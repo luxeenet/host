@@ -52,6 +52,7 @@ export const paymentStatus = pgEnum("paymentStatus", [
 
 export const paymentProviderEnum = pgEnum("paymentProviderEnum", [
 	"mpesa",
+	"sonicpesa",
 	"tigopesa",
 	"airtelmoney",
 	"halopesa",
@@ -266,7 +267,7 @@ export const apiCreateSubscription = z.object({
 
 export const apiInitiatePayment = z.object({
 	invoiceId: z.string().min(1),
-	provider: z.enum(["mpesa", "tigopesa", "airtelmoney", "halopesa", "azampesa", "bank_transfer", "card", "manual"]),
+	provider: z.enum(["mpesa", "sonicpesa", "tigopesa", "airtelmoney", "halopesa", "azampesa", "bank_transfer", "card", "manual"]),
 	payerIdentifier: z.string().min(1).optional(),
 });
 

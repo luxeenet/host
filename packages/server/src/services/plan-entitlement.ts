@@ -129,10 +129,11 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_projects"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		const [{ value }] = await db
+		const res = await db
 			.select({ value: count() })
 			.from(schema.projects)
 			.where(eq(schema.projects.organizationId, organizationId));
+		const value = res[0]?.value ?? 0;
 
 		if (value >= limit) {
 			return {
@@ -162,14 +163,19 @@ export class PlanEntitlementService {
 		if (limit === -1) return { allowed: true };
 
 		// Count total applications across all projects in the org
-		const [{ value }] = await db
+		const res = await db
 			.select({ value: count() })
 			.from(schema.applications)
 			.innerJoin(
+				schema.environments,
+				eq(schema.applications.environmentId, schema.environments.environmentId),
+			)
+			.innerJoin(
 				schema.projects,
-				eq(schema.applications.projectId, schema.projects.projectId),
+				eq(schema.environments.projectId, schema.projects.projectId),
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
+		const value = res[0]?.value ?? 0;
 
 		if (value >= limit) {
 			return {
@@ -238,12 +244,28 @@ export class PlanEntitlementService {
 		const pgCount = await db
 			.select({ value: count() })
 			.from(schema.postgres)
-			.where(eq(schema.postgres.organizationId, organizationId));
+			.innerJoin(
+				schema.environments,
+				eq(schema.postgres.environmentId, schema.environments.environmentId),
+			)
+			.innerJoin(
+				schema.projects,
+				eq(schema.environments.projectId, schema.projects.projectId),
+			)
+			.where(eq(schema.projects.organizationId, organizationId));
 
 		const mysqlCount = await db
 			.select({ value: count() })
 			.from(schema.mysql)
-			.where(eq(schema.mysql.organizationId, organizationId));
+			.innerJoin(
+				schema.environments,
+				eq(schema.mysql.environmentId, schema.environments.environmentId),
+			)
+			.innerJoin(
+				schema.projects,
+				eq(schema.environments.projectId, schema.projects.projectId),
+			)
+			.where(eq(schema.projects.organizationId, organizationId));
 
 		const totalDbs =
 			(pgCount[0]?.value ?? 0) + (mysqlCount[0]?.value ?? 0);
@@ -283,18 +305,23 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_domains"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		const [{ value }] = await db
+		const res = await db
 			.select({ value: count() })
-			.from(schema.domain)
+			.from(schema.domains)
 			.innerJoin(
 				schema.applications,
-				eq(schema.domain.applicationId, schema.applications.applicationId),
+				eq(schema.domains.applicationId, schema.applications.applicationId),
+			)
+			.innerJoin(
+				schema.environments,
+				eq(schema.applications.environmentId, schema.environments.environmentId),
 			)
 			.innerJoin(
 				schema.projects,
-				eq(schema.applications.projectId, schema.projects.projectId),
+				eq(schema.environments.projectId, schema.projects.projectId),
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
+		const value = res[0]?.value ?? 0;
 
 		if (value >= limit) {
 			return {
@@ -355,10 +382,11 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_team_members"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		const [{ value }] = await db
+		const res = await db
 			.select({ value: count() })
 			.from(schema.member)
 			.where(eq(schema.member.organizationId, organizationId));
+		const value = res[0]?.value ?? 0;
 
 		if (value >= limit) {
 			return {

@@ -9,7 +9,7 @@
 		"noEmit": false,
 		"declaration": true,
 		"moduleResolution": "bundler",
-		"rootDir": "./src",
+		"rootDir": "..",
 		"jsx": "react-jsx",
 		"paths": {
 			"@dokploy/server/*": ["./src/*"],

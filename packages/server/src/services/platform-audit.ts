@@ -26,6 +26,7 @@ export async function createPlatformAuditLog(
 			organizationId: input.organizationId ?? null,
 			userId: input.userId ?? null,
 			userEmail: input.userEmail ?? null,
+			userRole: input.userRole ?? null,
 			action: input.action,
 			resourceType: input.resourceType,
 			resourceId: input.resourceId ?? null,

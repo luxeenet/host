@@ -42,6 +42,7 @@ export const platformAuditLogs = pgTable("paas_audit_log", {
 	ipAddress: text("ip_address"),
 	/** User agent of the request */
 	userAgent: text("user_agent"),
+	userRole: text("user_role"),
 	createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -71,6 +72,7 @@ export interface CreateAuditLogInput {
 	organizationId?: string | null;
 	userId?: string | null;
 	userEmail?: string | null;
+	userRole?: string | null;
 	action: string;
 	resourceType: string;
 	resourceId?: string | null;

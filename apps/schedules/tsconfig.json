@@ -8,7 +8,10 @@
 		"jsx": "react-jsx",
 		"declaration": false,
 		"paths": {
-			"@dokploy/server/*": ["../../packages/server/src/*"]
+			"@dokploy/server": ["../../packages/server/src/index.ts"],
+			"@dokploy/server/db": ["../../packages/server/src/db/index.ts"],
+			"@dokploy/server/*": ["../../packages/server/src/*"],
+			"@paas/branding": ["../../packages/branding/src/index.ts"]
 		}
 	},
 	"exclude": ["node_modules", "dist"],

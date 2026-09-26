@@ -37,6 +37,10 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
 import {
+	PlanEntitlementService,
+	assertEntitlement,
+} from "@dokploy/server/services/plan-entitlement";
+import {
 	apiChangeMariaDBStatus,
 	apiCreateMariaDB,
 	apiDeployMariaDB,
@@ -62,6 +66,13 @@ export const mariadbRouter = createTRPCRouter({
 				const project = await findProjectById(environment.projectId);
 
 				await checkServiceAccess(ctx, project.projectId, "create");
+
+				// Plan entitlement — enforce database quota
+				await assertEntitlement(
+					PlanEntitlementService.checkCanCreateDatabase(
+						ctx.session.activeOrganizationId,
+					),
+				);
 
 				const webServerSettings = await getWebServerSettings();
 				if (

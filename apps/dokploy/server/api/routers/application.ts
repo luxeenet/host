@@ -165,6 +165,13 @@ export const applicationRouter = createTRPCRouter({
 
 			await checkServiceAccess(ctx, project.projectId, "create");
 
+			// Plan entitlement — quickstart also creates an application slot
+			await assertEntitlement(
+				PlanEntitlementService.checkCanCreateApplication(
+					ctx.session.activeOrganizationId,
+				),
+			);
+
 			if (project.organizationId !== ctx.session.activeOrganizationId) {
 				throw new TRPCError({
 					code: "UNAUTHORIZED",

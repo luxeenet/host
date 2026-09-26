@@ -13,6 +13,8 @@ import {
 	sendDokployRestartNotifications,
 	setupDirectories,
 } from "@dokploy/server";
+import { runBillingCycle } from "@dokploy/server/services/billing-cycle";
+import { seedPlans } from "@dokploy/server/services/plan-seed";
 import { config } from "dotenv";
 import next from "next";
 import packageInfo from "../package.json";
@@ -68,6 +70,18 @@ void app.prepare().then(async () => {
 			await sendDokployRestartNotifications();
 		}
 		await initEnterpriseBackupCronJobs();
+
+		// ─── Platform: seed plans + billing cron ──────────────────
+		try {
+			await seedPlans();
+			console.log("[platform] Plan seed: done");
+		} catch (e) {
+			console.error("[platform] Plan seed failed:", e);
+		}
+
+		// Run billing cycle immediately on startup, then every hour
+		runBillingCycle().catch(console.error);
+		setInterval(() => runBillingCycle().catch(console.error), 60 * 60 * 1000);
 
 		if (!IS_CLOUD) {
 			console.log("Starting Deployment Worker");

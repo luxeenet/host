@@ -25,6 +25,10 @@ import {
 } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
 import {
+	PlanEntitlementService,
+	assertEntitlement,
+} from "@dokploy/server/services/plan-entitlement";
+import {
 	apiCreateDomain,
 	apiFindCompose,
 	apiFindDomain,
@@ -46,6 +50,14 @@ export const domainRouter = createTRPCRouter({
 						domain: ["create"],
 					});
 				}
+
+				// Plan entitlement — enforce custom domain quota
+				await assertEntitlement(
+					PlanEntitlementService.checkCanAddDomain(
+						ctx.session.activeOrganizationId,
+					),
+				);
+
 				const domain = await createDomain(input);
 				await audit(ctx, {
 					action: "create",

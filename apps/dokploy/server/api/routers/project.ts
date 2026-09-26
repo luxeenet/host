@@ -51,6 +51,10 @@ import {
 } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
 import {
+	PlanEntitlementService,
+	assertEntitlement,
+} from "@dokploy/server/services/plan-entitlement";
+import {
 	apiCreateProject,
 	apiFindOneProject,
 	apiRemoveProject,
@@ -74,6 +78,13 @@ export const projectRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			try {
 				await checkProjectAccess(ctx, "create");
+
+				// Plan entitlement — enforce project quota
+				await assertEntitlement(
+					PlanEntitlementService.checkCanCreateProject(
+						ctx.session.activeOrganizationId,
+					),
+				);
 
 				const admin = await findUserById(ctx.user.ownerId);
 

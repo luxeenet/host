@@ -61,6 +61,7 @@ import { volumeBackupsRouter } from "./routers/volume-backups";
 import { planRouter } from "./routers/plan";
 import { subscriptionRouter } from "./routers/subscription";
 import { supportRouter } from "./routers/support";
+import { paymentRouter } from "./routers/payment";
 /**
  * This is the primary router for your server.
  *
@@ -130,6 +131,7 @@ export const appRouter = createTRPCRouter({
 	plan: planRouter,
 	subscription: subscriptionRouter,
 	support: supportRouter,
+	payment: paymentRouter,
 });
 
 // export type definition of API

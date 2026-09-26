@@ -81,6 +81,10 @@ import { cancelDeployment, deploy } from "@/server/utils/deploy";
 import { generatePassword } from "@/templates/utils";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { audit } from "../utils/audit";
+import {
+	PlanEntitlementService,
+	assertEntitlement,
+} from "@dokploy/server/services/plan-entitlement";
 
 export const composeRouter = createTRPCRouter({
 	create: protectedProcedure
@@ -91,6 +95,13 @@ export const composeRouter = createTRPCRouter({
 				const project = await findProjectById(environment.projectId);
 
 				await checkServiceAccess(ctx, project.projectId, "create");
+
+				// Plan entitlement — compose stacks count as application slots
+				await assertEntitlement(
+					PlanEntitlementService.checkCanCreateApplication(
+						ctx.session.activeOrganizationId,
+					),
+				);
 
 				const webServerSettings = await getWebServerSettings();
 				if (

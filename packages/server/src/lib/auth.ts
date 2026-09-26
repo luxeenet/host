@@ -18,8 +18,17 @@ import {
 	getTrustedProviders,
 	getUserByToken,
 } from "../services/admin";
-import { createAuditLog } from "../services/proprietary/audit-log";
-import { resolveOrganizationDefaultRole } from "../services/proprietary/license-key";
+import { createAuditLog } from "../services/platform-audit";
+
+/**
+ * Resolves the default role for new members joining via SSO/SCIM.
+ * Returns "member" — customisable per org via platform settings in future.
+ */
+async function resolveOrganizationDefaultRole(
+	_organizationId: string,
+): Promise<"owner" | "admin" | "member"> {
+	return "member";
+}
 import {
 	getWebServerSettings,
 	updateWebServerSettings,

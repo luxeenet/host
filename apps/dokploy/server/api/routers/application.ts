@@ -53,6 +53,10 @@ import {
 } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
 import {
+	PlanEntitlementService,
+	assertEntitlement,
+} from "@dokploy/server/services/plan-entitlement";
+import {
 	apiCreateApplication,
 	apiDeployApplication,
 	apiFindMonitoringStats,
@@ -89,6 +93,13 @@ export const applicationRouter = createTRPCRouter({
 				const project = await findProjectById(environment.projectId);
 
 				await checkServiceAccess(ctx, project.projectId, "create");
+
+				// Plan entitlement — enforce application quota
+				await assertEntitlement(
+					PlanEntitlementService.checkCanCreateApplication(
+						ctx.session.activeOrganizationId,
+					),
+				);
 
 				const webServerSettings = await getWebServerSettings();
 				if (

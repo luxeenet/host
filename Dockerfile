@@ -17,6 +17,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 # Deploy only the dokploy app
 
 ENV NODE_ENV=production
+RUN pnpm --filter=@paas/branding build || true
 RUN pnpm --filter=@dokploy/server build
 RUN pnpm --filter=./apps/dokploy run build
 
@@ -53,9 +54,9 @@ RUN curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh --ver
 
 ARG NIXPACKS_VERSION=1.41.0
 RUN curl -sSL https://nixpacks.com/install.sh -o install.sh \
-    && chmod +x install.sh \
-    && ./install.sh \
-    && pnpm install -g tsx
+  && chmod +x install.sh \
+  && ./install.sh \
+  && pnpm install -g tsx
 
 # Install Railpack
 ARG RAILPACK_VERSION=0.15.4
@@ -73,4 +74,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
 # Ejecutar node directamente: pnpm como wrapper queda residente (~100MB RSS)
-  CMD ["sh", "-c", "node -r dotenv/config dist/wait-for-postgres.mjs && node -r dotenv/config dist/migration.mjs && exec node -r dotenv/config dist/server.mjs"]
+CMD ["sh", "-c", "node -r dotenv/config dist/wait-for-postgres.mjs && node -r dotenv/config dist/migration.mjs && exec node -r dotenv/config dist/server.mjs"]

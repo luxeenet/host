@@ -1,3 +1,4 @@
+import { brand } from "@paas/branding";
 import {
 	getWebServerSettings,
 	IS_CLOUD,
@@ -142,7 +143,7 @@ export default function Home({ IS_CLOUD, enforceSSO }: Props) {
 			}
 
 			toast.success("Logged in successfully");
-			router.push("/dashboard/home");
+			router.push("/dashboard");
 		} catch {
 			toast.error("An error occurred while logging in");
 		} finally {
@@ -297,21 +298,21 @@ export default function Home({ IS_CLOUD, enforceSSO }: Props) {
 	return (
 		<>
 			<div className="flex flex-col space-y-2 text-center">
-				<h1 className="text-2xl font-semibold tracking-tight">
+				<h1 className="text-2xl font-bold tracking-tight">
 					<div className="flex flex-row items-center justify-center gap-2">
 						<Logo
-							className="size-12"
+							className="size-10"
 							logoUrl={
 								whitelabeling?.loginLogoUrl ||
 								whitelabeling?.logoUrl ||
 								undefined
 							}
 						/>
-						Sign in
+						Sign in to {brand.APP_NAME}
 					</div>
 				</h1>
 				<p className="text-sm text-muted-foreground">
-					Enter your email and password to sign in
+					Enter your account credentials to access your cloud portal
 				</p>
 			</div>
 			{error && (
@@ -455,14 +456,12 @@ export default function Home({ IS_CLOUD, enforceSSO }: Props) {
 
 				<div className="flex flex-row justify-between flex-wrap">
 					<div className="mt-4 text-center text-sm flex flex-row justify-center gap-2">
-						{IS_CLOUD && (
-							<Link
-								className="hover:underline text-muted-foreground"
-								href="/register"
-							>
-								Create an account
-							</Link>
-						)}
+						<Link
+							className="hover:underline text-indigo-400 font-medium"
+							href="/signup"
+						>
+							Create a new account
+						</Link>
 					</div>
 
 					<div className="mt-4 text-sm flex flex-row justify-center gap-2">
@@ -521,24 +520,13 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 			},
 		};
 	}
-	const hasAdmin = await isAdminPresent();
-
-	if (!hasAdmin) {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/register",
-			},
-		};
-	}
-
 	const { user } = await validateRequest(context.req);
 
 	if (user) {
 		return {
 			redirect: {
 				permanent: false,
-				destination: "/dashboard/home",
+				destination: "/dashboard",
 			},
 		};
 	}
@@ -548,7 +536,7 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 	return {
 		props: {
 			trpcState: helpers.dehydrate(),
-			hasAdmin,
+			hasAdmin: true,
 			enforceSSO: webServerSettings?.enforceSSO ?? false,
 		},
 	};

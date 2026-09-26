@@ -37,14 +37,18 @@ export const findOrganizationById = async (organizationId: string) => {
 };
 
 export const isAdminPresent = async () => {
-	const admin = await db.query.member.findFirst({
-		where: eq(member.role, "owner"),
-	});
+	try {
+		const admin = await db.query.member.findFirst({
+			where: eq(member.role, "owner"),
+		});
 
-	if (!admin) {
+		if (!admin) {
+			return false;
+		}
+		return true;
+	} catch {
 		return false;
 	}
-	return true;
 };
 
 export const findOwner = async () => {

@@ -57,6 +57,10 @@ import { transferRouter } from "./routers/transfer";
 import { userRouter } from "./routers/user";
 import { vaultProviderRouter } from "./routers/vault-provider";
 import { volumeBackupsRouter } from "./routers/volume-backups";
+// ─── Platform Business Layer ──────────────────────────────────
+import { planRouter } from "./routers/plan";
+import { subscriptionRouter } from "./routers/subscription";
+import { supportRouter } from "./routers/support";
 /**
  * This is the primary router for your server.
  *
@@ -122,6 +126,10 @@ export const appRouter = createTRPCRouter({
 	patch: patchRouter,
 	overview: overviewRouter,
 	transfer: transferRouter,
+	// ─── Platform Business Layer ──────────────────────────────
+	plan: planRouter,
+	subscription: subscriptionRouter,
+	support: supportRouter,
 });
 
 // export type definition of API

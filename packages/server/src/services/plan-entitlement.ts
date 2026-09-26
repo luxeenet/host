@@ -1,0 +1,393 @@
+/**
+ * PlanEntitlementService
+ *
+ * The single source of truth for "can this organization do X?".
+ *
+ * ARCHITECTURE RULE:
+ *   Every action that consumes a plan-limited resource MUST call
+ *   PlanEntitlementService.check*() before executing.
+ *   Never inline limit checks in feature controllers.
+ *
+ * This service reads plan resources and features from the database.
+ * Plans are NEVER hardcoded here.
+ */
+import { and, count, eq, isNull } from "drizzle-orm";
+import { db } from "../db";
+import * as schema from "../db/schema";
+
+// ─────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────
+
+export interface EntitlementResult {
+	allowed: boolean;
+	reason?: string;
+	/** Current usage count */
+	current?: number;
+	/** Plan limit (-1 = unlimited) */
+	limit?: number;
+}
+
+export interface PlanSnapshot {
+	planId: string;
+	planName: string;
+	resources: Record<string, number>;
+	features: Record<string, boolean>;
+	applicationTypes: string[];
+	subscriptionStatus: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Service
+// ─────────────────────────────────────────────────────────────
+
+export class PlanEntitlementService {
+	/**
+	 * Load the full plan snapshot for an organization.
+	 * Returns null if no active subscription exists.
+	 */
+	static async getPlanSnapshot(
+		organizationId: string,
+	): Promise<PlanSnapshot | null> {
+		const subscription = await db.query.subscriptions.findFirst({
+			where: eq(schema.subscriptions.organizationId, organizationId),
+			with: {
+				plan: {
+					with: {
+						resources: true,
+						features: true,
+						applicationTypes: true,
+					},
+				},
+			},
+			orderBy: (sub, { desc }) => [desc(sub.createdAt)],
+		});
+
+		if (!subscription) return null;
+
+		const resources: Record<string, number> = {};
+		for (const r of subscription.plan.resources) {
+			resources[r.resourceKey] = r.value;
+		}
+
+		const features: Record<string, boolean> = {};
+		for (const f of subscription.plan.features) {
+			features[f.featureKey] = f.enabled;
+		}
+
+		const applicationTypes = subscription.plan.applicationTypes.map(
+			(t) => t.applicationType,
+		);
+
+		return {
+			planId: subscription.plan.id,
+			planName: subscription.plan.name,
+			resources,
+			features,
+			applicationTypes,
+			subscriptionStatus: subscription.status,
+		};
+	}
+
+	/**
+	 * Check if subscription is in an active/usable state.
+	 */
+	static async checkSubscriptionActive(
+		organizationId: string,
+	): Promise<EntitlementResult> {
+		const sub = await db.query.subscriptions.findFirst({
+			where: eq(schema.subscriptions.organizationId, organizationId),
+		});
+
+		if (!sub) {
+			return { allowed: false, reason: "No active subscription found." };
+		}
+
+		const activeStatuses = ["trial", "active", "grace_period"];
+		if (!activeStatuses.includes(sub.status)) {
+			return {
+				allowed: false,
+				reason: `Subscription is ${sub.status}. Please renew your plan to continue.`,
+			};
+		}
+
+		return { allowed: true };
+	}
+
+	/**
+	 * Check if org can create another project.
+	 */
+	static async checkCanCreateProject(
+		organizationId: string,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		const limit = snapshot.resources["max_projects"] ?? -1;
+		if (limit === -1) return { allowed: true };
+
+		const [{ value }] = await db
+			.select({ value: count() })
+			.from(schema.projects)
+			.where(eq(schema.projects.organizationId, organizationId));
+
+		if (value >= limit) {
+			return {
+				allowed: false,
+				reason: `Your plan allows a maximum of ${limit} project${limit === 1 ? "" : "s"}. Please upgrade to create more.`,
+				current: value,
+				limit,
+			};
+		}
+
+		return { allowed: true, current: value, limit };
+	}
+
+	/**
+	 * Check if org can deploy another application.
+	 */
+	static async checkCanCreateApplication(
+		organizationId: string,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		const limit = snapshot.resources["max_applications"] ?? -1;
+		if (limit === -1) return { allowed: true };
+
+		// Count total applications across all projects in the org
+		const [{ value }] = await db
+			.select({ value: count() })
+			.from(schema.applications)
+			.innerJoin(
+				schema.projects,
+				eq(schema.applications.projectId, schema.projects.projectId),
+			)
+			.where(eq(schema.projects.organizationId, organizationId));
+
+		if (value >= limit) {
+			return {
+				allowed: false,
+				reason: `Your plan allows a maximum of ${limit} application${limit === 1 ? "" : "s"}. Please upgrade.`,
+				current: value,
+				limit,
+			};
+		}
+
+		return { allowed: true, current: value, limit };
+	}
+
+	/**
+	 * Check if org can deploy a specific application type.
+	 */
+	static async checkApplicationType(
+		organizationId: string,
+		applicationType: string,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		if (snapshot.applicationTypes.length === 0) {
+			// No restrictions — all types allowed
+			return { allowed: true };
+		}
+
+		if (!snapshot.applicationTypes.includes(applicationType)) {
+			return {
+				allowed: false,
+				reason: `Your plan does not support ${applicationType} applications. Upgrade to a higher plan to unlock this feature.`,
+			};
+		}
+
+		return { allowed: true };
+	}
+
+	/**
+	 * Check if org can add another managed database.
+	 */
+	static async checkCanCreateDatabase(
+		organizationId: string,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		const featureEnabled = snapshot.features["databases"] ?? false;
+		if (!featureEnabled) {
+			return {
+				allowed: false,
+				reason: "Your plan does not include managed databases. Upgrade to access this feature.",
+			};
+		}
+
+		const limit = snapshot.resources["max_databases"] ?? -1;
+		if (limit === -1) return { allowed: true };
+
+		// Count all managed databases in the org
+		const pgCount = await db
+			.select({ value: count() })
+			.from(schema.postgres)
+			.where(eq(schema.postgres.organizationId, organizationId));
+
+		const mysqlCount = await db
+			.select({ value: count() })
+			.from(schema.mysql)
+			.where(eq(schema.mysql.organizationId, organizationId));
+
+		const totalDbs =
+			(pgCount[0]?.value ?? 0) + (mysqlCount[0]?.value ?? 0);
+
+		if (totalDbs >= limit) {
+			return {
+				allowed: false,
+				reason: `Your plan allows a maximum of ${limit} database${limit === 1 ? "" : "s"}. Upgrade to add more.`,
+				current: totalDbs,
+				limit,
+			};
+		}
+
+		return { allowed: true, current: totalDbs, limit };
+	}
+
+	/**
+	 * Check if org can add another custom domain.
+	 */
+	static async checkCanAddDomain(
+		organizationId: string,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		const featureEnabled = snapshot.features["custom_domains"] ?? false;
+		if (!featureEnabled) {
+			return {
+				allowed: false,
+				reason: "Your plan does not include custom domains. Upgrade to use your own domain.",
+			};
+		}
+
+		const limit = snapshot.resources["max_domains"] ?? -1;
+		if (limit === -1) return { allowed: true };
+
+		const [{ value }] = await db
+			.select({ value: count() })
+			.from(schema.domain)
+			.innerJoin(
+				schema.applications,
+				eq(schema.domain.applicationId, schema.applications.applicationId),
+			)
+			.innerJoin(
+				schema.projects,
+				eq(schema.applications.projectId, schema.projects.projectId),
+			)
+			.where(eq(schema.projects.organizationId, organizationId));
+
+		if (value >= limit) {
+			return {
+				allowed: false,
+				reason: `Your plan allows a maximum of ${limit} custom domain${limit === 1 ? "" : "s"}.`,
+				current: value,
+				limit,
+			};
+		}
+
+		return { allowed: true, current: value, limit };
+	}
+
+	/**
+	 * Check if a feature flag is enabled for the org.
+	 */
+	static async checkFeature(
+		organizationId: string,
+		featureKey: string,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		const enabled = snapshot.features[featureKey] ?? false;
+		if (!enabled) {
+			return {
+				allowed: false,
+				reason: `The feature "${featureKey}" is not included in your current plan. Please upgrade.`,
+			};
+		}
+
+		return { allowed: true };
+	}
+
+	/**
+	 * Check if org can add another team member.
+	 */
+	static async checkCanAddTeamMember(
+		organizationId: string,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		const featureEnabled = snapshot.features["team_members"] ?? false;
+		if (!featureEnabled) {
+			return {
+				allowed: false,
+				reason: "Your plan does not include team member access. Upgrade to add team members.",
+			};
+		}
+
+		const limit = snapshot.resources["max_team_members"] ?? -1;
+		if (limit === -1) return { allowed: true };
+
+		const [{ value }] = await db
+			.select({ value: count() })
+			.from(schema.member)
+			.where(eq(schema.member.organizationId, organizationId));
+
+		if (value >= limit) {
+			return {
+				allowed: false,
+				reason: `Your plan allows a maximum of ${limit} team member${limit === 1 ? "" : "s"}.`,
+				current: value,
+				limit,
+			};
+		}
+
+		return { allowed: true, current: value, limit };
+	}
+}
+
+/**
+ * Convenience: throw a TRPCError if an entitlement check fails.
+ * Import and use in tRPC procedures:
+ *
+ *   await assertEntitlement(PlanEntitlementService.checkCanCreateProject(orgId));
+ */
+export async function assertEntitlement(
+	check: Promise<EntitlementResult> | EntitlementResult,
+): Promise<void> {
+	const result = await check;
+	if (!result.allowed) {
+		const { TRPCError } = await import("@trpc/server");
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: result.reason ?? "Action not permitted on your current plan.",
+		});
+	}
+}

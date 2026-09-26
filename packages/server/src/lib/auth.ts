@@ -1,3 +1,4 @@
+import { brand } from "@paas/branding";
 import type { IncomingMessage } from "node:http";
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
@@ -104,7 +105,7 @@ const createBetterAuth = () =>
 				allowDifferentEmails: true,
 			},
 		},
-		appName: "Dokploy",
+		appName: brand.APP_NAME,
 		socialProviders: {
 			github: {
 				clientId: process.env.GITHUB_CLIENT_ID as string,
@@ -221,7 +222,10 @@ const createBetterAuth = () =>
 								}
 							} else {
 								const isSSORequest = context?.path.includes("/sso");
-								if (isSSORequest) {
+								const isSignUpPath =
+									context?.path.includes("/sign-up") ||
+									context?.path.includes("/signup");
+								if (isSSORequest || isSignUpPath) {
 									return;
 								}
 								const isAdminPresent = await db.query.member.findFirst({
@@ -291,12 +295,16 @@ const createBetterAuth = () =>
 							return;
 						}
 
-						if (IS_CLOUD || !isAdminPresent) {
+						const isSignUpPath =
+							context?.path.includes("/sign-up") ||
+							context?.path.includes("/signup");
+
+						if (IS_CLOUD || !isAdminPresent || isSignUpPath) {
 							await db.transaction(async (tx) => {
 								const organization = await tx
 									.insert(schema.organization)
 									.values({
-										name: "My Organization",
+										name: `${user.name || "Customer"}'s Workspace`,
 										ownerId: user.id,
 										createdAt: new Date(),
 									})

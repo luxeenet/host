@@ -6,21 +6,25 @@ import { eq } from "drizzle-orm";
  * Get the web server settings (singleton - only one row should exist)
  */
 export const getWebServerSettings = async () => {
-	const settings = await db.query.webServerSettings.findFirst({
-		orderBy: (settings, { asc }) => [asc(settings.createdAt)],
-	});
+	try {
+		const settings = await db.query.webServerSettings.findFirst({
+			orderBy: (settings, { asc }) => [asc(settings.createdAt)],
+		});
 
-	if (!settings) {
-		// Create default settings if none exist
-		const [newSettings] = await db
-			.insert(webServerSettings)
-			.values({})
-			.returning();
+		if (!settings) {
+			// Create default settings if none exist
+			const [newSettings] = await db
+				.insert(webServerSettings)
+				.values({})
+				.returning();
 
-		return newSettings;
+			return newSettings;
+		}
+
+		return settings;
+	} catch {
+		return null;
 	}
-
-	return settings;
 };
 
 /**

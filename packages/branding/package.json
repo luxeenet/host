@@ -1,0 +1,19 @@
+{
+  "name": "@paas/branding",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.4.0",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": "^24.4.0"
+  }
+}

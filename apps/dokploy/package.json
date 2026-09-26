@@ -64,6 +64,7 @@
 		"@codemirror/search": "^6.6.0",
 		"@codemirror/view": "^6.39.15",
 		"@dokploy/server": "workspace:*",
+		"@paas/branding": "workspace:*",
 		"@dokploy/trpc-openapi": "0.0.18",
 		"@faker-js/faker": "^8.4.1",
 		"@hookform/resolvers": "^5.2.2",

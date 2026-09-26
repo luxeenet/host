@@ -306,44 +306,11 @@ Register.getLayout = (page: ReactElement) => {
 		</OnboardingLayout>
 	);
 };
-export async function getServerSideProps(context: GetServerSidePropsContext) {
-	const helpers = generateServerSideHelper(appRouter, context);
-	// Prefetch the public branding so the onboarding logo and app name render
-	// correctly on the server (no flash of default branding).
-	await helpers.whitelabeling.getPublic.prefetch();
-
-	if (IS_CLOUD) {
-		const { user } = await validateRequest(context.req);
-
-		if (user) {
-			return {
-				redirect: {
-					permanent: false,
-					destination: "/dashboard/home",
-				},
-			};
-		}
-		return {
-			props: {
-				trpcState: helpers.dehydrate(),
-				isCloud: true,
-			},
-		};
-	}
-	const hasAdmin = await isAdminPresent();
-
-	if (hasAdmin) {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/",
-			},
-		};
-	}
+export async function getServerSideProps() {
 	return {
-		props: {
-			trpcState: helpers.dehydrate(),
-			isCloud: false,
+		redirect: {
+			permanent: false,
+			destination: "/signup",
 		},
 	};
 }

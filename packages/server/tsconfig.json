@@ -22,7 +22,8 @@
 		"outDir": "./dist",
 		/* Path Aliases */
 		"paths": {
-			"@dokploy/server/*": ["./src/*"]
+			"@dokploy/server/*": ["./src/*"],
+			"@paas/branding": ["../branding/src/index.ts"]
 		}
 	},
 	"include": ["next-env.d.ts", "./src/**/*.ts"],

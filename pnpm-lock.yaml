@@ -183,6 +183,9 @@ importers:
       '@openpanel/nextjs':
         specifier: ^1.5.1
         version: 1.5.1(next@16.3.4(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@types/node@24.10.13)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@paas/branding':
+        specifier: workspace:*
+        version: link:../../packages/branding
       '@react-email/components':
         specifier: ^1.0.12
         version: 1.0.12(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -569,6 +572,15 @@ importers:
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/branding:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.4.0
+        version: 24.10.13
       typescript:
         specifier: ^7.0.2
         version: 7.0.2

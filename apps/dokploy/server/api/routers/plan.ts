@@ -8,8 +8,8 @@ import { z } from "zod";
 import { db } from "../../db";
 import * as schema from "@dokploy/server/db/schema";
 import {
-	adminProcedure,
 	createTRPCRouter,
+	platformAdminProcedure,
 	protectedProcedure,
 	publicProcedure,
 } from "../trpc";
@@ -58,7 +58,7 @@ export const planRouter = createTRPCRouter({
 	// ─── Admin ────────────────────────────────────────────────
 
 	/** Admin: list all plans including inactive */
-	adminList: adminProcedure.query(async () => {
+	adminList: platformAdminProcedure.query(async () => {
 		return db.query.plans.findMany({
 			with: {
 				resources: true,
@@ -70,7 +70,7 @@ export const planRouter = createTRPCRouter({
 	}),
 
 	/** Admin: create a new plan */
-	create: adminProcedure
+	create: platformAdminProcedure
 		.input(schema.apiCreatePlan)
 		.mutation(async ({ input }) => {
 			const id = nanoid();
@@ -82,7 +82,7 @@ export const planRouter = createTRPCRouter({
 		}),
 
 	/** Admin: update a plan */
-	update: adminProcedure
+	update: platformAdminProcedure
 		.input(schema.apiUpdatePlan)
 		.mutation(async ({ input }) => {
 			const { id, ...data } = input;
@@ -97,7 +97,7 @@ export const planRouter = createTRPCRouter({
 		}),
 
 	/** Admin: delete a plan (only if no active subscriptions) */
-	delete: adminProcedure
+	delete: platformAdminProcedure
 		.input(z.object({ id: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			const activeSubs = await db.query.subscriptions.findFirst({
@@ -120,7 +120,7 @@ export const planRouter = createTRPCRouter({
 		}),
 
 	/** Admin: set plan resource */
-	setResource: adminProcedure
+	setResource: platformAdminProcedure
 		.input(schema.apiSetPlanResource)
 		.mutation(async ({ input }) => {
 			const existing = await db.query.planResources.findFirst({
@@ -145,7 +145,7 @@ export const planRouter = createTRPCRouter({
 		}),
 
 	/** Admin: set plan feature */
-	setFeature: adminProcedure
+	setFeature: platformAdminProcedure
 		.input(schema.apiSetPlanFeature)
 		.mutation(async ({ input }) => {
 			const existing = await db.query.planFeatures.findFirst({

@@ -38,6 +38,7 @@ interface CreateContextOptions {
 				ownerId: string;
 				enableEnterpriseFeatures: boolean;
 				isValidEnterpriseLicense: boolean;
+				isPlatformAdmin?: boolean;
 		  })
 		| null;
 	session:
@@ -97,6 +98,7 @@ export const createTRPCContext = async (opts: CreateNextContextOptions) => {
 					role: user.role as "owner" | "member" | "admin",
 					id: user.id,
 					ownerId: user.ownerId,
+					isPlatformAdmin: (user as any).isPlatformAdmin ?? false,
 				}
 			: null,
 	});
@@ -207,6 +209,56 @@ export const adminProcedure = t.procedure.use(({ ctx, next }) => {
 		},
 	});
 });
+
+/**
+ * Platform-level admin procedure.
+ * Requires user.isPlatformAdmin === true.
+ * Use for platform-wide admin tasks (billing admin, global plans, server infrastructure).
+ */
+export const platformAdminProcedure = t.procedure.use(({ ctx, next }) => {
+	if (!ctx.session || !ctx.user) {
+		throw new TRPCError({ code: "UNAUTHORIZED" });
+	}
+	if (!(ctx.user as any).isPlatformAdmin) {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "Platform administrator access required.",
+		});
+	}
+	return next({
+		ctx: {
+			session: ctx.session,
+			user: ctx.user,
+		},
+	});
+});
+
+/**
+ * Procedure that requires an active subscription.
+ * Blocks suspended/expired accounts from write/execute operations.
+ */
+export const activePlanProcedure = protectedProcedure.use(
+	async ({ ctx, next }) => {
+		const { PlanEntitlementService } = await import(
+			"@dokploy/server/services/plan-entitlement"
+		);
+		const orgId = ctx.session.activeOrganizationId;
+		if (orgId) {
+			const result = await PlanEntitlementService.checkSubscriptionActive(
+				orgId,
+			);
+			if (!result.allowed) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						result.reason ??
+						"Your subscription is not active. Please renew your plan.",
+				});
+			}
+		}
+		return next();
+	},
+);
 
 /**
  * Requires admin/owner role AND enterprise enabled with a license key in DB.

@@ -74,6 +74,7 @@ export const user = pgTable("user", {
 		.array()
 		.default(sql`ARRAY[]::text[]`),
 	onboardingCompletedAt: timestamp("onboardingCompletedAt"),
+	isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
 });
 
 export const usersRelations = relations(user, ({ one, many }) => ({

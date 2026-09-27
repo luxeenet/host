@@ -10,7 +10,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { db } from "../../db";
 import * as schema from "@dokploy/server/db/schema";
-import { adminProcedure, createTRPCRouter, protectedProcedure } from "../trpc";
+import { createTRPCRouter, platformAdminProcedure, protectedProcedure } from "../trpc";
 import {
 	getPaymentProvider,
 	type SupportedProvider,
@@ -82,6 +82,13 @@ export const paymentRouter = createTRPCRouter({
 					providerMetadata: result.rawResponse as any,
 				})
 				.returning();
+
+			if (!payment) {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Failed to create payment record.",
+				});
+			}
 
 			return {
 				paymentId: payment.id,
@@ -195,7 +202,7 @@ export const paymentRouter = createTRPCRouter({
 	/**
 	 * Admin manually confirms a payment (for bank transfers, manual payments).
 	 */
-	adminConfirm: adminProcedure
+	adminConfirm: platformAdminProcedure
 		.input(
 			z.object({
 				paymentId: z.string().min(1),
@@ -235,7 +242,7 @@ export const paymentRouter = createTRPCRouter({
 
 	// ─── Admin: List all payments ──────────────────────────────
 
-	adminList: adminProcedure
+	adminList: platformAdminProcedure
 		.input(
 			z.object({
 				limit: z.number().int().min(1).max(100).default(50),

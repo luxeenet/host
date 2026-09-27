@@ -27,6 +27,7 @@
 		/* Path Aliases */
 		"paths": {
 			"@/*": ["./*"],
+			"@dokploy/server": ["../../packages/server/src/index.ts"],
 			"@dokploy/server/*": ["../../packages/server/src/*"],
 			"@paas/branding": ["../../packages/branding/src/index.ts"]
 		}

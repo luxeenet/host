@@ -6,7 +6,8 @@
 		"strict": true,
 		"skipLibCheck": true,
 		"outDir": "dist",
-		"rootDir": "../../",
+		"rootDir": "src",
+
 		"jsx": "react-jsx",
 		"paths": {
 			"@/*": ["./src/*"],

@@ -9,14 +9,15 @@
 		"noEmit": false,
 		"declaration": true,
 		"moduleResolution": "bundler",
-		"rootDir": "..",
+		"rootDir": "./src",
 		"jsx": "react-jsx",
 		"paths": {
 			"@dokploy/server/*": ["./src/*"],
 			"@paas/branding": ["../branding/src/index.ts"]
 		}
 	},
-	"include": ["next-env.d.ts", "./src/**/*"],
+	"include": ["./src/**/*"],
+
 	"exclude": ["**/dist", "tsup.ts", "src/lib/auth-cli.ts"],
 	"tsc-alias": {
 		"resolveFullPaths": true,

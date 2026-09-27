@@ -2,7 +2,8 @@
 	"extends": "./tsconfig.json",
 	"compilerOptions": {
 		"outDir": "dist",
-		"rootDir": "../../",
+		"rootDir": "src",
+
 		"paths": {
 			"@dokploy/server": ["../../packages/server/src/index.ts"],
 			"@dokploy/server/db": ["../../packages/server/src/db/index.ts"],

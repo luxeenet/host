@@ -38,10 +38,14 @@ if (DATABASE_URL) {
 	}
 
 	if (process.env.NODE_ENV === "production") {
-		dbUrl =
-			"postgres://dokploy:amukds4wi9001583845717ad2@dokploy-postgres:5432/dokploy";
+		throw new Error(
+			"[DB CONFIG] Neither DATABASE_URL nor POSTGRES_PASSWORD_FILE is set. " +
+				"In production you must provide one of these environment variables. " +
+				"Set POSTGRES_PASSWORD_FILE to the path of a Docker secret containing the password, " +
+				"or set DATABASE_URL to the full connection string.",
+		);
 	} else {
-		dbUrl =
-			"postgres://dokploy:amukds4wi9001583845717ad2@localhost:5432/dokploy";
+		dbUrl = "postgres://dokploy:dokploy@localhost:5432/dokploy";
 	}
+
 }

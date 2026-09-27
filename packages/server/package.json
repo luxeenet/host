@@ -5,28 +5,22 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs.js"
+      "import": "./dist/index.js"
     },
     "./db": {
-      "import": "./dist/db/index.js",
-      "require": "./dist/db/index.cjs.js"
+      "import": "./dist/db/index.js"
     },
     "./*": {
-      "import": "./dist/*",
-      "require": "./dist/*.cjs"
+      "import": "./dist/*"
     },
     "./dist": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs.js"
+      "import": "./dist/index.js"
     },
     "./dist/db": {
-      "import": "./dist/db/index.js",
-      "require": "./dist/db/index.cjs.js"
+      "import": "./dist/db/index.js"
     },
     "./dist/db/schema": {
-      "import": "./dist/db/schema/index.js",
-      "require": "./dist/db/schema/index.cjs.js"
+      "import": "./dist/db/schema/index.js"
     }
   },
   "scripts": {

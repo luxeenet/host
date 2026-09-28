@@ -5,21 +5,27 @@
   "type": "module",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./db": {
+      "types": "./dist/db/index.d.ts",
       "import": "./dist/db/index.js"
     },
     "./*": {
+      "types": "./dist/*.d.ts",
       "import": "./dist/*"
     },
     "./dist": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./dist/db": {
+      "types": "./dist/db/index.d.ts",
       "import": "./dist/db/index.js"
     },
     "./dist/db/schema": {
+      "types": "./dist/db/schema/index.d.ts",
       "import": "./dist/db/schema/index.js"
     }
   },

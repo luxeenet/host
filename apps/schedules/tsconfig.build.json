@@ -5,10 +5,10 @@
 		"rootDir": "src",
 
 		"paths": {
-			"@dokploy/server": ["../../packages/server/src/index.ts"],
-			"@dokploy/server/db": ["../../packages/server/src/db/index.ts"],
-			"@dokploy/server/*": ["../../packages/server/src/*"],
-			"@paas/branding": ["../../packages/branding/src/index.ts"]
+			"@dokploy/server": ["../../packages/server/dist/index.d.ts"],
+			"@dokploy/server/db": ["../../packages/server/dist/db/index.d.ts"],
+			"@dokploy/server/*": ["../../packages/server/dist/*"],
+			"@paas/branding": ["../../packages/branding/src/index.d.ts"]
 		}
 	},
 	"include": ["src/**/*"]

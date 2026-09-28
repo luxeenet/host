@@ -16,6 +16,10 @@ export function readSecret(path: string): string {
 		throw new Error(`Cannot read secret at ${path}`);
 	}
 }
+const IS_BUILD_TIME =
+	process.env.DOKPLOY_BUILD_TIME === "true" ||
+	process.env.NEXT_PHASE === "phase-production-build";
+
 export let dbUrl: string;
 if (DATABASE_URL) {
 	// Compatibilidad legacy / overrides
@@ -25,11 +29,10 @@ if (DATABASE_URL) {
 	dbUrl = `postgres://${POSTGRES_USER}:${encodeURIComponent(
 		password,
 	)}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}`;
-} else if (process.env.NEXT_PHASE === "phase-production-build") {
-	// Next.js evaluates some server modules while building the application.
-	// Docker secrets are intentionally unavailable during image builds.
-	// Use a non-secret placeholder so the module can be bundled without
-	// weakening the production runtime security requirement.
+} else if (IS_BUILD_TIME) {
+	// Next.js page-data workers may evaluate server modules without
+	// preserving NEXT_PHASE. This is strictly an image-build placeholder.
+	// It must never be used by the production runtime.
 	dbUrl = "postgres://build:build@127.0.0.1:5432/dokploy";
 } else {
 	if (process.env.NODE_ENV !== "test") {

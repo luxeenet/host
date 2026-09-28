@@ -13,7 +13,7 @@
 		"jsx": "react-jsx",
 		"paths": {
 			"@dokploy/server/*": ["./src/*"],
-			"@paas/branding": ["../branding/src/index.ts"]
+			"@paas/branding": ["../branding/src/index.d.ts"]
 		}
 	},
 	"include": ["./src/**/*"],

@@ -1380,6 +1380,20 @@
       "when": 1788995453103,
       "tag": "0196_worthless_ravenous",
       "breakpoints": true
+    },
+    {
+      "idx": 197,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0197_platform_business_layer",
+      "breakpoints": true
+    },
+    {
+      "idx": 198,
+      "version": "7",
+      "when": 1789000001000,
+      "tag": "0198_add_is_platform_admin",
+      "breakpoints": true
     }
   ]
 }

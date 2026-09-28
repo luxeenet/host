@@ -25,6 +25,12 @@ if (DATABASE_URL) {
 	dbUrl = `postgres://${POSTGRES_USER}:${encodeURIComponent(
 		password,
 	)}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}`;
+} else if (process.env.NEXT_PHASE === "phase-production-build") {
+	// Next.js evaluates some server modules while building the application.
+	// Docker secrets are intentionally unavailable during image builds.
+	// Use a non-secret placeholder so the module can be bundled without
+	// weakening the production runtime security requirement.
+	dbUrl = "postgres://build:build@127.0.0.1:5432/dokploy";
 } else {
 	if (process.env.NODE_ENV !== "test") {
 		console.warn(`
@@ -47,5 +53,4 @@ if (DATABASE_URL) {
 	} else {
 		dbUrl = "postgres://dokploy:dokploy@localhost:5432/dokploy";
 	}
-
 }

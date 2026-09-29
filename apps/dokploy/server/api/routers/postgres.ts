@@ -428,6 +428,33 @@ export const postgresRouter = createTRPCRouter({
 				service: ["create"],
 			});
 
+			if (
+				rest.memoryLimit ||
+				rest.cpuLimit ||
+				rest.memoryReservation ||
+				rest.cpuReservation
+			) {
+				const requestedRamMb = rest.memoryLimit
+					? Math.ceil(Number(rest.memoryLimit) / (1024 * 1024))
+					: rest.memoryReservation
+						? Math.ceil(Number(rest.memoryReservation) / (1024 * 1024))
+						: undefined;
+
+				const requestedCpuMillicores = rest.cpuLimit
+					? Math.ceil(Number(rest.cpuLimit) / 1000000)
+					: rest.cpuReservation
+						? Math.ceil(Number(rest.cpuReservation) / 1000000)
+						: undefined;
+
+				await assertEntitlement(
+					PlanEntitlementService.checkRuntimeResources(
+						ctx.session.activeOrganizationId,
+						requestedRamMb,
+						requestedCpuMillicores,
+					),
+				);
+			}
+
 			const service = await updatePostgresById(postgresId, {
 				...rest,
 			});

@@ -39,6 +39,10 @@ import { z } from "zod";
 import { apiKeyNameSchema } from "@/lib/api-keys";
 import { audit } from "@/server/api/utils/audit";
 import {
+	PlanEntitlementService,
+	assertEntitlement,
+} from "@dokploy/server/services/plan-entitlement";
+import {
 	adminProcedure,
 	createTRPCRouter,
 	protectedProcedure,
@@ -725,6 +729,13 @@ export const userRouter = createTRPCRouter({
 					message: "Cannot create a user with the owner role",
 				});
 			}
+
+			// Plan entitlement — enforce team member / seat limits
+			await assertEntitlement(
+				PlanEntitlementService.checkCanAddTeamMember(
+					ctx.session.activeOrganizationId,
+				),
+			);
 
 			return await createOrganizationUserWithCredentials({
 				organizationId: ctx.session.activeOrganizationId,

@@ -97,6 +97,7 @@ export class PlanEntitlementService {
 	): Promise<EntitlementResult> {
 		const sub = await db.query.subscriptions.findFirst({
 			where: eq(schema.subscriptions.organizationId, organizationId),
+			orderBy: (sub, { desc }) => [desc(sub.createdAt)],
 		});
 
 		if (!sub) {
@@ -218,7 +219,7 @@ export class PlanEntitlementService {
 	}
 
 	/**
-	 * Check if org can add another managed database.
+	 * Check if org can add another managed database (Postgres, MySQL, Mongo, Redis, MariaDB).
 	 */
 	static async checkCanCreateDatabase(
 		organizationId: string,
@@ -240,7 +241,7 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_databases"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		// Count all managed databases in the org
+		// Count all 5 managed database types in the org
 		const pgCount = await db
 			.select({ value: count() })
 			.from(schema.postgres)
@@ -267,8 +268,51 @@ export class PlanEntitlementService {
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
 
+		const mongoCount = await db
+			.select({ value: count() })
+			.from(schema.mongo)
+			.innerJoin(
+				schema.environments,
+				eq(schema.mongo.environmentId, schema.environments.environmentId),
+			)
+			.innerJoin(
+				schema.projects,
+				eq(schema.environments.projectId, schema.projects.projectId),
+			)
+			.where(eq(schema.projects.organizationId, organizationId));
+
+		const redisCount = await db
+			.select({ value: count() })
+			.from(schema.redis)
+			.innerJoin(
+				schema.environments,
+				eq(schema.redis.environmentId, schema.environments.environmentId),
+			)
+			.innerJoin(
+				schema.projects,
+				eq(schema.environments.projectId, schema.projects.projectId),
+			)
+			.where(eq(schema.projects.organizationId, organizationId));
+
+		const mariadbCount = await db
+			.select({ value: count() })
+			.from(schema.mariadb)
+			.innerJoin(
+				schema.environments,
+				eq(schema.mariadb.environmentId, schema.environments.environmentId),
+			)
+			.innerJoin(
+				schema.projects,
+				eq(schema.environments.projectId, schema.projects.projectId),
+			)
+			.where(eq(schema.projects.organizationId, organizationId));
+
 		const totalDbs =
-			(pgCount[0]?.value ?? 0) + (mysqlCount[0]?.value ?? 0);
+			(pgCount[0]?.value ?? 0) +
+			(mysqlCount[0]?.value ?? 0) +
+			(mongoCount[0]?.value ?? 0) +
+			(redisCount[0]?.value ?? 0) +
+			(mariadbCount[0]?.value ?? 0);
 
 		if (totalDbs >= limit) {
 			return {

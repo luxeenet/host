@@ -947,6 +947,13 @@ export const projectRouter = createTRPCRouter({
 									appName.lastIndexOf("-"),
 								);
 
+								// Plan entitlement — enforce application quota on duplicate
+								await assertEntitlement(
+									PlanEntitlementService.checkCanCreateApplication(
+										ctx.session.activeOrganizationId,
+									),
+								);
+
 								const newApplication = await createApplication({
 									...application,
 									appName: newAppName,
@@ -1091,6 +1098,13 @@ export const projectRouter = createTRPCRouter({
 									appName.lastIndexOf("-"),
 								);
 
+								// Plan entitlement — enforce database quota on duplicate
+								await assertEntitlement(
+									PlanEntitlementService.checkCanCreateDatabase(
+										ctx.session.activeOrganizationId,
+									),
+								);
+
 								const newMariadb = await createMariadb({
 									...mariadb,
 									appName: newAppName,
@@ -1125,6 +1139,13 @@ export const projectRouter = createTRPCRouter({
 								const newAppName = appName.substring(
 									0,
 									appName.lastIndexOf("-"),
+								);
+
+								// Plan entitlement — enforce database quota on duplicate
+								await assertEntitlement(
+									PlanEntitlementService.checkCanCreateDatabase(
+										ctx.session.activeOrganizationId,
+									),
 								);
 
 								const newMongo = await createMongo({
@@ -1163,6 +1184,13 @@ export const projectRouter = createTRPCRouter({
 									appName.lastIndexOf("-"),
 								);
 
+								// Plan entitlement — enforce database quota on duplicate
+								await assertEntitlement(
+									PlanEntitlementService.checkCanCreateDatabase(
+										ctx.session.activeOrganizationId,
+									),
+								);
+
 								const newMysql = await createMysql({
 									...mysql,
 									appName: newAppName,
@@ -1199,6 +1227,13 @@ export const projectRouter = createTRPCRouter({
 									appName.lastIndexOf("-"),
 								);
 
+								// Plan entitlement — enforce database quota on duplicate
+								await assertEntitlement(
+									PlanEntitlementService.checkCanCreateDatabase(
+										ctx.session.activeOrganizationId,
+									),
+								);
+
 								const newPostgres = await createPostgres({
 									...postgres,
 									appName: newAppName,
@@ -1233,6 +1268,13 @@ export const projectRouter = createTRPCRouter({
 								const newAppName = appName.substring(
 									0,
 									appName.lastIndexOf("-"),
+								);
+
+								// Plan entitlement — enforce database quota on duplicate
+								await assertEntitlement(
+									PlanEntitlementService.checkCanCreateDatabase(
+										ctx.session.activeOrganizationId,
+									),
 								);
 
 								const newRedis = await createRedis({

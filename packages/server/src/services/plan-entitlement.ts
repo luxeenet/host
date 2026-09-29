@@ -575,6 +575,96 @@ export class PlanEntitlementService {
 			}
 		}
 	}
+
+	/**
+	 * Validate that requested object storage upload or modification does not exceed plan limits.
+	 * Supports both general storage ("max_storage_gb") and backup storage ("backup_storage_gb").
+	 *
+	 * @param organizationId - The target organization
+	 * @param incomingBytes - Bytes to add/upload (or delta: newBytes - oldBytes for replacements; negative for deletions)
+	 * @param currentUsageBytes - Current storage consumed in bytes (defaults to 0)
+	 * @param resourceKey - "max_storage_gb" | "backup_storage_gb" (defaults to "max_storage_gb")
+	 * @param executor - Database executor/transaction
+	 */
+	static async checkObjectStorageCapacity(
+		organizationId: string,
+		incomingBytes: number,
+		currentUsageBytes = 0,
+		resourceKey: "max_storage_gb" | "backup_storage_gb" = "max_storage_gb",
+		executor: any = db,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
+		if (!snapshot) return { allowed: false, reason: "No active plan found." };
+
+		const limitGb = snapshot.resources[resourceKey] ?? -1;
+		if (limitGb === -1) {
+			return { allowed: true, current: currentUsageBytes, limit: -1 };
+		}
+
+		const limitBytes = limitGb * 1024 * 1024 * 1024;
+		const projectedUsageBytes = Math.max(0, currentUsageBytes + incomingBytes);
+
+		// Deletions / usage reductions (incomingBytes <= 0) are always permitted regardless of quota
+		if (incomingBytes <= 0) {
+			return {
+				allowed: true,
+				current: projectedUsageBytes,
+				limit: limitBytes,
+			};
+		}
+
+		if (projectedUsageBytes > limitBytes) {
+			const limitGbFormatted =
+				limitGb >= 1 ? `${limitGb} GB` : `${Math.round(limitGb * 1024)} MB`;
+			const requestedMbFormatted = (incomingBytes / (1024 * 1024)).toFixed(2);
+			const currentMbFormatted = (currentUsageBytes / (1024 * 1024)).toFixed(2);
+
+			return {
+				allowed: false,
+				reason: `Requested storage upload (${requestedMbFormatted} MB, current usage: ${currentMbFormatted} MB) exceeds your plan limit of ${limitGbFormatted}. Please upgrade your plan or delete existing files.`,
+				current: projectedUsageBytes,
+				limit: limitBytes,
+			};
+		}
+
+		return {
+			allowed: true,
+			current: projectedUsageBytes,
+			limit: limitBytes,
+		};
+	}
+
+	/**
+	 * Authoritative assertion for object storage capacity.
+	 * Throws TRPCError FORBIDDEN when requested capacity exceeds the organization's plan limit.
+	 */
+	static async assertObjectStorageCapacity(
+		organizationId: string,
+		incomingBytes: number,
+		currentUsageBytes = 0,
+		resourceKey: "max_storage_gb" | "backup_storage_gb" = "max_storage_gb",
+		executor: any = db,
+	): Promise<void> {
+		const check = await this.checkObjectStorageCapacity(
+			organizationId,
+			incomingBytes,
+			currentUsageBytes,
+			resourceKey,
+			executor,
+		);
+		if (!check.allowed) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: check.reason ?? "Storage capacity limit exceeded.",
+			});
+		}
+	}
 }
 
 /**

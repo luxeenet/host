@@ -46,6 +46,7 @@ import {
 	updateIssueComment,
 } from "./github";
 import { generateApplyPatchesCommand } from "./patch";
+import { PlanEntitlementService } from "./plan-entitlement";
 import {
 	findPreviewDeploymentById,
 	updatePreviewDeployment,
@@ -143,10 +144,55 @@ export const findApplicationByName = async (appName: string) => {
 	return application;
 };
 
+const assertApplicationRuntimeResources = async (
+	application: Awaited<ReturnType<typeof findApplicationById>>,
+) => {
+	await PlanEntitlementService.assertRuntimeResources(
+		application.environment.project.organizationId,
+		{
+			memoryLimit: application.memoryLimit,
+			memoryReservation: application.memoryReservation,
+			cpuLimit: application.cpuLimit,
+			cpuReservation: application.cpuReservation,
+		},
+	);
+};
+
 export const updateApplication = async (
 	applicationId: string,
 	applicationData: Partial<Application>,
 ) => {
+	const resourceFieldsChanged =
+		applicationData.memoryLimit !== undefined ||
+		applicationData.memoryReservation !== undefined ||
+		applicationData.cpuLimit !== undefined ||
+		applicationData.cpuReservation !== undefined;
+
+	if (resourceFieldsChanged) {
+		const currentApplication = await findApplicationById(applicationId);
+		await PlanEntitlementService.assertRuntimeResources(
+			currentApplication.environment.project.organizationId,
+			{
+				memoryLimit:
+					applicationData.memoryLimit !== undefined
+						? applicationData.memoryLimit
+						: currentApplication.memoryLimit,
+				memoryReservation:
+					applicationData.memoryReservation !== undefined
+						? applicationData.memoryReservation
+						: currentApplication.memoryReservation,
+				cpuLimit:
+					applicationData.cpuLimit !== undefined
+						? applicationData.cpuLimit
+						: currentApplication.cpuLimit,
+				cpuReservation:
+					applicationData.cpuReservation !== undefined
+						? applicationData.cpuReservation
+						: currentApplication.cpuReservation,
+			},
+		);
+	}
+
 	const { appName, ...rest } = applicationData;
 	const application = await db
 		.update(applications)
@@ -184,6 +230,7 @@ export const deployApplication = async ({
 	descriptionLog: string;
 }) => {
 	const application = await findApplicationById(applicationId);
+	await assertApplicationRuntimeResources(application);
 	const serverId = application.buildServerId || application.serverId;
 	const applicationEntity = {
 		...application,
@@ -302,6 +349,7 @@ export const rebuildApplication = async ({
 	descriptionLog: string;
 }) => {
 	const application = await findApplicationById(applicationId);
+	await assertApplicationRuntimeResources(application);
 	const serverId = application.buildServerId || application.serverId;
 	const buildLink = `${await getDokployUrl()}/dashboard/project/${application.environment.projectId}/environment/${application.environmentId}/services/application/${application.applicationId}?tab=deployments`;
 
@@ -370,6 +418,7 @@ export const deployPreviewApplication = async ({
 	previewDeploymentId: string;
 }) => {
 	const application = await findApplicationById(applicationId);
+	await assertApplicationRuntimeResources(application);
 
 	const deployment = await createDeploymentPreview({
 		title: titleLog,
@@ -490,6 +539,7 @@ export const rebuildPreviewApplication = async ({
 	previewDeploymentId: string;
 }) => {
 	const application = await findApplicationById(applicationId);
+	await assertApplicationRuntimeResources(application);
 	const previewDeployment =
 		await findPreviewDeploymentById(previewDeploymentId);
 

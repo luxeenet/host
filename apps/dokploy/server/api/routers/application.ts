@@ -820,29 +820,6 @@ export const applicationRouter = createTRPCRouter({
 
 			const { applicationId, ...rest } = input;
 
-			const existingApp = await findApplicationById(applicationId);
-			await PlanEntitlementService.assertRuntimeResources(
-				ctx.session.activeOrganizationId,
-				{
-					memoryLimit:
-						rest.memoryLimit !== undefined
-							? rest.memoryLimit
-							: existingApp.memoryLimit,
-					memoryReservation:
-						rest.memoryReservation !== undefined
-							? rest.memoryReservation
-							: existingApp.memoryReservation,
-					cpuLimit:
-						rest.cpuLimit !== undefined
-							? rest.cpuLimit
-							: existingApp.cpuLimit,
-					cpuReservation:
-						rest.cpuReservation !== undefined
-							? rest.cpuReservation
-							: existingApp.cpuReservation,
-				},
-			);
-
 			const updateApp = await updateApplication(applicationId, {
 				...rest,
 			});

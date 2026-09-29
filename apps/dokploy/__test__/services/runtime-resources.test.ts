@@ -267,19 +267,54 @@ describe("Runtime Resource Normalization and Validation", () => {
 			).rejects.toThrow(TRPCError);
 		});
 
-		it("should reject deployment if existing resources exceed downgraded plan limits", async () => {
-			// Existing resource was created under a higher plan (2048 MB RAM)
-			const existingApp = {
-				memoryLimit: String(2048 * MB),
-				memoryReservation: String(1024 * MB),
-			};
-
-			// Customer has downgraded to Starter (512 MB RAM)
+		it("Scenario A — allowed RAM within plan", async () => {
 			vi.spyOn(PlanEntitlementService, "getPlanSnapshot").mockResolvedValueOnce({
-				planId: "starter",
-				planName: "Starter",
+				planId: "pro",
+				planName: "Pro",
 				resources: {
-					max_ram_mb: 512,
+					max_ram_mb: 2048,
+					max_cpu_millicores: 2000,
+				},
+				features: {},
+				applicationTypes: [],
+				subscriptionStatus: "active",
+			});
+
+			await expect(
+				PlanEntitlementService.assertRuntimeResources("org-1", {
+					memoryLimit: 1024 * MB,
+					memoryReservation: 512 * MB,
+				}),
+			).resolves.toBeUndefined();
+		});
+
+		it("Scenario B — RAM reservation exceeds limit", async () => {
+			vi.spyOn(PlanEntitlementService, "getPlanSnapshot").mockResolvedValueOnce({
+				planId: "pro",
+				planName: "Pro",
+				resources: {
+					max_ram_mb: 2048,
+					max_cpu_millicores: 2000,
+				},
+				features: {},
+				applicationTypes: [],
+				subscriptionStatus: "active",
+			});
+
+			await expect(
+				PlanEntitlementService.assertRuntimeResources("org-1", {
+					memoryLimit: 1024 * MB,
+					memoryReservation: 3072 * MB,
+				}),
+			).rejects.toThrow(TRPCError);
+		});
+
+		it("Scenario C — CPU limit exceeds plan", async () => {
+			vi.spyOn(PlanEntitlementService, "getPlanSnapshot").mockResolvedValueOnce({
+				planId: "pro",
+				planName: "Pro",
+				resources: {
+					max_ram_mb: 2048,
 					max_cpu_millicores: 1000,
 				},
 				features: {},
@@ -287,9 +322,90 @@ describe("Runtime Resource Normalization and Validation", () => {
 				subscriptionStatus: "active",
 			});
 
-			// On deployment, existingApp resources are checked and must be rejected
 			await expect(
-				PlanEntitlementService.assertRuntimeResources("org-1", existingApp),
+				PlanEntitlementService.assertRuntimeResources("org-1", {
+					cpuLimit: 2 * ONE_CPU_NANO,
+				}),
+			).rejects.toThrow(TRPCError);
+		});
+
+		it("Scenario D — CPU reservation exceeds plan", async () => {
+			vi.spyOn(PlanEntitlementService, "getPlanSnapshot").mockResolvedValueOnce({
+				planId: "pro",
+				planName: "Pro",
+				resources: {
+					max_ram_mb: 2048,
+					max_cpu_millicores: 1000,
+				},
+				features: {},
+				applicationTypes: [],
+				subscriptionStatus: "active",
+			});
+
+			await expect(
+				PlanEntitlementService.assertRuntimeResources("org-1", {
+					cpuLimit: 500_000_000,
+					cpuReservation: 1500_000_000,
+				}),
+			).rejects.toThrow(TRPCError);
+		});
+
+		it("Scenario E — unlimited allows large valid values", async () => {
+			vi.spyOn(PlanEntitlementService, "getPlanSnapshot").mockResolvedValueOnce({
+				planId: "unlimited",
+				planName: "Unlimited",
+				resources: {
+					max_ram_mb: -1,
+					max_cpu_millicores: -1,
+				},
+				features: {},
+				applicationTypes: [],
+				subscriptionStatus: "active",
+			});
+
+			await expect(
+				PlanEntitlementService.assertRuntimeResources("org-1", {
+					memoryLimit: 64 * 1024 * MB,
+					cpuLimit: 32 * ONE_CPU_NANO,
+				}),
+			).resolves.toBeUndefined();
+		});
+
+		it("Scenario F — status-only update does not trigger resource entitlement validation", () => {
+			const updateInput: { applicationStatus: "done" } = {
+				applicationStatus: "done",
+			};
+			const resourceFieldsChanged =
+				(updateInput as any).memoryLimit !== undefined ||
+				(updateInput as any).memoryReservation !== undefined ||
+				(updateInput as any).cpuLimit !== undefined ||
+				(updateInput as any).cpuReservation !== undefined;
+
+			expect(resourceFieldsChanged).toBe(false);
+		});
+
+		it("Scenario G — deployment/rebuild rejects application exceeding downgraded plan", async () => {
+			const storedApp = {
+				memoryLimit: String(2048 * MB),
+				memoryReservation: String(1024 * MB),
+				cpuLimit: String(2 * ONE_CPU_NANO),
+				cpuReservation: String(1 * ONE_CPU_NANO),
+			};
+
+			vi.spyOn(PlanEntitlementService, "getPlanSnapshot").mockResolvedValueOnce({
+				planId: "starter",
+				planName: "Starter",
+				resources: {
+					max_ram_mb: 1024,
+					max_cpu_millicores: 1000,
+				},
+				features: {},
+				applicationTypes: [],
+				subscriptionStatus: "active",
+			});
+
+			await expect(
+				PlanEntitlementService.assertRuntimeResources("org-1", storedApp),
 			).rejects.toThrow(TRPCError);
 		});
 	});

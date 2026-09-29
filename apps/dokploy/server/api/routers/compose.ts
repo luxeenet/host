@@ -98,11 +98,12 @@ export const composeRouter = createTRPCRouter({
 
 				return await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
-					async () => {
+					async (tx) => {
 						// Plan entitlement — compose stacks count as application slots
 						await assertEntitlement(
 							PlanEntitlementService.checkCanCreateApplication(
 								ctx.session.activeOrganizationId,
+								tx,
 							),
 						);
 

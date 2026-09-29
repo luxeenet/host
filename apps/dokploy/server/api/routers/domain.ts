@@ -53,11 +53,12 @@ export const domainRouter = createTRPCRouter({
 
 				return await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
-					async () => {
+					async (tx) => {
 						// Plan entitlement — enforce custom domain quota
 						await assertEntitlement(
 							PlanEntitlementService.checkCanAddDomain(
 								ctx.session.activeOrganizationId,
+								tx,
 							),
 						);
 

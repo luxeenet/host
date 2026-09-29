@@ -70,11 +70,12 @@ export const postgresRouter = createTRPCRouter({
 
 				return await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
-					async () => {
+					async (tx) => {
 						// Plan entitlement — enforce database quota
 						await assertEntitlement(
 							PlanEntitlementService.checkCanCreateDatabase(
 								ctx.session.activeOrganizationId,
+								tx,
 							),
 						);
 

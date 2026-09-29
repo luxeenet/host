@@ -81,11 +81,12 @@ export const projectRouter = createTRPCRouter({
 
 				return await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
-					async () => {
+					async (tx) => {
 						// Plan entitlement — enforce project quota
 						await assertEntitlement(
 							PlanEntitlementService.checkCanCreateProject(
 								ctx.session.activeOrganizationId,
+								tx,
 							),
 						);
 

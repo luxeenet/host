@@ -66,11 +66,12 @@ export const redisRouter = createTRPCRouter({
 
 				return await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
-					async () => {
+					async (tx) => {
 						// Plan entitlement — Redis counts as a database slot
 						await assertEntitlement(
 							PlanEntitlementService.checkCanCreateDatabase(
 								ctx.session.activeOrganizationId,
+								tx,
 							),
 						);
 

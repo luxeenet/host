@@ -48,8 +48,9 @@ export class PlanEntitlementService {
 	 */
 	static async getPlanSnapshot(
 		organizationId: string,
+		executor: any = db,
 	): Promise<PlanSnapshot | null> {
-		const subscription = await db.query.subscriptions.findFirst({
+		const subscription = await executor.query.subscriptions.findFirst({
 			where: eq(schema.subscriptions.organizationId, organizationId),
 			with: {
 				plan: {
@@ -60,7 +61,7 @@ export class PlanEntitlementService {
 					},
 				},
 			},
-			orderBy: (sub, { desc }) => [desc(sub.createdAt)],
+			orderBy: (sub: any, { desc }: any) => [desc(sub.createdAt)],
 		});
 
 		if (!subscription) return null;
@@ -76,7 +77,7 @@ export class PlanEntitlementService {
 		}
 
 		const applicationTypes = subscription.plan.applicationTypes.map(
-			(t) => t.applicationType,
+			(t: any) => t.applicationType,
 		);
 
 		return {
@@ -94,10 +95,11 @@ export class PlanEntitlementService {
 	 */
 	static async checkSubscriptionActive(
 		organizationId: string,
+		executor: any = db,
 	): Promise<EntitlementResult> {
-		const sub = await db.query.subscriptions.findFirst({
+		const sub = await executor.query.subscriptions.findFirst({
 			where: eq(schema.subscriptions.organizationId, organizationId),
-			orderBy: (sub, { desc }) => [desc(sub.createdAt)],
+			orderBy: (sub: any, { desc }: any) => [desc(sub.createdAt)],
 		});
 
 		if (!sub) {
@@ -120,17 +122,21 @@ export class PlanEntitlementService {
 	 */
 	static async checkCanCreateProject(
 		organizationId: string,
+		executor: any = db,
 	): Promise<EntitlementResult> {
-		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
 		if (!activeCheck.allowed) return activeCheck;
 
-		const snapshot = await this.getPlanSnapshot(organizationId);
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
 		if (!snapshot) return { allowed: false, reason: "No plan found." };
 
 		const limit = snapshot.resources["max_projects"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		const res = await db
+		const res = await executor
 			.select({ value: count() })
 			.from(schema.projects)
 			.where(eq(schema.projects.organizationId, organizationId));
@@ -153,18 +159,22 @@ export class PlanEntitlementService {
 	 */
 	static async checkCanCreateApplication(
 		organizationId: string,
+		executor: any = db,
 	): Promise<EntitlementResult> {
-		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
 		if (!activeCheck.allowed) return activeCheck;
 
-		const snapshot = await this.getPlanSnapshot(organizationId);
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
 		if (!snapshot) return { allowed: false, reason: "No plan found." };
 
 		const limit = snapshot.resources["max_applications"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
 		// Count total applications across all projects in the org
-		const res = await db
+		const res = await executor
 			.select({ value: count() })
 			.from(schema.applications)
 			.innerJoin(
@@ -196,11 +206,15 @@ export class PlanEntitlementService {
 	static async checkApplicationType(
 		organizationId: string,
 		applicationType: string,
+		executor: any = db,
 	): Promise<EntitlementResult> {
-		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
 		if (!activeCheck.allowed) return activeCheck;
 
-		const snapshot = await this.getPlanSnapshot(organizationId);
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
 		if (!snapshot) return { allowed: false, reason: "No plan found." };
 
 		if (snapshot.applicationTypes.length === 0) {
@@ -223,11 +237,15 @@ export class PlanEntitlementService {
 	 */
 	static async checkCanCreateDatabase(
 		organizationId: string,
+		executor: any = db,
 	): Promise<EntitlementResult> {
-		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
 		if (!activeCheck.allowed) return activeCheck;
 
-		const snapshot = await this.getPlanSnapshot(organizationId);
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
 		if (!snapshot) return { allowed: false, reason: "No plan found." };
 
 		const featureEnabled = snapshot.features["databases"] ?? false;
@@ -242,7 +260,7 @@ export class PlanEntitlementService {
 		if (limit === -1) return { allowed: true };
 
 		// Count all 5 managed database types in the org
-		const pgCount = await db
+		const pgCount = await executor
 			.select({ value: count() })
 			.from(schema.postgres)
 			.innerJoin(
@@ -255,7 +273,7 @@ export class PlanEntitlementService {
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
 
-		const mysqlCount = await db
+		const mysqlCount = await executor
 			.select({ value: count() })
 			.from(schema.mysql)
 			.innerJoin(
@@ -268,7 +286,7 @@ export class PlanEntitlementService {
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
 
-		const mongoCount = await db
+		const mongoCount = await executor
 			.select({ value: count() })
 			.from(schema.mongo)
 			.innerJoin(
@@ -281,7 +299,7 @@ export class PlanEntitlementService {
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
 
-		const redisCount = await db
+		const redisCount = await executor
 			.select({ value: count() })
 			.from(schema.redis)
 			.innerJoin(
@@ -294,7 +312,7 @@ export class PlanEntitlementService {
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
 
-		const mariadbCount = await db
+		const mariadbCount = await executor
 			.select({ value: count() })
 			.from(schema.mariadb)
 			.innerJoin(
@@ -331,11 +349,15 @@ export class PlanEntitlementService {
 	 */
 	static async checkCanAddDomain(
 		organizationId: string,
+		executor: any = db,
 	): Promise<EntitlementResult> {
-		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
 		if (!activeCheck.allowed) return activeCheck;
 
-		const snapshot = await this.getPlanSnapshot(organizationId);
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
 		if (!snapshot) return { allowed: false, reason: "No plan found." };
 
 		const featureEnabled = snapshot.features["custom_domains"] ?? false;
@@ -349,7 +371,7 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_domains"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		const res = await db
+		const res = await executor
 			.select({ value: count() })
 			.from(schema.domains)
 			.innerJoin(
@@ -385,11 +407,15 @@ export class PlanEntitlementService {
 	static async checkFeature(
 		organizationId: string,
 		featureKey: string,
+		executor: any = db,
 	): Promise<EntitlementResult> {
-		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
 		if (!activeCheck.allowed) return activeCheck;
 
-		const snapshot = await this.getPlanSnapshot(organizationId);
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
 		if (!snapshot) return { allowed: false, reason: "No plan found." };
 
 		const enabled = snapshot.features[featureKey] ?? false;
@@ -408,11 +434,15 @@ export class PlanEntitlementService {
 	 */
 	static async checkCanAddTeamMember(
 		organizationId: string,
+		executor: any = db,
 	): Promise<EntitlementResult> {
-		const activeCheck = await this.checkSubscriptionActive(organizationId);
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
 		if (!activeCheck.allowed) return activeCheck;
 
-		const snapshot = await this.getPlanSnapshot(organizationId);
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
 		if (!snapshot) return { allowed: false, reason: "No plan found." };
 
 		const featureEnabled = snapshot.features["team_members"] ?? false;
@@ -426,7 +456,7 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_team_members"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		const res = await db
+		const res = await executor
 			.select({ value: count() })
 			.from(schema.member)
 			.where(eq(schema.member.organizationId, organizationId));
@@ -450,13 +480,13 @@ export class PlanEntitlementService {
 	 */
 	static async withAtomicQuotaLock<T>(
 		organizationId: string,
-		fn: () => Promise<T>,
+		fn: (tx: any) => Promise<T>,
 	): Promise<T> {
 		return await db.transaction(async (tx) => {
 			await tx.execute(
 				sql`SELECT pg_advisory_xact_lock(hashtext(${`org_quota_${organizationId}`}))`,
 			);
-			return await fn();
+			return await fn(tx);
 		});
 	}
 
@@ -467,8 +497,9 @@ export class PlanEntitlementService {
 		organizationId: string,
 		requestedRamMb?: number,
 		requestedCpuMillicores?: number,
+		executor: any = db,
 	): Promise<EntitlementResult> {
-		const snapshot = await this.getPlanSnapshot(organizationId);
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
 		if (!snapshot) return { allowed: false, reason: "No active plan found." };
 
 		const maxRam = snapshot.resources["max_ram_mb"] ?? -1;
@@ -503,7 +534,7 @@ export class PlanEntitlementService {
  * Convenience: throw a TRPCError if an entitlement check fails.
  * Import and use in tRPC procedures:
  *
- *   await assertEntitlement(PlanEntitlementService.checkCanCreateProject(orgId));
+ *   await assertEntitlement(PlanEntitlementService.checkCanCreateProject(orgId, tx));
  */
 export async function assertEntitlement(
 	check: Promise<EntitlementResult> | EntitlementResult,

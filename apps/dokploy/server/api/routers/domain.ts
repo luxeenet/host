@@ -51,21 +51,26 @@ export const domainRouter = createTRPCRouter({
 					});
 				}
 
-				// Plan entitlement — enforce custom domain quota
-				await assertEntitlement(
-					PlanEntitlementService.checkCanAddDomain(
-						ctx.session.activeOrganizationId,
-					),
-				);
+				return await PlanEntitlementService.withAtomicQuotaLock(
+					ctx.session.activeOrganizationId,
+					async () => {
+						// Plan entitlement — enforce custom domain quota
+						await assertEntitlement(
+							PlanEntitlementService.checkCanAddDomain(
+								ctx.session.activeOrganizationId,
+							),
+						);
 
-				const domain = await createDomain(input);
-				await audit(ctx, {
-					action: "create",
-					resourceType: "domain",
-					resourceId: domain.domainId,
-					resourceName: domain.host,
-				});
-				return domain;
+						const domain = await createDomain(input);
+						await audit(ctx, {
+							action: "create",
+							resourceType: "domain",
+							resourceId: domain.domainId,
+							resourceName: domain.host,
+						});
+						return domain;
+					},
+				);
 			} catch (error) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",

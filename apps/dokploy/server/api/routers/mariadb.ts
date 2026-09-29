@@ -67,61 +67,74 @@ export const mariadbRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				// Plan entitlement — enforce database quota
-				await assertEntitlement(
-					PlanEntitlementService.checkCanCreateDatabase(
-						ctx.session.activeOrganizationId,
-					),
-				);
+				return await PlanEntitlementService.withAtomicQuotaLock(
+					ctx.session.activeOrganizationId,
+					async () => {
+						// Plan entitlement — enforce database quota
+						await assertEntitlement(
+							PlanEntitlementService.checkCanCreateDatabase(
+								ctx.session.activeOrganizationId,
+							),
+						);
 
-				const webServerSettings = await getWebServerSettings();
-				if (
-					(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
-					!input.serverId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You need to use a server to create a Mariadb",
-					});
-				}
+						const webServerSettings = await getWebServerSettings();
+						if (
+							(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
+							!input.serverId
+						) {
+							throw new TRPCError({
+								code: "UNAUTHORIZED",
+								message:
+									"You need to use a server to create a Mariadb",
+							});
+						}
 
-				if (project.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to access this project",
-					});
-				}
+						if (
+							project.organizationId !==
+							ctx.session.activeOrganizationId
+						) {
+							throw new TRPCError({
+								code: "UNAUTHORIZED",
+								message:
+									"You are not authorized to access this project",
+							});
+						}
 
-				if (input.serverId) {
-					const accessibleIds = await getAccessibleServerIds(ctx.session);
-					if (!accessibleIds.has(input.serverId)) {
-						throw new TRPCError({
-							code: "UNAUTHORIZED",
-							message: "You are not authorized to access this server",
+						if (input.serverId) {
+							const accessibleIds = await getAccessibleServerIds(
+								ctx.session,
+							);
+							if (!accessibleIds.has(input.serverId)) {
+								throw new TRPCError({
+									code: "UNAUTHORIZED",
+									message:
+										"You are not authorized to access this server",
+								});
+							}
+						}
+
+						const newMariadb = await createMariadb({
+							...input,
 						});
-					}
-				}
+						await addNewService(ctx, newMariadb.mariadbId);
 
-				const newMariadb = await createMariadb({
-					...input,
-				});
-				await addNewService(ctx, newMariadb.mariadbId);
+						await createMount({
+							serviceId: newMariadb.mariadbId,
+							serviceType: "mariadb",
+							volumeName: `${newMariadb.appName}-data`,
+							mountPath: "/var/lib/mysql",
+							type: "volume",
+						});
 
-				await createMount({
-					serviceId: newMariadb.mariadbId,
-					serviceType: "mariadb",
-					volumeName: `${newMariadb.appName}-data`,
-					mountPath: "/var/lib/mysql",
-					type: "volume",
-				});
-
-				await audit(ctx, {
-					action: "create",
-					resourceType: "service",
-					resourceId: newMariadb.mariadbId,
-					resourceName: newMariadb.appName,
-				});
-				return newMariadb;
+						await audit(ctx, {
+							action: "create",
+							resourceType: "service",
+							resourceId: newMariadb.mariadbId,
+							resourceName: newMariadb.appName,
+						});
+						return newMariadb;
+					},
+				);
 			} catch (error) {
 				if (error instanceof TRPCError) {
 					throw error;

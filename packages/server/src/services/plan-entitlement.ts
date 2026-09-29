@@ -11,7 +11,7 @@
  * This service reads plan resources and features from the database.
  * Plans are NEVER hardcoded here.
  */
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, count, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import * as schema from "../db/schema";
 
@@ -442,6 +442,60 @@ export class PlanEntitlementService {
 		}
 
 		return { allowed: true, current: value, limit };
+	}
+
+	/**
+	 * Run a quota check and creation action inside an atomic transaction
+	 * with an advisory lock on the organization to guarantee concurrency safety.
+	 */
+	static async withAtomicQuotaLock<T>(
+		organizationId: string,
+		fn: () => Promise<T>,
+	): Promise<T> {
+		return await db.transaction(async (tx) => {
+			await tx.execute(
+				sql`SELECT pg_advisory_xact_lock(hashtext(${`org_quota_${organizationId}`}))`,
+			);
+			return await fn();
+		});
+	}
+
+	/**
+	 * Validate that requested runtime CPU and RAM do not exceed plan limits.
+	 */
+	static async checkRuntimeResources(
+		organizationId: string,
+		requestedRamMb?: number,
+		requestedCpuMillicores?: number,
+	): Promise<EntitlementResult> {
+		const snapshot = await this.getPlanSnapshot(organizationId);
+		if (!snapshot) return { allowed: false, reason: "No active plan found." };
+
+		const maxRam = snapshot.resources["max_ram_mb"] ?? -1;
+		if (maxRam !== -1 && requestedRamMb && requestedRamMb > maxRam) {
+			return {
+				allowed: false,
+				reason: `Requested RAM (${requestedRamMb} MB) exceeds your plan limit of ${maxRam} MB. Please upgrade your plan.`,
+				current: requestedRamMb,
+				limit: maxRam,
+			};
+		}
+
+		const maxCpu = snapshot.resources["max_cpu_millicores"] ?? -1;
+		if (
+			maxCpu !== -1 &&
+			requestedCpuMillicores &&
+			requestedCpuMillicores > maxCpu
+		) {
+			return {
+				allowed: false,
+				reason: `Requested CPU (${requestedCpuMillicores} mCPU) exceeds your plan limit of ${maxCpu} mCPU. Please upgrade your plan.`,
+				current: requestedCpuMillicores,
+				limit: maxCpu,
+			};
+		}
+
+		return { allowed: true };
 	}
 }
 

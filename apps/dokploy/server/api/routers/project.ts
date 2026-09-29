@@ -79,37 +79,45 @@ export const projectRouter = createTRPCRouter({
 			try {
 				await checkProjectAccess(ctx, "create");
 
-				// Plan entitlement — enforce project quota
-				await assertEntitlement(
-					PlanEntitlementService.checkCanCreateProject(
-						ctx.session.activeOrganizationId,
-					),
-				);
-
-				const admin = await findUserById(ctx.user.ownerId);
-
-				if (admin.serversQuantity === 0 && IS_CLOUD) {
-					throw new TRPCError({
-						code: "NOT_FOUND",
-						message: "No servers available, Please subscribe to a plan",
-					});
-				}
-
-				const project = await createProject(
-					input,
+				return await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
+					async () => {
+						// Plan entitlement — enforce project quota
+						await assertEntitlement(
+							PlanEntitlementService.checkCanCreateProject(
+								ctx.session.activeOrganizationId,
+							),
+						);
+
+						const admin = await findUserById(ctx.user.ownerId);
+
+						if (admin.serversQuantity === 0 && IS_CLOUD) {
+							throw new TRPCError({
+								code: "NOT_FOUND",
+								message: "No servers available, Please subscribe to a plan",
+							});
+						}
+
+						const project = await createProject(
+							input,
+							ctx.session.activeOrganizationId,
+						);
+						await addNewProject(ctx, project.project.projectId);
+
+						await addNewEnvironment(
+							ctx,
+							project?.environment?.environmentId || "",
+						);
+
+						await audit(ctx, {
+							action: "create",
+							resourceType: "project",
+							resourceId: project.project.projectId,
+							resourceName: project.project.name,
+						});
+						return project;
+					},
 				);
-				await addNewProject(ctx, project.project.projectId);
-
-				await addNewEnvironment(ctx, project?.environment?.environmentId || "");
-
-				await audit(ctx, {
-					action: "create",
-					resourceType: "project",
-					resourceId: project.project.projectId,
-					resourceName: project.project.name,
-				});
-				return project;
 			} catch (error) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",

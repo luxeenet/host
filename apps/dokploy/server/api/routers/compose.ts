@@ -96,53 +96,66 @@ export const composeRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				// Plan entitlement — compose stacks count as application slots
-				await assertEntitlement(
-					PlanEntitlementService.checkCanCreateApplication(
-						ctx.session.activeOrganizationId,
-					),
-				);
+				return await PlanEntitlementService.withAtomicQuotaLock(
+					ctx.session.activeOrganizationId,
+					async () => {
+						// Plan entitlement — compose stacks count as application slots
+						await assertEntitlement(
+							PlanEntitlementService.checkCanCreateApplication(
+								ctx.session.activeOrganizationId,
+							),
+						);
 
-				const webServerSettings = await getWebServerSettings();
-				if (
-					(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
-					!input.serverId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You need to use a server to create a compose",
-					});
-				}
-				if (project.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to access this project",
-					});
-				}
+						const webServerSettings = await getWebServerSettings();
+						if (
+							(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
+							!input.serverId
+						) {
+							throw new TRPCError({
+								code: "UNAUTHORIZED",
+								message:
+									"You need to use a server to create a compose",
+							});
+						}
+						if (
+							project.organizationId !==
+							ctx.session.activeOrganizationId
+						) {
+							throw new TRPCError({
+								code: "UNAUTHORIZED",
+								message:
+									"You are not authorized to access this project",
+							});
+						}
 
-				if (input.serverId) {
-					const accessibleIds = await getAccessibleServerIds(ctx.session);
-					if (!accessibleIds.has(input.serverId)) {
-						throw new TRPCError({
-							code: "UNAUTHORIZED",
-							message: "You are not authorized to access this server",
+						if (input.serverId) {
+							const accessibleIds = await getAccessibleServerIds(
+								ctx.session,
+							);
+							if (!accessibleIds.has(input.serverId)) {
+								throw new TRPCError({
+									code: "UNAUTHORIZED",
+									message:
+										"You are not authorized to access this server",
+								});
+							}
+						}
+
+						const newService = await createCompose({
+							...input,
 						});
-					}
-				}
 
-				const newService = await createCompose({
-					...input,
-				});
+						await addNewService(ctx, newService.composeId);
 
-				await addNewService(ctx, newService.composeId);
-
-				await audit(ctx, {
-					action: "create",
-					resourceType: "service",
-					resourceId: newService.composeId,
-					resourceName: newService.appName,
-				});
-				return newService;
+						await audit(ctx, {
+							action: "create",
+							resourceType: "service",
+							resourceId: newService.composeId,
+							resourceName: newService.appName,
+						});
+						return newService;
+					},
+				);
 			} catch (error) {
 				throw error;
 			}

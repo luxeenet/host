@@ -64,61 +64,74 @@ export const redisRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				// Plan entitlement — Redis counts as a database slot
-				await assertEntitlement(
-					PlanEntitlementService.checkCanCreateDatabase(
-						ctx.session.activeOrganizationId,
-					),
-				);
+				return await PlanEntitlementService.withAtomicQuotaLock(
+					ctx.session.activeOrganizationId,
+					async () => {
+						// Plan entitlement — Redis counts as a database slot
+						await assertEntitlement(
+							PlanEntitlementService.checkCanCreateDatabase(
+								ctx.session.activeOrganizationId,
+							),
+						);
 
-				const webServerSettings = await getWebServerSettings();
-				if (
-					(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
-					!input.serverId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You need to use a server to create a Redis",
-					});
-				}
+						const webServerSettings = await getWebServerSettings();
+						if (
+							(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
+							!input.serverId
+						) {
+							throw new TRPCError({
+								code: "UNAUTHORIZED",
+								message:
+									"You need to use a server to create a Redis",
+							});
+						}
 
-				if (project.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to access this project",
-					});
-				}
+						if (
+							project.organizationId !==
+							ctx.session.activeOrganizationId
+						) {
+							throw new TRPCError({
+								code: "UNAUTHORIZED",
+								message:
+									"You are not authorized to access this project",
+							});
+						}
 
-				if (input.serverId) {
-					const accessibleIds = await getAccessibleServerIds(ctx.session);
-					if (!accessibleIds.has(input.serverId)) {
-						throw new TRPCError({
-							code: "UNAUTHORIZED",
-							message: "You are not authorized to access this server",
+						if (input.serverId) {
+							const accessibleIds = await getAccessibleServerIds(
+								ctx.session,
+							);
+							if (!accessibleIds.has(input.serverId)) {
+								throw new TRPCError({
+									code: "UNAUTHORIZED",
+									message:
+										"You are not authorized to access this server",
+								});
+							}
+						}
+
+						const newRedis = await createRedis({
+							...input,
 						});
-					}
-				}
+						await addNewService(ctx, newRedis.redisId);
 
-				const newRedis = await createRedis({
-					...input,
-				});
-				await addNewService(ctx, newRedis.redisId);
+						await createMount({
+							serviceId: newRedis.redisId,
+							serviceType: "redis",
+							volumeName: `${newRedis.appName}-data`,
+							mountPath: "/data",
+							type: "volume",
+						});
 
-				await createMount({
-					serviceId: newRedis.redisId,
-					serviceType: "redis",
-					volumeName: `${newRedis.appName}-data`,
-					mountPath: "/data",
-					type: "volume",
-				});
-
-				await audit(ctx, {
-					action: "create",
-					resourceType: "service",
-					resourceId: newRedis.redisId,
-					resourceName: newRedis.appName,
-				});
-				return newRedis;
+						await audit(ctx, {
+							action: "create",
+							resourceType: "service",
+							resourceId: newRedis.redisId,
+							resourceName: newRedis.appName,
+						});
+						return newRedis;
+					},
+				);
 			} catch (error) {
 				throw error;
 			}

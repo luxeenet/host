@@ -17,10 +17,8 @@ import {
 	Zap,
 	X,
 } from "lucide-react";
-import { authClient } from "@/lib/auth-client";
-import { brand } from "@paas/branding";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { api } from "@/utils/api";
+import { useEffect } from "react";
 
 const ADMIN_NAV_ITEMS = [
 	{ label: "Admin Overview", icon: LayoutDashboard, href: "/admin" },
@@ -38,10 +36,32 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 	const router = useRouter();
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 
+	const { data: user, isLoading } = api.user.get.useQuery(undefined, {
+		retry: false,
+	});
+
+	useEffect(() => {
+		if (!isLoading) {
+			if (!user) {
+				router.replace("/login");
+			} else if (!(user as any)?.user?.isPlatformAdmin && !(user as any)?.isPlatformAdmin) {
+				router.replace("/dashboard");
+			}
+		}
+	}, [user, isLoading, router]);
+
 	const handleSignOut = async () => {
 		await authClient.signOut();
 		await router.push("/");
 	};
+
+	if (isLoading) {
+		return (
+			<div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm font-medium">
+				Verifying platform administrator session...
+			</div>
+		);
+	}
 
 	const SidebarContent = () => (
 		<div className="flex flex-col h-full">

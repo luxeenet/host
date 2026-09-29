@@ -4,9 +4,6 @@ import { toast } from "sonner";
 import {
 	Zap,
 	Plus,
-	Edit,
-	Trash2,
-	Check,
 	Server,
 	Cpu,
 	HardDrive,
@@ -16,82 +13,41 @@ import {
 import { AdminLayout } from "@/components/layouts/admin-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
-
-const INITIAL_PLANS = [
-	{
-		id: "plan-starter",
-		name: "Starter Hobby",
-		price: "$9.00",
-		cycle: "month",
-		maxApps: 3,
-		maxDatabases: 1,
-		maxRamMb: 1024,
-		maxCpuCores: 1,
-		maxBandwidthGb: 100,
-		customDomains: true,
-		sslAuto: true,
-		activeSubscribers: 120,
-	},
-	{
-		id: "plan-pro",
-		name: "Pro Developer",
-		price: "$29.00",
-		cycle: "month",
-		maxApps: 10,
-		maxDatabases: 4,
-		maxRamMb: 4096,
-		maxCpuCores: 2,
-		maxBandwidthGb: 500,
-		customDomains: true,
-		sslAuto: true,
-		activeSubscribers: 240,
-	},
-	{
-		id: "plan-business",
-		name: "Business Scale",
-		price: "$79.00",
-		cycle: "month",
-		maxApps: 30,
-		maxDatabases: 15,
-		maxRamMb: 16384,
-		maxCpuCores: 8,
-		maxBandwidthGb: 2000,
-		customDomains: true,
-		sslAuto: true,
-		activeSubscribers: 52,
-	},
-];
+import { api } from "@/utils/api";
 
 export default function AdminPlansPage() {
-	const [plans, setPlans] = useState(INITIAL_PLANS);
+	const { data: plans, isLoading, refetch } = api.plan.adminList.useQuery();
+	const createPlanMutation = api.plan.create.useMutation();
+
 	const [showModal, setShowModal] = useState(false);
 	const [newPlanName, setNewPlanName] = useState("");
 	const [newPrice, setNewPrice] = useState("");
+	const [newSlug, setNewSlug] = useState("");
 
-	const handleCreatePlan = () => {
-		if (!newPlanName || !newPrice) {
-			toast.error("Please specify plan name and price.");
+	const handleCreatePlan = async () => {
+		if (!newPlanName || !newPrice || !newSlug) {
+			toast.error("Please specify plan name, slug, and price.");
 			return;
 		}
-		const created = {
-			id: `plan-${Date.now()}`,
-			name: newPlanName,
-			price: `$${newPrice}`,
-			cycle: "month",
-			maxApps: 5,
-			maxDatabases: 2,
-			maxRamMb: 2048,
-			maxCpuCores: 2,
-			maxBandwidthGb: 250,
-			customDomains: true,
-			sslAuto: true,
-			activeSubscribers: 0,
-		};
-		setPlans([...plans, created]);
-		setShowModal(false);
-		setNewPlanName("");
-		setNewPrice("");
-		toast.success(`Plan '${newPlanName}' created and activated for customer checkout!`);
+		try {
+			await createPlanMutation.mutateAsync({
+				name: newPlanName,
+				slug: newSlug.toLowerCase().trim(),
+				price: newPrice,
+				currency: "USD",
+				billingCycle: "monthly",
+				status: "active",
+				isPublic: true,
+			});
+			await refetch();
+			setShowModal(false);
+			setNewPlanName("");
+			setNewPrice("");
+			setNewSlug("");
+			toast.success(`Plan '${newPlanName}' created successfully!`);
+		} catch (err: any) {
+			toast.error(err?.message || "Failed to create plan");
+		}
 	};
 
 	return (
@@ -163,59 +119,52 @@ export default function AdminPlansPage() {
 				)}
 
 				{/* Plan Cards Grid */}
-				<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-					{plans.map((p) => (
-						<div
-							key={p.id}
-							className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-5 flex flex-col justify-between hover:border-slate-700 transition-all"
-						>
-							<div className="space-y-4">
-								<div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-									<h3 className="text-base font-bold text-white">{p.name}</h3>
-									<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-										{p.activeSubscribers} Subscribers
-									</span>
-								</div>
+				{isLoading ? (
+					<div className="text-slate-400 text-sm py-8 text-center">Loading plans from PostgreSQL database...</div>
+				) : !plans || plans.length === 0 ? (
+					<div className="text-slate-500 text-sm py-8 text-center bg-slate-900/40 rounded-xl border border-slate-800">
+						No plans configured yet. Click "Create New Tier Plan" to add your first commercial plan.
+					</div>
+				) : (
+					<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+						{plans.map((p) => (
+							<div
+								key={p.id}
+								className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-5 flex flex-col justify-between hover:border-slate-700 transition-all"
+							>
+								<div className="space-y-4">
+									<div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+										<h3 className="text-base font-bold text-white">{p.name}</h3>
+										<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+											Status: {p.status}
+										</span>
+									</div>
 
-								<div>
-									<span className="text-3xl font-extrabold text-white">{p.price}</span>
-									<span className="text-slate-400 text-xs"> / {p.cycle}</span>
-								</div>
+									<div>
+										<span className="text-3xl font-extrabold text-white">${p.price}</span>
+										<span className="text-slate-400 text-xs"> / {p.billingCycle}</span>
+									</div>
 
-								{/* Quotas */}
-								<div className="space-y-2 text-xs text-slate-300">
-									<div className="flex items-center justify-between p-2 rounded bg-slate-950">
-										<span className="text-slate-400">Applications Limit:</span>
-										<strong className="text-white">{p.maxApps} Apps</strong>
-									</div>
-									<div className="flex items-center justify-between p-2 rounded bg-slate-950">
-										<span className="text-slate-400">Managed DBs Limit:</span>
-										<strong className="text-white">{p.maxDatabases} DBs</strong>
-									</div>
-									<div className="flex items-center justify-between p-2 rounded bg-slate-950">
-										<span className="text-slate-400">RAM Quota:</span>
-										<strong className="text-white">{p.maxRamMb / 1024} GB RAM</strong>
-									</div>
-									<div className="flex items-center justify-between p-2 rounded bg-slate-950">
-										<span className="text-slate-400">CPU Cores Max:</span>
-										<strong className="text-white">{p.maxCpuCores} Cores</strong>
+									{/* Features & Resources list */}
+									<div className="space-y-2 text-xs text-slate-300">
+										<div className="flex items-center justify-between p-2 rounded bg-slate-950">
+											<span className="text-slate-400">Slug:</span>
+											<strong className="text-amber-400">{p.slug}</strong>
+										</div>
+										<div className="flex items-center justify-between p-2 rounded bg-slate-950">
+											<span className="text-slate-400">Currency:</span>
+											<strong className="text-white">{p.currency}</strong>
+										</div>
+										<div className="flex items-center justify-between p-2 rounded bg-slate-950">
+											<span className="text-slate-400">Trial Days:</span>
+											<strong className="text-white">{p.trialDays} Days</strong>
+										</div>
 									</div>
 								</div>
 							</div>
-
-							<div className="flex items-center gap-2 pt-3 border-t border-slate-800">
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => toast.info(`Editing plan ${p.name}`)}
-									className="flex-1 border-slate-800 text-slate-300 hover:bg-slate-800 text-xs gap-1.5"
-								>
-									<Edit className="w-3.5 h-3.5" /> Edit Quotas
-								</Button>
-							</div>
-						</div>
-					))}
-				</div>
+						))}
+					</div>
+				)}
 			</div>
 		</>
 	);

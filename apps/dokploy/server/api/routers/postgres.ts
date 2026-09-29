@@ -178,6 +178,10 @@ export const postgresRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const service = await findPostgresById(input.postgresId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				service,
+			);
 
 			if (service.serverId) {
 				await startServiceRemote(service.serverId, service.appName);
@@ -260,6 +264,10 @@ export const postgresRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const postgres = await findPostgresById(input.postgresId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				postgres,
+			);
 			await audit(ctx, {
 				action: "deploy",
 				resourceType: "service",
@@ -283,6 +291,12 @@ export const postgresRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.postgresId, {
 				deployment: ["create"],
 			});
+
+			const postgres = await findPostgresById(input.postgresId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				postgres,
+			);
 
 			const queue: string[] = [];
 			let done = false;
@@ -395,6 +409,10 @@ export const postgresRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const postgres = await findPostgresById(input.postgresId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				postgres,
+			);
 			if (postgres.serverId) {
 				await stopServiceRemote(postgres.serverId, postgres.appName);
 			} else {
@@ -428,32 +446,28 @@ export const postgresRouter = createTRPCRouter({
 				service: ["create"],
 			});
 
-			if (
-				rest.memoryLimit ||
-				rest.cpuLimit ||
-				rest.memoryReservation ||
-				rest.cpuReservation
-			) {
-				const requestedRamMb = rest.memoryLimit
-					? Math.ceil(Number(rest.memoryLimit) / (1024 * 1024))
-					: rest.memoryReservation
-						? Math.ceil(Number(rest.memoryReservation) / (1024 * 1024))
-						: undefined;
-
-				const requestedCpuMillicores = rest.cpuLimit
-					? Math.ceil(Number(rest.cpuLimit) / 1000000)
-					: rest.cpuReservation
-						? Math.ceil(Number(rest.cpuReservation) / 1000000)
-						: undefined;
-
-				await assertEntitlement(
-					PlanEntitlementService.checkRuntimeResources(
-						ctx.session.activeOrganizationId,
-						requestedRamMb,
-						requestedCpuMillicores,
-					),
-				);
-			}
+			const current = await findPostgresById(postgresId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				{
+					memoryLimit:
+						rest.memoryLimit !== undefined
+							? rest.memoryLimit
+							: current.memoryLimit,
+					memoryReservation:
+						rest.memoryReservation !== undefined
+							? rest.memoryReservation
+							: current.memoryReservation,
+					cpuLimit:
+						rest.cpuLimit !== undefined
+							? rest.cpuLimit
+							: current.cpuLimit,
+					cpuReservation:
+						rest.cpuReservation !== undefined
+							? rest.cpuReservation
+							: current.cpuReservation,
+				},
+			);
 
 			const service = await updatePostgresById(postgresId, {
 				...rest,

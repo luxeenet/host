@@ -140,6 +140,10 @@ export const libsqlRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const libsql = await findLibsqlById(input.libsqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				libsql,
+			);
 
 			if (libsql.serverId) {
 				await startServiceRemote(libsql.serverId, libsql.appName);
@@ -252,6 +256,10 @@ export const libsqlRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const libsql = await findLibsqlById(input.libsqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				libsql,
+			);
 			await audit(ctx, {
 				action: "deploy",
 				resourceType: "service",
@@ -274,6 +282,12 @@ export const libsqlRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.libsqlId, {
 				deployment: ["create"],
 			});
+			const libsql = await findLibsqlById(input.libsqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				libsql,
+			);
+
 			const queue: string[] = [];
 			let done = false;
 
@@ -381,6 +395,10 @@ export const libsqlRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const libsql = await findLibsqlById(input.libsqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				libsql,
+			);
 			if (libsql.serverId) {
 				await stopServiceRemote(libsql.serverId, libsql.appName);
 			} else {
@@ -413,6 +431,29 @@ export const libsqlRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, libsqlId, {
 				service: ["create"],
 			});
+
+			const current = await findLibsqlById(libsqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				{
+					memoryLimit:
+						rest.memoryLimit !== undefined
+							? rest.memoryLimit
+							: current.memoryLimit,
+					memoryReservation:
+						rest.memoryReservation !== undefined
+							? rest.memoryReservation
+							: current.memoryReservation,
+					cpuLimit:
+						rest.cpuLimit !== undefined
+							? rest.cpuLimit
+							: current.cpuLimit,
+					cpuReservation:
+						rest.cpuReservation !== undefined
+							? rest.cpuReservation
+							: current.cpuReservation,
+				},
+			);
 			const libsql = await updateLibsqlById(libsqlId, {
 				...rest,
 			});

@@ -170,6 +170,10 @@ export const mariadbRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const service = await findMariadbById(input.mariadbId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				service,
+			);
 			if (service.serverId) {
 				await startServiceRemote(service.serverId, service.appName);
 			} else {
@@ -252,6 +256,10 @@ export const mariadbRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const mariadb = await findMariadbById(input.mariadbId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				mariadb,
+			);
 
 			await audit(ctx, {
 				action: "deploy",
@@ -275,6 +283,12 @@ export const mariadbRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.mariadbId, {
 				deployment: ["create"],
 			});
+
+			const mariadb = await findMariadbById(input.mariadbId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				mariadb,
+			);
 
 			return observable<string>((emit) => {
 				deployMariadb(input.mariadbId, (log) => {
@@ -368,6 +382,10 @@ export const mariadbRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const mariadb = await findMariadbById(input.mariadbId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				mariadb,
+			);
 			if (mariadb.serverId) {
 				await stopServiceRemote(mariadb.serverId, mariadb.appName);
 			} else {
@@ -401,32 +419,28 @@ export const mariadbRouter = createTRPCRouter({
 				service: ["create"],
 			});
 
-			if (
-				rest.memoryLimit ||
-				rest.cpuLimit ||
-				rest.memoryReservation ||
-				rest.cpuReservation
-			) {
-				const requestedRamMb = rest.memoryLimit
-					? Math.ceil(Number(rest.memoryLimit) / (1024 * 1024))
-					: rest.memoryReservation
-						? Math.ceil(Number(rest.memoryReservation) / (1024 * 1024))
-						: undefined;
-
-				const requestedCpuMillicores = rest.cpuLimit
-					? Math.ceil(Number(rest.cpuLimit) / 1000000)
-					: rest.cpuReservation
-						? Math.ceil(Number(rest.cpuReservation) / 1000000)
-						: undefined;
-
-				await assertEntitlement(
-					PlanEntitlementService.checkRuntimeResources(
-						ctx.session.activeOrganizationId,
-						requestedRamMb,
-						requestedCpuMillicores,
-					),
-				);
-			}
+			const current = await findMariadbById(mariadbId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				{
+					memoryLimit:
+						rest.memoryLimit !== undefined
+							? rest.memoryLimit
+							: current.memoryLimit,
+					memoryReservation:
+						rest.memoryReservation !== undefined
+							? rest.memoryReservation
+							: current.memoryReservation,
+					cpuLimit:
+						rest.cpuLimit !== undefined
+							? rest.cpuLimit
+							: current.cpuLimit,
+					cpuReservation:
+						rest.cpuReservation !== undefined
+							? rest.cpuReservation
+							: current.cpuReservation,
+				},
+			);
 
 			const service = await updateMariadbById(mariadbId, {
 				...rest,

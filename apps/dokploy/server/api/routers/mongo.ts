@@ -174,6 +174,10 @@ export const mongoRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const service = await findMongoById(input.mongoId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				service,
+			);
 
 			if (service.serverId) {
 				await startServiceRemote(service.serverId, service.appName);
@@ -257,6 +261,10 @@ export const mongoRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const mongo = await findMongoById(input.mongoId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				mongo,
+			);
 			await audit(ctx, {
 				action: "deploy",
 				resourceType: "service",
@@ -279,6 +287,12 @@ export const mongoRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.mongoId, {
 				deployment: ["create"],
 			});
+			const mongo = await findMongoById(input.mongoId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				mongo,
+			);
+
 			const queue: string[] = [];
 			let done = false;
 
@@ -328,6 +342,10 @@ export const mongoRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const mongo = await findMongoById(input.mongoId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				mongo,
+			);
 			if (mongo.serverId) {
 				await stopServiceRemote(mongo.serverId, mongo.appName);
 			} else {
@@ -423,32 +441,28 @@ export const mongoRouter = createTRPCRouter({
 				service: ["create"],
 			});
 
-			if (
-				rest.memoryLimit ||
-				rest.cpuLimit ||
-				rest.memoryReservation ||
-				rest.cpuReservation
-			) {
-				const requestedRamMb = rest.memoryLimit
-					? Math.ceil(Number(rest.memoryLimit) / (1024 * 1024))
-					: rest.memoryReservation
-						? Math.ceil(Number(rest.memoryReservation) / (1024 * 1024))
-						: undefined;
-
-				const requestedCpuMillicores = rest.cpuLimit
-					? Math.ceil(Number(rest.cpuLimit) / 1000000)
-					: rest.cpuReservation
-						? Math.ceil(Number(rest.cpuReservation) / 1000000)
-						: undefined;
-
-				await assertEntitlement(
-					PlanEntitlementService.checkRuntimeResources(
-						ctx.session.activeOrganizationId,
-						requestedRamMb,
-						requestedCpuMillicores,
-					),
-				);
-			}
+			const current = await findMongoById(mongoId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				{
+					memoryLimit:
+						rest.memoryLimit !== undefined
+							? rest.memoryLimit
+							: current.memoryLimit,
+					memoryReservation:
+						rest.memoryReservation !== undefined
+							? rest.memoryReservation
+							: current.memoryReservation,
+					cpuLimit:
+						rest.cpuLimit !== undefined
+							? rest.cpuLimit
+							: current.cpuLimit,
+					cpuReservation:
+						rest.cpuReservation !== undefined
+							? rest.cpuReservation
+							: current.cpuReservation,
+				},
+			);
 
 			const service = await updateMongoById(mongoId, {
 				...rest,

@@ -12,12 +12,25 @@
  * Plans are NEVER hardcoded here.
  */
 import { and, count, eq, isNull, sql } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { db } from "../db";
 import * as schema from "../db/schema";
 
 // ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
+
+export interface RawRuntimeResourceInput {
+	memoryLimit?: unknown;
+	memoryReservation?: unknown;
+	cpuLimit?: unknown;
+	cpuReservation?: unknown;
+}
+
+export interface EffectiveRuntimeResources {
+	effectiveRamMb?: number;
+	effectiveCpuMillicores?: number;
+}
 
 export interface EntitlementResult {
 	allowed: boolean;
@@ -503,7 +516,11 @@ export class PlanEntitlementService {
 		if (!snapshot) return { allowed: false, reason: "No active plan found." };
 
 		const maxRam = snapshot.resources["max_ram_mb"] ?? -1;
-		if (maxRam !== -1 && requestedRamMb && requestedRamMb > maxRam) {
+		if (
+			maxRam !== -1 &&
+			requestedRamMb !== undefined &&
+			requestedRamMb > maxRam
+		) {
 			return {
 				allowed: false,
 				reason: `Requested RAM (${requestedRamMb} MB) exceeds your plan limit of ${maxRam} MB. Please upgrade your plan.`,
@@ -515,7 +532,7 @@ export class PlanEntitlementService {
 		const maxCpu = snapshot.resources["max_cpu_millicores"] ?? -1;
 		if (
 			maxCpu !== -1 &&
-			requestedCpuMillicores &&
+			requestedCpuMillicores !== undefined &&
 			requestedCpuMillicores > maxCpu
 		) {
 			return {
@@ -528,6 +545,176 @@ export class PlanEntitlementService {
 
 		return { allowed: true };
 	}
+
+	/**
+	 * Centralized authoritative method to normalize raw runtime resource inputs
+	 * and assert that effective RAM and CPU do not exceed organization plan limits.
+	 * Rejects over-limit, malformed, or negative inputs with an appropriate TRPCError.
+	 */
+	static async assertRuntimeResources(
+		organizationId: string,
+		resources: RawRuntimeResourceInput,
+		executor: any = db,
+	): Promise<void> {
+		const { effectiveRamMb, effectiveCpuMillicores } =
+			normalizeAndCalculateEffectiveResources(resources);
+
+		if (effectiveRamMb !== undefined || effectiveCpuMillicores !== undefined) {
+			const check = await this.checkRuntimeResources(
+				organizationId,
+				effectiveRamMb,
+				effectiveCpuMillicores,
+				executor,
+			);
+			if (!check.allowed) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						check.reason ?? "Action not permitted on your current plan.",
+				});
+			}
+		}
+	}
+}
+
+/**
+ * Validates and converts a single raw numeric resource parameter (bytes or NanoCPUs).
+ * Handles string or number inputs, rejects NaN, Infinity, negative values, unsafe integers, or non-numeric strings.
+ * Returns undefined if value is null, undefined, or empty string.
+ */
+export function parseAndValidateResourceValue(
+	value: unknown,
+	fieldName: string,
+): number | undefined {
+	if (value === undefined || value === null) {
+		return undefined;
+	}
+
+	let numericValue: number;
+
+	if (typeof value === "number") {
+		numericValue = value;
+	} else if (typeof value === "string") {
+		const trimmed = value.trim();
+		if (trimmed === "") {
+			return undefined;
+		}
+		// Strict numeric check
+		if (!/^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(trimmed)) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: `Invalid value for ${fieldName}: "${value}" is not a valid number.`,
+			});
+		}
+		numericValue = Number(trimmed);
+	} else {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `Invalid type for ${fieldName}: expected number or numeric string.`,
+		});
+	}
+
+	if (!Number.isFinite(numericValue) || Number.isNaN(numericValue)) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `Invalid value for ${fieldName}: must be a finite number.`,
+		});
+	}
+
+	if (numericValue < 0) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `Invalid value for ${fieldName}: negative values are not allowed.`,
+		});
+	}
+
+	if (numericValue > Number.MAX_SAFE_INTEGER) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `Invalid value for ${fieldName}: value exceeds maximum safe integer.`,
+		});
+	}
+
+	return numericValue;
+}
+
+/**
+ * Centralized helper for runtime-resource normalization and conversion.
+ * - RAM: Converts Docker bytes to MB using `Math.ceil(bytes / (1024 * 1024))`.
+ *   `effectiveRamMb = max(memoryLimitMb, memoryReservationMb)`
+ * - CPU: Converts Docker NanoCPUs to millicores using `Math.ceil(nanoCpus / 1_000_000)`.
+ *   `effectiveCpuMillicores = max(cpuLimitMillicores, cpuReservationMillicores)`
+ * - If only limit exists, uses limit.
+ * - If only reservation exists, uses reservation.
+ * - If neither exists, returns undefined.
+ * - If both exist, always evaluates the larger effective value.
+ */
+export function normalizeAndCalculateEffectiveResources(
+	input: RawRuntimeResourceInput,
+): EffectiveRuntimeResources {
+	const rawMemoryLimit = parseAndValidateResourceValue(
+		input.memoryLimit,
+		"memoryLimit",
+	);
+	const rawMemoryReservation = parseAndValidateResourceValue(
+		input.memoryReservation,
+		"memoryReservation",
+	);
+	const rawCpuLimit = parseAndValidateResourceValue(
+		input.cpuLimit,
+		"cpuLimit",
+	);
+	const rawCpuReservation = parseAndValidateResourceValue(
+		input.cpuReservation,
+		"cpuReservation",
+	);
+
+	const memoryLimitMb =
+		rawMemoryLimit !== undefined
+			? Math.ceil(rawMemoryLimit / (1024 * 1024))
+			: undefined;
+	const memoryReservationMb =
+		rawMemoryReservation !== undefined
+			? Math.ceil(rawMemoryReservation / (1024 * 1024))
+			: undefined;
+
+	let effectiveRamMb: number | undefined;
+	if (memoryLimitMb !== undefined && memoryReservationMb !== undefined) {
+		effectiveRamMb = Math.max(memoryLimitMb, memoryReservationMb);
+	} else if (memoryLimitMb !== undefined) {
+		effectiveRamMb = memoryLimitMb;
+	} else if (memoryReservationMb !== undefined) {
+		effectiveRamMb = memoryReservationMb;
+	}
+
+	const cpuLimitMillicores =
+		rawCpuLimit !== undefined
+			? Math.ceil(rawCpuLimit / 1_000_000)
+			: undefined;
+	const cpuReservationMillicores =
+		rawCpuReservation !== undefined
+			? Math.ceil(rawCpuReservation / 1_000_000)
+			: undefined;
+
+	let effectiveCpuMillicores: number | undefined;
+	if (
+		cpuLimitMillicores !== undefined &&
+		cpuReservationMillicores !== undefined
+	) {
+		effectiveCpuMillicores = Math.max(
+			cpuLimitMillicores,
+			cpuReservationMillicores,
+		);
+	} else if (cpuLimitMillicores !== undefined) {
+		effectiveCpuMillicores = cpuLimitMillicores;
+	} else if (cpuReservationMillicores !== undefined) {
+		effectiveCpuMillicores = cpuReservationMillicores;
+	}
+
+	return {
+		effectiveRamMb,
+		effectiveCpuMillicores,
+	};
 }
 
 /**
@@ -541,7 +728,6 @@ export async function assertEntitlement(
 ): Promise<void> {
 	const result = await check;
 	if (!result.allowed) {
-		const { TRPCError } = await import("@trpc/server");
 		throw new TRPCError({
 			code: "FORBIDDEN",
 			message: result.reason ?? "Action not permitted on your current plan.",

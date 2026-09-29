@@ -37,6 +37,7 @@ export * from "./services/overview";
 export * from "./services/patch";
 export * from "./services/patch-repo";
 export * from "./services/port";
+export * from "./services/plan-entitlement";
 export * from "./services/postgres";
 export * from "./services/preview-deployment";
 export * from "./services/project";

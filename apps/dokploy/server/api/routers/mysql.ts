@@ -174,6 +174,10 @@ export const mysqlRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const service = await findMySqlById(input.mysqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				service,
+			);
 
 			if (service.serverId) {
 				await startServiceRemote(service.serverId, service.appName);
@@ -256,6 +260,10 @@ export const mysqlRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const mysql = await findMySqlById(input.mysqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				mysql,
+			);
 			await audit(ctx, {
 				action: "deploy",
 				resourceType: "service",
@@ -278,6 +286,12 @@ export const mysqlRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.mysqlId, {
 				deployment: ["create"],
 			});
+
+			const mysql = await findMySqlById(input.mysqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				mysql,
+			);
 
 			const queue: string[] = [];
 			let done = false;
@@ -327,6 +341,10 @@ export const mysqlRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const mysql = await findMySqlById(input.mysqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				mysql,
+			);
 			if (mysql.serverId) {
 				await stopServiceRemote(mysql.serverId, mysql.appName);
 			} else {
@@ -419,32 +437,28 @@ export const mysqlRouter = createTRPCRouter({
 				service: ["create"],
 			});
 
-			if (
-				rest.memoryLimit ||
-				rest.cpuLimit ||
-				rest.memoryReservation ||
-				rest.cpuReservation
-			) {
-				const requestedRamMb = rest.memoryLimit
-					? Math.ceil(Number(rest.memoryLimit) / (1024 * 1024))
-					: rest.memoryReservation
-						? Math.ceil(Number(rest.memoryReservation) / (1024 * 1024))
-						: undefined;
-
-				const requestedCpuMillicores = rest.cpuLimit
-					? Math.ceil(Number(rest.cpuLimit) / 1000000)
-					: rest.cpuReservation
-						? Math.ceil(Number(rest.cpuReservation) / 1000000)
-						: undefined;
-
-				await assertEntitlement(
-					PlanEntitlementService.checkRuntimeResources(
-						ctx.session.activeOrganizationId,
-						requestedRamMb,
-						requestedCpuMillicores,
-					),
-				);
-			}
+			const current = await findMySqlById(mysqlId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				{
+					memoryLimit:
+						rest.memoryLimit !== undefined
+							? rest.memoryLimit
+							: current.memoryLimit,
+					memoryReservation:
+						rest.memoryReservation !== undefined
+							? rest.memoryReservation
+							: current.memoryReservation,
+					cpuLimit:
+						rest.cpuLimit !== undefined
+							? rest.cpuLimit
+							: current.cpuLimit,
+					cpuReservation:
+						rest.cpuReservation !== undefined
+							? rest.cpuReservation
+							: current.cpuReservation,
+				},
+			);
 
 			const service = await updateMySqlById(mysqlId, {
 				...rest,

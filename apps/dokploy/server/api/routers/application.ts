@@ -344,6 +344,10 @@ export const applicationRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const application = await findApplicationById(input.applicationId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				application,
+			);
 
 			try {
 				await updateApplicationStatus(input.applicationId, "idle");
@@ -460,6 +464,10 @@ export const applicationRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const service = await findApplicationById(input.applicationId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				service,
+			);
 			if (service.serverId) {
 				await startServiceRemote(service.serverId, service.appName);
 			} else {
@@ -482,6 +490,10 @@ export const applicationRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const application = await findApplicationById(input.applicationId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				application,
+			);
 			const jobData: DeploymentJob = {
 				applicationId: input.applicationId,
 				titleLog: input.title || "Rebuild deployment",
@@ -808,32 +820,28 @@ export const applicationRouter = createTRPCRouter({
 
 			const { applicationId, ...rest } = input;
 
-			if (
-				rest.memoryLimit ||
-				rest.cpuLimit ||
-				rest.memoryReservation ||
-				rest.cpuReservation
-			) {
-				const requestedRamMb = rest.memoryLimit
-					? Math.ceil(Number(rest.memoryLimit) / (1024 * 1024))
-					: rest.memoryReservation
-						? Math.ceil(Number(rest.memoryReservation) / (1024 * 1024))
-						: undefined;
-
-				const requestedCpuMillicores = rest.cpuLimit
-					? Math.ceil(Number(rest.cpuLimit) / 1000000)
-					: rest.cpuReservation
-						? Math.ceil(Number(rest.cpuReservation) / 1000000)
-						: undefined;
-
-				await assertEntitlement(
-					PlanEntitlementService.checkRuntimeResources(
-						ctx.session.activeOrganizationId,
-						requestedRamMb,
-						requestedCpuMillicores,
-					),
-				);
-			}
+			const existingApp = await findApplicationById(applicationId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				{
+					memoryLimit:
+						rest.memoryLimit !== undefined
+							? rest.memoryLimit
+							: existingApp.memoryLimit,
+					memoryReservation:
+						rest.memoryReservation !== undefined
+							? rest.memoryReservation
+							: existingApp.memoryReservation,
+					cpuLimit:
+						rest.cpuLimit !== undefined
+							? rest.cpuLimit
+							: existingApp.cpuLimit,
+					cpuReservation:
+						rest.cpuReservation !== undefined
+							? rest.cpuReservation
+							: existingApp.cpuReservation,
+				},
+			);
 
 			const updateApp = await updateApplication(applicationId, {
 				...rest,
@@ -878,23 +886,10 @@ export const applicationRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const application = await findApplicationById(input.applicationId);
-
-			if (application.memoryLimit || application.cpuLimit) {
-				const requestedRamMb = application.memoryLimit
-					? Math.ceil(Number(application.memoryLimit) / (1024 * 1024))
-					: undefined;
-				const requestedCpuMillicores = application.cpuLimit
-					? Math.ceil(Number(application.cpuLimit) / 1000000)
-					: undefined;
-
-				await assertEntitlement(
-					PlanEntitlementService.checkRuntimeResources(
-						ctx.session.activeOrganizationId,
-						requestedRamMb,
-						requestedCpuMillicores,
-					),
-				);
-			}
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				application,
+			);
 			const jobData: DeploymentJob = {
 				applicationId: input.applicationId,
 				titleLog: input.title || "Manual deployment",
@@ -1007,6 +1002,10 @@ export const applicationRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const app = await findApplicationById(applicationId);
+			await PlanEntitlementService.assertRuntimeResources(
+				ctx.session.activeOrganizationId,
+				app,
+			);
 
 			await updateApplication(applicationId, {
 				sourceType: "drop",

@@ -1,5 +1,6 @@
 "use client";
 
+import { brand } from "@paas/branding";
 import {
 	Activity,
 	ArrowRight,
@@ -34,9 +35,9 @@ const SLIDES: ShowcaseItem[][] = [
 		},
 		{
 			icon: Layers,
-			title: "Open source",
+			title: "High Performance Engine",
 			description:
-				"Deploy for free with the open-source alternative to Netlify, Vercel, and Heroku.",
+				`Deploy instantly with automated builds and zero-downtime rollouts powered by ${brand.APP_NAME}.`,
 		},
 		{
 			icon: Bot,
@@ -82,7 +83,7 @@ const SLIDES: ShowcaseItem[][] = [
 			icon: Database,
 			title: "Managed databases",
 			description:
-				"Manage and back up MySQL, PostgreSQL, MongoDB, MariaDB, and Redis directly from Dokploy.",
+				`Manage and back up MySQL, PostgreSQL, MongoDB, MariaDB, and Redis directly from ${brand.APP_NAME}.`,
 		},
 		{
 			icon: Terminal,
@@ -97,9 +98,9 @@ const SLIDES: ShowcaseItem[][] = [
 		},
 		{
 			icon: Unlock,
-			title: "No lock-in",
+			title: "Instant Cloud Scaling",
 			description:
-				"Modify, scale, and customize Dokploy however your project needs.",
+				`Host, auto-scale, and manage all your applications effortlessly with high availability on ${brand.APP_NAME}.`,
 		},
 	],
 ];

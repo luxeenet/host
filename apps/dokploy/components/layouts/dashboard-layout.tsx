@@ -1,3 +1,4 @@
+import { brand } from "@paas/branding";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect } from "react";
@@ -17,7 +18,7 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 	const { data: haveRootAccess } = api.user.haveRootAccess.useQuery();
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { config: whitelabeling } = useWhitelabeling();
-	const appName = whitelabeling?.appName || "Dokploy";
+	const appName = whitelabeling?.appName || brand.APP_NAME;
 	const { data: currentPlan } = api.stripe.getCurrentPlan.useQuery(undefined, {
 		enabled: isCloud === true,
 		refetchOnWindowFocus: false,

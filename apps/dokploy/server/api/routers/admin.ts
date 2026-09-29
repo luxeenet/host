@@ -92,7 +92,10 @@ export const adminRouter = createTRPCRouter({
 			if (!planCounts[sub.plan.id]) {
 				planCounts[sub.plan.id] = { name: sub.plan.name, count: 0, price: monthlyPrice };
 			}
-			planCounts[sub.plan.id].count += 1;
+			const entry = planCounts[sub.plan.id];
+			if (entry) {
+				entry.count += 1;
+			}
 		}
 
 		return {

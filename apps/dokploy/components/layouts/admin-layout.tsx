@@ -19,13 +19,17 @@ import {
 } from "lucide-react";
 import { api } from "@/utils/api";
 import { useEffect } from "react";
+import { brand } from "@paas/branding";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { authClient } from "@/lib/auth-client";
 
 const ADMIN_NAV_ITEMS = [
 	{ label: "Admin Overview", icon: LayoutDashboard, href: "/admin" },
 	{ label: "Plans & Pricing", icon: Zap, href: "/admin/plans" },
 	{ label: "Customers", icon: Users, href: "/admin/customers" },
 	{ label: "Server Nodes", icon: Server, href: "/admin/servers" },
-	{ label: "Dokploy Infra Control", icon: ShieldCheck, href: "/dashboard/home" },
+	{ label: "Hatdot Infra Control", icon: ShieldCheck, href: "/dashboard/home" },
 ];
 
 interface AdminLayoutProps {
@@ -68,9 +72,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 			{/* Logo & Admin Badge */}
 			<div className="p-5 border-b border-slate-800">
 				<Link href="/admin" className="flex items-center gap-2.5">
-					<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/20">
-						<ShieldCheck className="w-4 h-4 text-white" />
-					</div>
+					<img src={brand.ICON_URL || "/logo-icon.png"} alt={brand.APP_NAME} className="w-8 h-8 object-contain shrink-0" />
 					<div>
 						<span className="text-white font-bold text-sm block leading-tight">{brand.APP_NAME}</span>
 						<span className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest">Platform Admin</span>

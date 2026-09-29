@@ -25,6 +25,7 @@ import { redis } from "./redis";
 import { schedules } from "./schedule";
 import { sshKeys } from "./ssh-key";
 import { generateAppName } from "./utils";
+import { serverCapacity } from "./server-capacity";
 export const serverStatus = pgEnum("serverStatus", ["active", "inactive"]);
 export const serverType = pgEnum("serverType", ["deploy", "build"]);
 
@@ -132,6 +133,10 @@ export const serverRelations = relations(server, ({ one, many }) => ({
 		references: [organization.id],
 	}),
 	schedules: many(schedules),
+	capacity: one(serverCapacity, {
+		fields: [server.serverId],
+		references: [serverCapacity.serverId],
+	}),
 }));
 
 const createSchema = createInsertSchema(server, {

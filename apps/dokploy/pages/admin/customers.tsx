@@ -86,7 +86,7 @@ export default function AdminCustomersPage() {
 													{cust.isPlatformAdmin ? "YES" : "NO"}
 												</span>
 											</td>
-											<td className="px-6 py-4 text-slate-400">{cust.createdAt}</td>
+											<td className="px-6 py-4 text-slate-400">{cust.createdAt ? new Date(cust.createdAt).toLocaleDateString() : "—"}</td>
 										</tr>
 									))}
 								</tbody>

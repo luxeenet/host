@@ -8,11 +8,9 @@ import { findEnvironmentById } from "@dokploy/server/services/environment";
 import type { Libsql } from "@dokploy/server/services/libsql";
 import { findProjectById } from "@dokploy/server/services/project";
 import { sendDatabaseBackupNotifications } from "../notifications/database-backup";
-import { execAsync, execAsyncRemote } from "../process/execAsync";
 import {
-	getBackupCommand,
+	executeDatabaseBackup,
 	getBackupTimestamp,
-	getS3Credentials,
 	normalizeS3Path,
 } from "./utils";
 
@@ -34,21 +32,14 @@ export const runLibsqlBackup = async (
 	const backupFileName = `${getBackupTimestamp()}.sql.gz`;
 	const bucketDestination = `${appName}/${normalizeS3Path(prefix)}${backupFileName}`;
 	try {
-		const rcloneFlags = getS3Credentials(destination);
-		const rcloneDestination = `:s3:${destination.bucket}/${bucketDestination}`;
-		const backupCommand = getBackupCommand(
+		await executeDatabaseBackup({
 			backup,
-			rcloneFlags,
-			rcloneDestination,
-			deployment.logPath,
-		);
-		if (libsql.serverId) {
-			await execAsyncRemote(libsql.serverId, backupCommand);
-		} else {
-			await execAsync(backupCommand, {
-				shell: "/bin/bash",
-			});
-		}
+			organizationId: project.organizationId,
+			destination,
+			bucketDestination,
+			logPath: deployment.logPath,
+			serverId: libsql.serverId,
+		});
 
 		await sendDatabaseBackupNotifications({
 			applicationName: name,

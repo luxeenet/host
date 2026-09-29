@@ -8,11 +8,9 @@ import { findEnvironmentById } from "@dokploy/server/services/environment";
 import type { Mongo } from "@dokploy/server/services/mongo";
 import { findProjectById } from "@dokploy/server/services/project";
 import { sendDatabaseBackupNotifications } from "../notifications/database-backup";
-import { execAsync, execAsyncRemote } from "../process/execAsync";
 import {
-	getBackupCommand,
+	executeDatabaseBackup,
 	getBackupTimestamp,
-	getS3Credentials,
 	normalizeS3Path,
 } from "./utils";
 
@@ -30,22 +28,14 @@ export const runMongoBackup = async (mongo: Mongo, backup: BackupSchedule) => {
 		description: "MongoDB Backup",
 	});
 	try {
-		const rcloneFlags = getS3Credentials(destination);
-		const rcloneDestination = `:s3:${destination.bucket}/${bucketDestination}`;
-		const backupCommand = getBackupCommand(
+		await executeDatabaseBackup({
 			backup,
-			rcloneFlags,
-			rcloneDestination,
-			deployment.logPath,
-		);
-
-		if (mongo.serverId) {
-			await execAsyncRemote(mongo.serverId, backupCommand);
-		} else {
-			await execAsync(backupCommand, {
-				shell: "/bin/bash",
-			});
-		}
+			organizationId: project.organizationId,
+			destination,
+			bucketDestination,
+			logPath: deployment.logPath,
+			serverId: mongo.serverId,
+		});
 
 		await sendDatabaseBackupNotifications({
 			applicationName: name,

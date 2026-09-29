@@ -8,11 +8,9 @@ import { findDestinationById } from "@dokploy/server/services/destination";
 import { findEnvironmentById } from "@dokploy/server/services/environment";
 import { findProjectById } from "@dokploy/server/services/project";
 import { sendDatabaseBackupNotifications } from "../notifications/database-backup";
-import { execAsync, execAsyncRemote } from "../process/execAsync";
 import {
-	getBackupCommand,
+	executeDatabaseBackup,
 	getBackupTimestamp,
-	getS3Credentials,
 	normalizeS3Path,
 } from "./utils";
 
@@ -35,21 +33,14 @@ export const runComposeBackup = async (
 	});
 
 	try {
-		const rcloneFlags = getS3Credentials(destination);
-		const rcloneDestination = `:s3:${destination.bucket}/${bucketDestination}`;
-		const backupCommand = getBackupCommand(
+		await executeDatabaseBackup({
 			backup,
-			rcloneFlags,
-			rcloneDestination,
-			deployment.logPath,
-		);
-		if (compose.serverId) {
-			await execAsyncRemote(compose.serverId, backupCommand);
-		} else {
-			await execAsync(backupCommand, {
-				shell: "/bin/bash",
-			});
-		}
+			organizationId: project.organizationId,
+			destination,
+			bucketDestination,
+			logPath: deployment.logPath,
+			serverId: compose.serverId,
+		});
 
 		await sendDatabaseBackupNotifications({
 			applicationName: name,

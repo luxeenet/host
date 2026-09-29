@@ -8,6 +8,7 @@ import {
 	exportEncryptionKeys,
 } from "@dokploy/server/lib/encryption";
 import type { BackupSchedule } from "@dokploy/server/services/backup";
+import { BackupStorageService } from "@dokploy/server/services/backup-storage";
 import {
 	createDeploymentBackup,
 	updateDeploymentStatus,
@@ -39,6 +40,7 @@ export const runWebServerBackup = async (backup: BackupSchedule) => {
 	});
 	const writeStream = createWriteStream(deployment.logPath, { flags: "a" });
 	let computedBackupSize: number | undefined;
+	let quotaReservationId: string | null = null;
 	try {
 		const destination = await findDestinationById(backup.destinationId);
 		const rcloneFlags = getS3Credentials(destination);
@@ -46,7 +48,8 @@ export const runWebServerBackup = async (backup: BackupSchedule) => {
 		const { BASE_PATH } = paths();
 		const tempDir = await mkdtemp(join(tmpdir(), "dokploy-backup-"));
 		const backupFileName = `webserver-backup-${timestamp}.zip`;
-		const s3Path = `:s3:${destination.bucket}/${backup.appName}/${normalizeS3Path(backup.prefix)}${backupFileName}`;
+		const objectKey = `${backup.appName}/${normalizeS3Path(backup.prefix)}${backupFileName}`;
+		const s3Path = `:s3:${destination.bucket}/${objectKey}`;
 
 		try {
 			await execAsync(`mkdir -p ${tempDir}/filesystem`);
@@ -114,10 +117,31 @@ export const runWebServerBackup = async (backup: BackupSchedule) => {
 				// If stat fails, keep undefined
 			}
 
+			if (computedBackupSize !== undefined && computedBackupSize > 0) {
+				writeStream.write("Checking backup storage quota...\n");
+				const reservation = await BackupStorageService.reserveBackupStorage({
+					organizationId: destination.organizationId,
+					destinationId: destination.destinationId,
+					backupId: backup.backupId,
+					objectKey,
+					bytes: computedBackupSize,
+				});
+				quotaReservationId = reservation.id;
+				writeStream.write("Backup storage quota approved ✅\n");
+			}
+
 			const uploadCommand = `rclone copyto ${rcloneFlags.join(" ")} "${zipPath}" "${s3Path}"`;
 			writeStream.write("Running command to upload backup to S3\n");
 			await execAsync(uploadCommand);
 			writeStream.write("Uploaded backup to S3 ✅\n");
+
+			if (quotaReservationId && computedBackupSize !== undefined) {
+				await BackupStorageService.commitBackupStorage(
+					quotaReservationId,
+					computedBackupSize,
+				);
+			}
+
 			writeStream.end();
 			await sendDokployBackupNotifications({
 				type: "success",
@@ -136,6 +160,14 @@ export const runWebServerBackup = async (backup: BackupSchedule) => {
 			}
 		}
 	} catch (error) {
+		if (quotaReservationId) {
+			try {
+				await BackupStorageService.releaseBackupStorage(quotaReservationId);
+			} catch (releaseErr) {
+				console.error("Failed to release backup quota reservation:", releaseErr);
+			}
+		}
+
 		const safeErrorMessage = redactRcloneCredentials(
 			error instanceof Error ? error.message : String(error),
 		);

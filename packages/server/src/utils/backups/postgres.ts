@@ -8,11 +8,9 @@ import { findEnvironmentById } from "@dokploy/server/services/environment";
 import type { Postgres } from "@dokploy/server/services/postgres";
 import { findProjectById } from "@dokploy/server/services/project";
 import { sendDatabaseBackupNotifications } from "../notifications/database-backup";
-import { execAsync, execAsyncRemote } from "../process/execAsync";
 import {
-	getBackupCommand,
+	executeDatabaseBackup,
 	getBackupTimestamp,
-	getS3Credentials,
 	normalizeS3Path,
 } from "./utils";
 
@@ -34,21 +32,14 @@ export const runPostgresBackup = async (
 	const backupFileName = `${getBackupTimestamp()}.sql.gz`;
 	const bucketDestination = `${appName}/${normalizeS3Path(prefix)}${backupFileName}`;
 	try {
-		const rcloneFlags = getS3Credentials(destination);
-		const rcloneDestination = `:s3:${destination.bucket}/${bucketDestination}`;
-		const backupCommand = getBackupCommand(
+		await executeDatabaseBackup({
 			backup,
-			rcloneFlags,
-			rcloneDestination,
-			deployment.logPath,
-		);
-		if (postgres.serverId) {
-			await execAsyncRemote(postgres.serverId, backupCommand);
-		} else {
-			await execAsync(backupCommand, {
-				shell: "/bin/bash",
-			});
-		}
+			organizationId: project.organizationId,
+			destination,
+			bucketDestination,
+			logPath: deployment.logPath,
+			serverId: postgres.serverId,
+		});
 
 		await sendDatabaseBackupNotifications({
 			applicationName: name,

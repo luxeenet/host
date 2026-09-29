@@ -55,3 +55,4 @@ export * from "./support";
 export * from "./server-capacity";
 export * from "./platform-settings";
 export * from "./platform-audit";
+export * from "./backup-storage";

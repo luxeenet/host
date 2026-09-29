@@ -13,7 +13,7 @@ interface RestartSafeBackupCommandOptions {
 	stopCommand: string;
 	backupCommand: string;
 	startCommand: string;
-	uploadCommand: string;
+	uploadCommand?: string;
 }
 
 export const createRestartSafeBackupCommand = ({
@@ -21,7 +21,8 @@ export const createRestartSafeBackupCommand = ({
 	backupCommand,
 	startCommand,
 	uploadCommand,
-}: RestartSafeBackupCommandOptions) => `
+}: RestartSafeBackupCommandOptions) =>
+	`
 	${stopCommand}
 	set +e
 	(
@@ -43,8 +44,8 @@ export const createRestartSafeBackupCommand = ({
 	if [ "$DOKPLOY_VOLUME_RESTART_STATUS" -ne 0 ]; then
 		exit "$DOKPLOY_VOLUME_RESTART_STATUS"
 	fi
-	${uploadCommand}
-`;
+	${uploadCommand || ""}
+`.replace(/\r\n/g, "\n");
 
 export const getVolumeServiceAppName = (
 	volumeBackup: Awaited<ReturnType<typeof findVolumeBackupById>>,
@@ -65,22 +66,15 @@ export const getVolumeServiceAppName = (
 	return serviceAppName || volumeBackup.appName;
 };
 
-export const backupVolume = async (
+export const createVolumeBackupTarCommand = async (
 	volumeBackup: Awaited<ReturnType<typeof findVolumeBackupById>>,
+	backupFileName: string,
 ) => {
-	const { serviceType, volumeName, turnOff, prefix } = volumeBackup;
-	const destination = await findDestinationById(volumeBackup.destinationId);
+	const { serviceType, volumeName, turnOff } = volumeBackup;
 	const serverId =
 		volumeBackup.application?.serverId || volumeBackup.compose?.serverId;
 	const { VOLUME_BACKUPS_PATH, VOLUME_BACKUP_LOCK_PATH } = paths(!!serverId);
-	const s3AppName = getVolumeServiceAppName(volumeBackup);
-	const backupFileName = `${volumeName}-${getBackupTimestamp()}.tar`;
-	const bucketDestination = `${s3AppName}/${normalizeS3Path(prefix || "")}${backupFileName}`;
-	const rcloneFlags = getS3Credentials(destination);
-	const rcloneDestination = `:s3:${destination.bucket}/${bucketDestination}`;
 	const volumeBackupPath = path.join(VOLUME_BACKUPS_PATH, volumeBackup.appName);
-
-	const rcloneCommand = `rclone copyto ${rcloneFlags.join(" ")} "${volumeBackupPath}/${backupFileName}" "${rcloneDestination}"`;
 
 	const backupCommand = `
 	set -e
@@ -89,7 +83,8 @@ export const backupVolume = async (
 	echo "Turning off volume backup: ${turnOff ? "Yes" : "No"}"
 	echo "Starting volume backup" 
 	echo "Dir: ${volumeBackupPath}"
-    docker run --rm \
+	mkdir -p "${volumeBackupPath}"
+	docker run --rm \
   -v ${volumeName}:/volume_data \
   -v ${volumeBackupPath}:/backup \
   ubuntu \
@@ -97,20 +92,8 @@ export const backupVolume = async (
   echo "Volume backup done ✅"
   `;
 
-	const uploadCommand = `
-  echo "Starting upload to S3..."
-  ${rcloneCommand}
-  echo "Upload to S3 done ✅"
-  echo "Cleaning up local backup file..."
-  rm "${volumeBackupPath}/${backupFileName}"
-  echo "Local backup file cleaned up ✅"
-  `;
-
 	if (!turnOff) {
-		return `
-		${backupCommand}
-		${uploadCommand}
-		`;
+		return backupCommand;
 	}
 
 	const serviceLockId =
@@ -146,13 +129,6 @@ export const backupVolume = async (
 		echo "Volume backup lock released"
 	`;
 
-	console.log(
-		lockWrapper(`
-		echo "Volume backup lock acquired"
-		echo "Volume backup lock released"
-	`),
-	);
-
 	if (serviceType === "application") {
 		return lockWrapper(
 			createRestartSafeBackupCommand({
@@ -165,7 +141,6 @@ export const backupVolume = async (
 				startCommand: `
 				echo "Starting application to $ACTUAL_REPLICAS replicas"
 				docker service update --replicas=$ACTUAL_REPLICAS --with-registry-auth ${volumeBackup.application?.appName}`,
-				uploadCommand,
 			}),
 		);
 	}
@@ -204,8 +179,58 @@ export const backupVolume = async (
 				stopCommand,
 				backupCommand,
 				startCommand,
-				uploadCommand,
 			}),
 		);
 	}
+
+	return backupCommand;
+};
+
+export const createVolumeBackupUploadCommand = ({
+	rcloneFlags,
+	volumeBackupPath,
+	backupFileName,
+	rcloneDestination,
+}: {
+	rcloneFlags: string[];
+	volumeBackupPath: string;
+	backupFileName: string;
+	rcloneDestination: string;
+}) => `
+	set -e
+	echo "Starting upload to S3..."
+	rclone copyto ${rcloneFlags.join(" ")} "${volumeBackupPath}/${backupFileName}" "${rcloneDestination}"
+	echo "Upload to S3 done ✅"
+	echo "Cleaning up local backup file..."
+	rm -f "${volumeBackupPath}/${backupFileName}"
+	echo "Local backup file cleaned up ✅"
+`;
+
+export const backupVolume = async (
+	volumeBackup: Awaited<ReturnType<typeof findVolumeBackupById>>,
+) => {
+	const { volumeName, prefix } = volumeBackup;
+	const destination = await findDestinationById(volumeBackup.destinationId);
+	const serverId =
+		volumeBackup.application?.serverId || volumeBackup.compose?.serverId;
+	const { VOLUME_BACKUPS_PATH } = paths(!!serverId);
+	const s3AppName = getVolumeServiceAppName(volumeBackup);
+	const backupFileName = `${volumeName}-${getBackupTimestamp()}.tar`;
+	const bucketDestination = `${s3AppName}/${normalizeS3Path(prefix || "")}${backupFileName}`;
+	const rcloneFlags = getS3Credentials(destination);
+	const rcloneDestination = `:s3:${destination.bucket}/${bucketDestination}`;
+	const volumeBackupPath = path.join(VOLUME_BACKUPS_PATH, volumeBackup.appName);
+
+	const tarCommand = await createVolumeBackupTarCommand(volumeBackup, backupFileName);
+	const uploadCommand = createVolumeBackupUploadCommand({
+		rcloneFlags,
+		volumeBackupPath,
+		backupFileName,
+		rcloneDestination,
+	});
+
+	return `
+	${tarCommand}
+	${uploadCommand}
+	`;
 };

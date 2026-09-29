@@ -53,6 +53,7 @@ export * from "./services/security";
 export * from "./services/server";
 export * from "./services/server-health";
 export * from "./services/settings";
+export * from "./services/sonicpesa";
 export * from "./services/ssh-key";
 export * from "./services/transfer";
 export * from "./services/user";

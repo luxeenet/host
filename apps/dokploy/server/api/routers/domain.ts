@@ -62,7 +62,7 @@ export const domainRouter = createTRPCRouter({
 							),
 						);
 
-						const domain = await createDomain(input);
+						const domain = await createDomain(input, tx);
 						await audit(ctx, {
 							action: "create",
 							resourceType: "domain",

@@ -35,6 +35,7 @@ export type Postgres = typeof postgres.$inferSelect;
 
 export const createPostgres = async (
 	input: z.infer<typeof apiCreatePostgres>,
+	tx: any = db,
 ) => {
 	const appName = buildAppName("postgres", input.appName);
 
@@ -46,7 +47,7 @@ export const createPostgres = async (
 		});
 	}
 
-	const newPostgres = await db
+	const newPostgres = await tx
 		.insert(postgres)
 		.values({
 			...input,
@@ -56,7 +57,7 @@ export const createPostgres = async (
 			appName,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newPostgres) {
 		throw new TRPCError({

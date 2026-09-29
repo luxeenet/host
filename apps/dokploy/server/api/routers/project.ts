@@ -102,6 +102,7 @@ export const projectRouter = createTRPCRouter({
 						const project = await createProject(
 							input,
 							ctx.session.activeOrganizationId,
+							tx,
 						);
 						await addNewProject(ctx, project.project.projectId);
 

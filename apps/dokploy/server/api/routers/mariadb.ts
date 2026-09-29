@@ -114,9 +114,12 @@ export const mariadbRouter = createTRPCRouter({
 							}
 						}
 
-						const newMariadb = await createMariadb({
-							...input,
-						});
+						const newMariadb = await createMariadb(
+							{
+								...input,
+							},
+							tx,
+						);
 						await addNewService(ctx, newMariadb.mariadbId);
 
 						await createMount({

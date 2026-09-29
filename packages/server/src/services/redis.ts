@@ -20,7 +20,10 @@ import { validUniqueServerAppName } from "./project";
 export type Redis = typeof redis.$inferSelect;
 
 // https://github.com/drizzle-team/drizzle-orm/discussions/1483#discussioncomment-7523881
-export const createRedis = async (input: z.infer<typeof apiCreateRedis>) => {
+export const createRedis = async (
+	input: z.infer<typeof apiCreateRedis>,
+	tx: any = db,
+) => {
 	const appName = buildAppName("redis", input.appName);
 
 	const valid = await validUniqueServerAppName(appName);
@@ -31,7 +34,7 @@ export const createRedis = async (input: z.infer<typeof apiCreateRedis>) => {
 		});
 	}
 
-	const newRedis = await db
+	const newRedis = await tx
 		.insert(redis)
 		.values({
 			...input,
@@ -41,7 +44,7 @@ export const createRedis = async (input: z.infer<typeof apiCreateRedis>) => {
 			appName,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newRedis) {
 		throw new TRPCError({

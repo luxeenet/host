@@ -141,7 +141,7 @@ export const applicationRouter = createTRPCRouter({
 							}
 						}
 
-						const newApplication = await createApplication(input);
+						const newApplication = await createApplication(input, tx);
 
 						await addNewService(ctx, newApplication.applicationId);
 						await audit(ctx, {

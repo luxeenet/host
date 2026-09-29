@@ -114,9 +114,12 @@ export const mysqlRouter = createTRPCRouter({
 							}
 						}
 
-						const newMysql = await createMysql({
-							...input,
-						});
+						const newMysql = await createMysql(
+							{
+								...input,
+							},
+							tx,
+						);
 						await addNewService(ctx, newMysql.mysqlId);
 
 						await createMount({

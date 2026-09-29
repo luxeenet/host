@@ -55,6 +55,7 @@ export type Application = typeof applications.$inferSelect;
 
 export const createApplication = async (
 	input: z.infer<typeof apiCreateApplication>,
+	tx: any = db,
 ) => {
 	const appName = buildAppName("app", input.appName);
 
@@ -66,29 +67,27 @@ export const createApplication = async (
 		});
 	}
 
-	return await db.transaction(async (tx) => {
-		const newApplication = await tx
-			.insert(applications)
-			.values({
-				...input,
-				appName,
-			})
-			.returning()
-			.then((value) => value[0]);
+	const newApplication = await tx
+		.insert(applications)
+		.values({
+			...input,
+			appName,
+		})
+		.returning()
+		.then((value: any) => value[0]);
 
-		if (!newApplication) {
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: "Error creating the application",
-			});
-		}
+	if (!newApplication) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Error creating the application",
+		});
+	}
 
-		if (process.env.NODE_ENV === "development") {
-			createTraefikConfig(newApplication.appName);
-		}
+	if (process.env.NODE_ENV === "development") {
+		createTraefikConfig(newApplication.appName);
+	}
 
-		return newApplication;
-	});
+	return newApplication;
 };
 
 export const findApplicationById = async (applicationId: string) => {

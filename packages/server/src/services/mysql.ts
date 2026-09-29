@@ -20,7 +20,10 @@ import { validUniqueServerAppName } from "./project";
 
 export type MySql = typeof mysql.$inferSelect;
 
-export const createMysql = async (input: z.infer<typeof apiCreateMySql>) => {
+export const createMysql = async (
+	input: z.infer<typeof apiCreateMySql>,
+	tx: any = db,
+) => {
 	const appName = buildAppName("mysql", input.appName);
 
 	const valid = await validUniqueServerAppName(appName);
@@ -31,7 +34,7 @@ export const createMysql = async (input: z.infer<typeof apiCreateMySql>) => {
 		});
 	}
 
-	const newMysql = await db
+	const newMysql = await tx
 		.insert(mysql)
 		.values({
 			...input,
@@ -44,7 +47,7 @@ export const createMysql = async (input: z.infer<typeof apiCreateMySql>) => {
 			appName,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newMysql) {
 		throw new TRPCError({

@@ -389,8 +389,11 @@ export const filterEnvironmentServices = <T extends EnvironmentWithServices>(
 	),
 });
 
-export const createProductionEnvironment = async (projectId: string) => {
-	const newEnvironment = await db
+export const createProductionEnvironment = async (
+	projectId: string,
+	tx: any = db,
+) => {
+	const newEnvironment = await tx
 		.insert(environments)
 		.values({
 			name: "production",
@@ -399,7 +402,7 @@ export const createProductionEnvironment = async (projectId: string) => {
 			isDefault: true,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newEnvironment) {
 		throw new TRPCError({

@@ -22,6 +22,7 @@ export type Mariadb = typeof mariadb.$inferSelect;
 
 export const createMariadb = async (
 	input: z.infer<typeof apiCreateMariaDB>,
+	tx: any = db,
 ) => {
 	const appName = buildAppName("mariadb", input.appName);
 
@@ -33,7 +34,7 @@ export const createMariadb = async (
 		});
 	}
 
-	const newMariadb = await db
+	const newMariadb = await tx
 		.insert(mariadb)
 		.values({
 			...input,
@@ -46,7 +47,7 @@ export const createMariadb = async (
 			appName,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newMariadb) {
 		throw new TRPCError({

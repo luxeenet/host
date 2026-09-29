@@ -111,9 +111,12 @@ export const redisRouter = createTRPCRouter({
 							}
 						}
 
-						const newRedis = await createRedis({
-							...input,
-						});
+						const newRedis = await createRedis(
+							{
+								...input,
+							},
+							tx,
+						);
 						await addNewService(ctx, newRedis.redisId);
 
 						await createMount({

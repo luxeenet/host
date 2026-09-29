@@ -21,7 +21,10 @@ import { validUniqueServerAppName } from "./project";
 
 export type Mongo = typeof mongo.$inferSelect;
 
-export const createMongo = async (input: z.infer<typeof apiCreateMongo>) => {
+export const createMongo = async (
+	input: z.infer<typeof apiCreateMongo>,
+	tx: any = db,
+) => {
 	const appName = buildAppName("mongo", input.appName);
 
 	const valid = await validUniqueServerAppName(appName);
@@ -32,7 +35,7 @@ export const createMongo = async (input: z.infer<typeof apiCreateMongo>) => {
 		});
 	}
 
-	const newMongo = await db
+	const newMongo = await tx
 		.insert(mongo)
 		.values({
 			...input,
@@ -42,7 +45,7 @@ export const createMongo = async (input: z.infer<typeof apiCreateMongo>) => {
 			appName,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newMongo) {
 		throw new TRPCError({

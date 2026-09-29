@@ -113,9 +113,12 @@ export const mongoRouter = createTRPCRouter({
 							}
 						}
 
-						const newMongo = await createMongo({
-							...input,
-						});
+						const newMongo = await createMongo(
+							{
+								...input,
+							},
+							tx,
+						);
 						await addNewService(ctx, newMongo.mongoId);
 
 						await createMount({

@@ -20,15 +20,16 @@ export type Project = typeof projects.$inferSelect;
 export const createProject = async (
 	input: z.infer<typeof apiCreateProject>,
 	organizationId: string,
+	tx: any = db,
 ) => {
-	const newProject = await db
+	const newProject = await tx
 		.insert(projects)
 		.values({
 			...input,
 			organizationId: organizationId,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newProject) {
 		throw new TRPCError({
@@ -40,6 +41,7 @@ export const createProject = async (
 	// Automatically create a production environment
 	const newEnvironment = await createProductionEnvironment(
 		newProject.projectId,
+		tx,
 	);
 	return {
 		project: newProject,

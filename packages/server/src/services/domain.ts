@@ -18,33 +18,32 @@ import { findServerById } from "./server";
 
 export type Domain = typeof domains.$inferSelect;
 
-export const createDomain = async (input: z.infer<typeof apiCreateDomain>) => {
-	const result = await db.transaction(async (tx) => {
-		const domain = await tx
-			.insert(domains)
-			.values({
-				...input,
-				host: input.host?.trim(),
-			} as typeof domains.$inferInsert)
-			.returning()
-			.then((response) => response[0]);
+export const createDomain = async (
+	input: z.infer<typeof apiCreateDomain>,
+	tx: any = db,
+) => {
+	const domain = await tx
+		.insert(domains)
+		.values({
+			...input,
+			host: input.host?.trim(),
+		} as typeof domains.$inferInsert)
+		.returning()
+		.then((response: any) => response[0]);
 
-		if (!domain) {
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: "Error creating domain",
-			});
-		}
+	if (!domain) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Error creating domain",
+		});
+	}
 
-		if (domain.applicationId) {
-			const application = await findApplicationById(domain.applicationId);
-			await manageDomain(application, domain);
-		}
+	if (domain.applicationId) {
+		const application = await findApplicationById(domain.applicationId);
+		await manageDomain(application, domain);
+	}
 
-		return domain;
-	});
-
-	return result;
+	return domain;
 };
 
 export const generateTraefikMeDomain = async (

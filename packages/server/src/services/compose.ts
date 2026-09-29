@@ -49,6 +49,7 @@ export type Compose = typeof compose.$inferSelect;
 
 export const createCompose = async (
 	input: z.infer<typeof apiCreateCompose>,
+	tx: any = db,
 ) => {
 	const appName = buildAppName("compose", input.appName);
 
@@ -60,7 +61,7 @@ export const createCompose = async (
 		});
 	}
 
-	const newDestination = await db
+	const newDestination = await tx
 		.insert(compose)
 		.values({
 			...input,
@@ -68,7 +69,7 @@ export const createCompose = async (
 			appName,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newDestination) {
 		throw new TRPCError({

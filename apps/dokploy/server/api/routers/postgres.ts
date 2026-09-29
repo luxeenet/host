@@ -115,9 +115,12 @@ export const postgresRouter = createTRPCRouter({
 							}
 						}
 
-						const newPostgres = await createPostgres({
-							...input,
-						});
+						const newPostgres = await createPostgres(
+							{
+								...input,
+							},
+							tx,
+						);
 						await addNewService(ctx, newPostgres.postgresId);
 
 						const mountPath = getMountPath(input.dockerImage);

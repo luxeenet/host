@@ -142,9 +142,12 @@ export const composeRouter = createTRPCRouter({
 							}
 						}
 
-						const newService = await createCompose({
-							...input,
-						});
+						const newService = await createCompose(
+							{
+								...input,
+							},
+							tx,
+						);
 
 						await addNewService(ctx, newService.composeId);
 

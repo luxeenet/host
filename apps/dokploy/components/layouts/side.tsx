@@ -119,6 +119,10 @@ type EnabledOpts = {
 	auth?: AuthQueryOutput;
 	permissions?: PermissionsOutput;
 	isCloud: boolean;
+	/** Feature flags from the org's active plan (null = no plan or unlimited) */
+	planFeatures?: Record<string, boolean> | null;
+	/** True for platform-level administrators who can see all infrastructure */
+	isPlatformAdmin?: boolean;
 };
 
 type SingleNavItem = {
@@ -191,9 +195,14 @@ const MENU: Menu = {
 			title: "Monitoring",
 			url: "/dashboard/monitoring",
 			icon: BarChartHorizontalBigIcon,
-			// Only enabled in non-cloud environments and if user has monitoring.read
-			isEnabled: ({ isCloud, permissions }) =>
-				!isCloud && !!permissions?.monitoring.read,
+			// Only enabled in non-cloud, with monitoring.read permission.
+			// In cloud, platform admins always see it; customers need the 'monitoring' plan feature.
+			isEnabled: ({ isCloud, permissions, isPlatformAdmin, planFeatures }) => {
+				if (!permissions?.monitoring.read) return false;
+				if (!isCloud) return true; // self-hosted: permission is enough
+				if (isPlatformAdmin) return true; // platform admins always see infra
+				return planFeatures?.monitoring === true;
+			},
 		},
 		{
 			isSingle: true,
@@ -207,25 +216,45 @@ const MENU: Menu = {
 			title: "Traefik File System",
 			url: "/dashboard/traefik",
 			icon: GalleryVerticalEnd,
-			// Only enabled for users with access to Traefik files
-			isEnabled: ({ permissions }) => !!permissions?.traefikFiles.read,
+			// Infrastructure item: visible to those with traefikFiles.read permission.
+			// In cloud, additionally requires platform admin OR plan feature 'traefik'.
+			isEnabled: ({ permissions, isCloud, isPlatformAdmin, planFeatures }) => {
+				if (!permissions?.traefikFiles.read) return false;
+				if (!isCloud) return true;
+				if (isPlatformAdmin) return true;
+				return planFeatures?.traefik === true;
+			},
 		},
 		{
 			isSingle: true,
 			title: "Docker",
 			url: "/dashboard/docker",
 			icon: BlocksIcon,
-			// Only enabled for users with access to Docker
-			isEnabled: ({ permissions }) => !!permissions?.docker.read,
+			// Infrastructure item: visible to those with docker.read permission.
+			// In cloud, additionally requires platform admin OR plan feature 'docker'.
+			isEnabled: ({ permissions, isCloud, isPlatformAdmin, planFeatures }) => {
+				if (!permissions?.docker.read) return false;
+				if (!isCloud) return true;
+				if (isPlatformAdmin) return true;
+				return planFeatures?.docker === true;
+			},
 		},
 		{
 			isSingle: true,
 			title: "Requests",
 			url: "/dashboard/requests",
 			icon: Forward,
-			// Only enabled for users with access to Docker in non-cloud environments
-			isEnabled: ({ permissions, isCloud }) =>
-				!!(permissions?.docker.read && !isCloud),
+			// Infrastructure: requires docker.read, non-cloud, OR platform admin.
+			isEnabled: ({ permissions, isCloud, isPlatformAdmin }) =>
+				!!(permissions?.docker.read && (!isCloud || isPlatformAdmin)),
+		},
+		{
+			isSingle: true,
+			title: "Admin Portal",
+			url: "/admin",
+			icon: ShieldCheck,
+			// Only visible to platform administrators
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 
 		// Legacy unused menu, adjusted to the new structure
@@ -312,15 +341,22 @@ const MENU: Menu = {
 			title: "Remote Servers",
 			url: "/dashboard/settings/servers",
 			icon: Server,
-			isEnabled: ({ permissions }) => !!permissions?.server.read,
+			// Infrastructure: requires server.read. In cloud, only platform admins or
+			// customers with the 'remote_servers' plan feature.
+			isEnabled: ({ permissions, isCloud, isPlatformAdmin, planFeatures }) => {
+				if (!permissions?.server.read) return false;
+				if (!isCloud) return true;
+				if (isPlatformAdmin) return true;
+				return planFeatures?.remote_servers === true;
+			},
 		},
 		{
 			isSingle: true,
 			title: "Deployments",
 			url: "/dashboard/settings/deployments",
 			icon: Boxes,
-			isEnabled: ({ permissions, isCloud }) =>
-				!!(permissions?.server.read && !isCloud),
+			isEnabled: ({ permissions, isCloud, isPlatformAdmin }) =>
+				!!(permissions?.server.read && (!isCloud || isPlatformAdmin)),
 		},
 		{
 			isSingle: true,
@@ -467,6 +503,8 @@ function createMenuForAuthUser(opts: {
 	auth?: AuthQueryOutput;
 	permissions?: PermissionsOutput;
 	isCloud: boolean;
+	planFeatures?: Record<string, boolean> | null;
+	isPlatformAdmin?: boolean;
 	whitelabeling?: {
 		docsUrl?: string | null;
 		supportUrl?: string | null;
@@ -486,6 +524,8 @@ function createMenuForAuthUser(opts: {
 						auth: opts.auth,
 						permissions: opts.permissions,
 						isCloud: opts.isCloud,
+						planFeatures: opts.planFeatures,
+						isPlatformAdmin: opts.isPlatformAdmin,
 					}),
 		) as T[];
 
@@ -956,6 +996,26 @@ export default function Page({ children }: Props) {
 	const includesProjects = pathname?.includes("/dashboard/project");
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 
+	// Fetch plan snapshot to gate plan-restricted nav items
+	const { data: currentSubscription } = api.subscription.getCurrent.useQuery(undefined, {
+		staleTime: 5 * 60 * 1000,
+		refetchOnWindowFocus: false,
+	});
+
+	// Build a feature flag map from the plan's features list
+	const planFeatures = currentSubscription?.plan?.features
+		? Object.fromEntries(
+				currentSubscription.plan.features.map((f: { featureKey: string; enabled: boolean }) => [
+					f.featureKey,
+					f.enabled,
+				]),
+		  )
+		: null;
+
+	// isPlatformAdmin comes from the user context (set in user.get or trpc ctx)
+	const isPlatformAdmin = !!(auth as any)?.user?.isPlatformAdmin ||
+		!!(auth as any)?.isPlatformAdmin;
+
 	const {
 		home: filteredHome,
 		settings: filteredSettings,
@@ -964,6 +1024,8 @@ export default function Page({ children }: Props) {
 		auth,
 		permissions,
 		isCloud: !!isCloud,
+		planFeatures,
+		isPlatformAdmin,
 		whitelabeling,
 	});
 

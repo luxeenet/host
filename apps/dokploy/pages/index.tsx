@@ -503,6 +503,8 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 		try {
 			const { user } = await validateRequest(context.req);
 			if (user) {
+				// All users land at /dashboard/home — the role-aware DashboardLayout.
+				// Platform admins see full infrastructure nav; customers see only plan-allowed items.
 				return {
 					redirect: {
 						permanent: false,
@@ -523,10 +525,12 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 	const { user } = await validateRequest(context.req);
 
 	if (user) {
+		// All users land at /dashboard/home — the role-aware DashboardLayout.
+		// Platform admins see full infrastructure nav; customers see only plan-allowed items.
 		return {
 			redirect: {
 				permanent: false,
-				destination: "/dashboard",
+				destination: "/dashboard/home",
 			},
 		};
 	}

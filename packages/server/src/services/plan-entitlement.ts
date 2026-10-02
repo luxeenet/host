@@ -11,7 +11,7 @@
  * This service reads plan resources and features from the database.
  * Plans are NEVER hardcoded here.
  */
-import { and, count, eq, isNull, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { db } from "../db";
 import * as schema from "../db/schema";
@@ -686,6 +686,62 @@ export class PlanEntitlementService {
 				message: check.reason ?? "Storage capacity limit exceeded.",
 			});
 		}
+	}
+
+	/**
+	 * Verify if an application name belongs to an organization.
+	 */
+	static async verifyAppNameBelongsToOrg(
+		appName: string,
+		organizationId: string,
+		executor: any = db,
+	): Promise<boolean> {
+		if (!appName || !organizationId) return false;
+
+		const orgProjects = await executor.query.projects.findMany({
+			where: eq(schema.projects.organizationId, organizationId),
+			columns: { projectId: true },
+			with: {
+				environments: {
+					columns: { environmentId: true },
+				},
+			},
+		});
+
+		const validEnvIds = new Set<string>();
+		for (const p of orgProjects || []) {
+			for (const e of (p as any).environments || []) {
+				if (e.environmentId) validEnvIds.add(e.environmentId);
+			}
+		}
+
+		if (validEnvIds.size === 0) return false;
+		const envIdArray = Array.from(validEnvIds);
+
+		const serviceTables: (keyof typeof schema)[] = [
+			"applications",
+			"compose",
+			"postgres",
+			"mysql",
+			"mariadb",
+			"mongo",
+			"redis",
+			"libsql",
+		];
+
+		for (const tableName of serviceTables) {
+			const table = (schema as any)[tableName];
+			if (!table || !table.appName || !table.environmentId) continue;
+			const match = await executor.query[tableName]?.findFirst({
+				where: and(
+					eq(table.appName, appName),
+					inArray(table.environmentId, envIdArray),
+				),
+			});
+			if (match) return true;
+		}
+
+		return false;
 	}
 }
 

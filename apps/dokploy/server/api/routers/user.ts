@@ -156,6 +156,7 @@ export const userRouter = createTRPCRouter({
 						serversQuantity: true,
 						isEnterpriseCloud: true,
 						sendInvoiceNotifications: true,
+						isPlatformAdmin: true,
 					},
 					with: {
 						apiKeys: {
@@ -535,7 +536,7 @@ export const userRouter = createTRPCRouter({
 				dataPoints: z.string(),
 			}),
 		)
-		.query(async ({ input }) => {
+		.query(async ({ input, ctx }) => {
 			try {
 				if (!input.appName) {
 					throw new Error(
@@ -545,6 +546,25 @@ export const userRouter = createTRPCRouter({
 							"Make Sure to select an application to monitor.",
 						].join("\n"),
 					);
+				}
+
+				if (!ctx.user.isPlatformAdmin) {
+					if (input.appName === "dokploy") {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: "System monitoring is reserved for platform administrators.",
+						});
+					}
+					const isOwner = await PlanEntitlementService.verifyAppNameBelongsToOrg(
+						input.appName,
+						ctx.session?.activeOrganizationId || "",
+					);
+					if (!isOwner) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: `You do not have permission to view metrics for "${input.appName}".`,
+						});
+					}
 				}
 				const url = new URL(`${input.url}/metrics/containers`);
 				url.searchParams.append("limit", input.dataPoints);

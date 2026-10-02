@@ -1,6 +1,8 @@
 import Head from "next/head";
 import Link from "next/link";
 import { type ReactElement } from "react";
+import type { GetServerSidePropsContext } from "next";
+import { validateRequest } from "@dokploy/server/lib/auth";
 import {
 	DollarSign,
 	Users,
@@ -184,3 +186,14 @@ export default function AdminDashboardPage() {
 }
 
 AdminDashboardPage.getLayout = (page: ReactElement) => <AdminLayout>{page}</AdminLayout>;
+
+export async function getServerSideProps(ctx: GetServerSidePropsContext) {
+	const { user } = await validateRequest(ctx.req);
+	if (!user) {
+		return { redirect: { destination: "/", permanent: false } };
+	}
+	if (!(user as any).isPlatformAdmin) {
+		return { redirect: { destination: "/dashboard", permanent: false } };
+	}
+	return { props: {} };
+}

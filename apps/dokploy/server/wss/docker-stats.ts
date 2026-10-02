@@ -114,6 +114,11 @@ export const setupDockerStatsMonitoringSocketServer = (
 			try {
 				// Special case: when monitoring "dokploy", get host system stats instead of container stats
 				if (appName === "dokploy") {
+					if (!(user as any).isPlatformAdmin) {
+						ws.close(4003, "System monitoring requires platform administrator privileges.");
+						clearInterval(intervalId);
+						return;
+					}
 					const stat = await getHostSystemStats();
 
 					await recordAdvancedStats(stat, appName);

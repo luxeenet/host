@@ -1,5 +1,7 @@
 import Head from "next/head";
 import { type ReactElement } from "react";
+import type { GetServerSidePropsContext } from "next";
+import { validateRequest } from "@dokploy/server/lib/auth";
 import { toast } from "sonner";
 import {
 	Server,
@@ -134,3 +136,14 @@ export default function AdminServersPage() {
 }
 
 AdminServersPage.getLayout = (page: ReactElement) => <AdminLayout>{page}</AdminLayout>;
+
+export async function getServerSideProps(ctx: GetServerSidePropsContext) {
+	const { user } = await validateRequest(ctx.req);
+	if (!user) {
+		return { redirect: { destination: "/", permanent: false } };
+	}
+	if (!(user as any).isPlatformAdmin) {
+		return { redirect: { destination: "/dashboard", permanent: false } };
+	}
+	return { props: {} };
+}

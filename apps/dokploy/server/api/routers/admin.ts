@@ -9,10 +9,10 @@ import * as schema from "@dokploy/server/db/schema";
 import { TRPCError } from "@trpc/server";
 import { count, eq } from "drizzle-orm";
 import { apiUpdateWebServerMonitoring } from "@/server/db/schema";
-import { adminProcedure, createTRPCRouter, platformAdminProcedure } from "../trpc";
+import { createTRPCRouter, platformAdminProcedure } from "../trpc";
 
 export const adminRouter = createTRPCRouter({
-	setupMonitoring: adminProcedure
+	setupMonitoring: platformAdminProcedure
 		.input(apiUpdateWebServerMonitoring)
 		.mutation(async ({ input }) => {
 			try {

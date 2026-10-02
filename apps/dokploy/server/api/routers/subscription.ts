@@ -8,8 +8,8 @@ import { z } from "zod";
 import { db } from "../../db";
 import * as schema from "@dokploy/server/db/schema";
 import {
-	adminProcedure,
 	createTRPCRouter,
+	platformAdminProcedure,
 	protectedProcedure,
 } from "../trpc";
 import { seedPlans } from "@dokploy/server/services/plan-seed";
@@ -379,7 +379,7 @@ export const subscriptionRouter = createTRPCRouter({
 	// ─── Admin ────────────────────────────────────────────────
 
 	/** Admin: list all subscriptions */
-	adminList: adminProcedure
+	adminList: platformAdminProcedure
 		.input(
 			z.object({
 				limit: z.number().int().min(1).max(100).default(50),
@@ -403,7 +403,7 @@ export const subscriptionRouter = createTRPCRouter({
 		}),
 
 	/** Admin: manually override subscription status */
-	adminOverride: adminProcedure
+	adminOverride: platformAdminProcedure
 		.input(
 			z.object({
 				subscriptionId: z.string().min(1),
@@ -437,7 +437,7 @@ export const subscriptionRouter = createTRPCRouter({
 		}),
 
 	/** Admin: seed default plans (idempotent) */
-	seedPlans: adminProcedure.mutation(async () => {
+	seedPlans: platformAdminProcedure.mutation(async () => {
 		await seedPlans();
 		return { success: true };
 	}),

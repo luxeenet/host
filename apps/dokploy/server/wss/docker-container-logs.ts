@@ -161,8 +161,9 @@ export const setupDockerContainerLogsWebSocketServer = (
 				} --tail ${tail} ${
 					since === "all" ? "" : `--since ${since}`
 				} --follow ${containerId}`;
+				const escapedSearch = search ? search.replace(/'/g, "'\\''") : "";
 				const command = search
-					? `${baseCommand} 2>&1 | grep -iF '${search}'`
+					? `${baseCommand} 2>&1 | grep --line-buffered -iF '${escapedSearch}'`
 					: baseCommand;
 				const ptyProcess = spawn(shell, ["-c", command], {
 					name: "xterm-256color",

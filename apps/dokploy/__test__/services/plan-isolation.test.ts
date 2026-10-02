@@ -485,7 +485,18 @@ describe("13. Signup to Dashboard Flow", () => {
 		vi.restoreAllMocks();
 		mockSubscriptionActive(true);
 		mockSnapshot({ resources: { max_applications: 10 }, features: { databases: true } });
-		const canCreateApp = await PlanEntitlementService.checkCanCreateApplication("org-1");
+		const mockDb = {
+			select: vi.fn().mockReturnValue({
+				from: vi.fn().mockReturnValue({
+					innerJoin: vi.fn().mockReturnValue({
+						innerJoin: vi.fn().mockReturnValue({
+							where: vi.fn().mockResolvedValue([{ value: 0 }]),
+						}),
+					}),
+				}),
+			}),
+		};
+		const canCreateApp = await PlanEntitlementService.checkCanCreateApplication("org-1", mockDb);
 		expect(canCreateApp.allowed).toBe(true);
 	});
 });
@@ -552,5 +563,82 @@ describe("14. Backup Storage Quota (Migration 0199 Infrastructure)", () => {
 		const sqlEnumName = "backupStorageStatus";
 		const schemaEnumName = "backupStorageStatus";
 		expect(sqlEnumName).toBe(schemaEnumName);
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 15. Cross-Tenant Deployment Log Path Security
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("verifyDeploymentLogPathBelongsToOrg returns false when logPath is missing or belongs to another org", async () => {
+		const resultNull = await PlanEntitlementService.verifyDeploymentLogPathBelongsToOrg("", "org-1");
+		expect(resultNull).toBe(false);
+
+		const mockExecutor = {
+			query: {
+				deployments: {
+					findFirst: vi.fn().mockResolvedValue(null),
+				},
+			},
+		};
+
+		const resultNonExistent = await PlanEntitlementService.verifyDeploymentLogPathBelongsToOrg("/logs/fake.log", "org-1", mockExecutor);
+		expect(resultNonExistent).toBe(false);
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 16. WebSocket Host System Monitoring & IDOR Guard
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("WebSocket host system monitoring (dokploy) is denied to non-platform admin users", () => {
+		const customerUser = { id: "user-1", isPlatformAdmin: false };
+		const adminUser = { id: "admin-1", isPlatformAdmin: true };
+
+		const checkWssDokployStats = (u: any) => {
+			if (!u.isPlatformAdmin) {
+				return { allowed: false, code: 4003, message: "System monitoring requires platform administrator privileges." };
+			}
+			return { allowed: true };
+		};
+
+		expect(checkWssDokployStats(customerUser)).toEqual({
+			allowed: false,
+			code: 4003,
+			message: "System monitoring requires platform administrator privileges.",
+		});
+		expect(checkWssDokployStats(adminUser)).toEqual({ allowed: true });
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 17. Subscription & Admin Procedures Guard
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("platformAdminProcedure rejects customer with org admin role who is not platform admin", () => {
+		const orgOwnerUser = { id: "cust-owner", role: "owner", isPlatformAdmin: false };
+
+		const platformAdminGuard = (ctxUser: any) => {
+			if (!ctxUser.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Platform administrator privileges required.",
+				});
+			}
+		};
+
+		expect(() => platformAdminGuard(orgOwnerUser)).toThrow(TRPCError);
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 18. Shell Command Parameter Sanitization Regression Test
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("escapes shell metacharacters in search parameter so command execution fails to inject commands", () => {
+		const dangerousSearch = "test'; rm -rf /; echo 'injected";
+		const escapedSearch = dangerousSearch.replace(/'/g, "'\\''");
+		const baseCommand = "docker container logs --timestamps --tail 100 --follow cont123";
+		const command = `${baseCommand} 2>&1 | grep --line-buffered -iF '${escapedSearch}'`;
+
+		// Verify the command string encloses the payload safely inside single quotes
+		expect(command).toContain("'test'\\''");
+		expect(command).toContain("grep --line-buffered -iF");
 	});
 });

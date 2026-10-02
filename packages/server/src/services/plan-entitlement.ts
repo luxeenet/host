@@ -743,6 +743,45 @@ export class PlanEntitlementService {
 
 		return false;
 	}
+
+	/**
+	 * Verify if a deployment logPath belongs to an organization.
+	 */
+	static async verifyDeploymentLogPathBelongsToOrg(
+		logPath: string,
+		organizationId: string,
+		executor: any = db,
+	): Promise<boolean> {
+		if (!logPath || !organizationId) return false;
+
+		const deployment = await executor.query.deployments.findFirst({
+			where: eq(schema.deployments.logPath, logPath),
+			with: {
+				application: {
+					with: {
+						environment: {
+							with: { project: { columns: { organizationId: true } } },
+						},
+					},
+				},
+				compose: {
+					with: {
+						environment: {
+							with: { project: { columns: { organizationId: true } } },
+						},
+					},
+				},
+			},
+		});
+
+		if (!deployment) return false;
+
+		const orgId =
+			(deployment as any).application?.environment?.project?.organizationId ??
+			(deployment as any).compose?.environment?.project?.organizationId;
+
+		return orgId === organizationId;
+	}
 }
 
 /**

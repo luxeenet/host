@@ -4,24 +4,19 @@
   "main": "./dist/index.js",
   "type": "module",
   "exports": {
-    ".": {
-      "import": "./dist/index.js"
-    },
+    ".": "./src/index.ts",
     "./db": {
-      "import": "./dist/db/index.js"
+      "import": "./src/db/index.ts",
+      "require": "./dist/db/index.cjs.js"
     },
-    "./*": {
-      "import": "./dist/*"
-    },
-    "./dist": {
-      "import": "./dist/index.js"
-    },
-    "./dist/db": {
-      "import": "./dist/db/index.js"
-    },
-    "./dist/db/schema": {
-      "import": "./dist/db/schema/index.js"
-    }
+    "./db/schema": "./src/db/schema/index.ts",
+    "./templates": "./src/templates/index.ts",
+    "./constants": "./src/constants/index.ts",
+    "./setup/*": "./src/setup/*.ts",
+    "./services/*": "./src/services/*.ts",
+    "./lib/*": "./src/lib/*.ts",
+    "./utils/*": "./src/utils/*.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "build": "npm run switch:prod && rimraf dist && tsc --project tsconfig.server.json && tsc-alias -p tsconfig.server.json",

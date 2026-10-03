@@ -187,73 +187,48 @@ const MENU: Menu = {
 			title: "Overview",
 			url: "/dashboard/overview",
 			icon: LayoutGrid,
-			// Only enabled for users with access to services
-			isEnabled: ({ permissions }) => !!permissions?.service.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Monitoring",
 			url: "/dashboard/monitoring",
 			icon: BarChartHorizontalBigIcon,
-			// Only enabled in non-cloud, with monitoring.read permission.
-			// In cloud, platform admins always see it; customers need the 'monitoring' plan feature.
-			isEnabled: ({ isCloud, permissions, isPlatformAdmin, planFeatures }) => {
-				if (!permissions?.monitoring.read) return false;
-				if (!isCloud) return true; // self-hosted: permission is enough
-				if (isPlatformAdmin) return true; // platform admins always see infra
-				return planFeatures?.monitoring === true;
-			},
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Schedules",
 			url: "/dashboard/schedules",
 			icon: Clock,
-			isEnabled: ({ permissions }) => !!permissions?.organization.update,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Traefik File System",
 			url: "/dashboard/traefik",
 			icon: GalleryVerticalEnd,
-			// Infrastructure item: visible to those with traefikFiles.read permission.
-			// In cloud, additionally requires platform admin OR plan feature 'traefik'.
-			isEnabled: ({ permissions, isCloud, isPlatformAdmin, planFeatures }) => {
-				if (!permissions?.traefikFiles.read) return false;
-				if (!isCloud) return true;
-				if (isPlatformAdmin) return true;
-				return planFeatures?.traefik === true;
-			},
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Docker",
 			url: "/dashboard/docker",
 			icon: BlocksIcon,
-			// Infrastructure item: visible to those with docker.read permission.
-			// In cloud, additionally requires platform admin OR plan feature 'docker'.
-			isEnabled: ({ permissions, isCloud, isPlatformAdmin, planFeatures }) => {
-				if (!permissions?.docker.read) return false;
-				if (!isCloud) return true;
-				if (isPlatformAdmin) return true;
-				return planFeatures?.docker === true;
-			},
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Requests",
 			url: "/dashboard/requests",
 			icon: Forward,
-			// Infrastructure: requires docker.read, non-cloud, OR platform admin.
-			isEnabled: ({ permissions, isCloud, isPlatformAdmin }) =>
-				!!(permissions?.docker.read && (!isCloud || isPlatformAdmin)),
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Admin Portal",
 			url: "/admin",
 			icon: ShieldCheck,
-			// Only visible to platform administrators
 			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 
@@ -320,9 +295,7 @@ const MENU: Menu = {
 			title: "Web Server",
 			url: "/dashboard/settings/server",
 			icon: Activity,
-			// Only enabled for admins in non-cloud environments
-			isEnabled: ({ permissions, isCloud }) =>
-				!!(permissions?.organization.update && !isCloud),
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
@@ -341,22 +314,14 @@ const MENU: Menu = {
 			title: "Remote Servers",
 			url: "/dashboard/settings/servers",
 			icon: Server,
-			// Infrastructure: requires server.read. In cloud, only platform admins or
-			// customers with the 'remote_servers' plan feature.
-			isEnabled: ({ permissions, isCloud, isPlatformAdmin, planFeatures }) => {
-				if (!permissions?.server.read) return false;
-				if (!isCloud) return true;
-				if (isPlatformAdmin) return true;
-				return planFeatures?.remote_servers === true;
-			},
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Deployments",
 			url: "/dashboard/settings/deployments",
 			icon: Boxes,
-			isEnabled: ({ permissions, isCloud, isPlatformAdmin }) =>
-				!!(permissions?.server.read && (!isCloud || isPlatformAdmin)),
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
@@ -371,65 +336,63 @@ const MENU: Menu = {
 			title: "Audit Logs",
 			icon: ClipboardList,
 			url: "/dashboard/settings/audit-logs",
-			isEnabled: ({ permissions }) => !!permissions?.auditLog.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "SSH Keys",
 			icon: KeyRound,
 			url: "/dashboard/settings/ssh-keys",
-			// Only enabled for users with access to SSH keys
-			isEnabled: ({ permissions }) => !!permissions?.sshKeys.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			title: "AI",
 			icon: BotIcon,
 			url: "/dashboard/settings/ai",
 			isSingle: true,
-			isEnabled: ({ permissions }) => !!permissions?.organization.update,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Tags",
 			url: "/dashboard/settings/tags",
 			icon: Tags,
-			isEnabled: ({ permissions }) => !!permissions?.tag.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Git",
 			url: "/dashboard/settings/git-providers",
 			icon: GitBranch,
-			// Only enabled for users with access to Git providers
-			isEnabled: ({ permissions }) => !!permissions?.gitProviders.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Registry",
 			url: "/dashboard/settings/registry",
 			icon: Package,
-			isEnabled: ({ permissions }) => !!permissions?.registry.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Secrets",
 			url: "/dashboard/settings/secrets",
 			icon: Vault,
-			isEnabled: ({ permissions }) => !!permissions?.vaultProvider.create,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "DNS Providers",
 			url: "/dashboard/settings/dns",
 			icon: Globe,
-			isEnabled: ({ permissions }) => !!permissions?.dnsProvider.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "S3 Destinations",
 			url: "/dashboard/settings/destinations",
 			icon: HardDrive,
-			isEnabled: ({ permissions }) => !!permissions?.destination.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 
 		{
@@ -437,15 +400,14 @@ const MENU: Menu = {
 			title: "Certificates",
 			url: "/dashboard/settings/certificates",
 			icon: ShieldCheck,
-			isEnabled: ({ permissions }) => !!permissions?.certificate.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Notifications",
 			url: "/dashboard/settings/notifications",
 			icon: Bell,
-			// Only enabled for users with access to notifications
-			isEnabled: ({ permissions }) => !!permissions?.notification.read,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
@@ -460,24 +422,21 @@ const MENU: Menu = {
 			title: "License",
 			url: "/dashboard/settings/license",
 			icon: Key,
-			// Only enabled for owners
-			isEnabled: ({ auth }) => !!(auth?.role === "owner"),
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "SSO",
 			url: "/dashboard/settings/sso",
 			icon: LogIn,
-			// Enabled for admins in both cloud and self-hosted (enterprise)
-			isEnabled: ({ permissions }) => !!permissions?.organization.update,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Whitelabeling",
 			url: "/dashboard/settings/whitelabeling",
 			icon: Palette,
-			// Only enabled for owners in non-cloud environments (enterprise)
-			isEnabled: ({ auth, isCloud }) => !!(auth?.role === "owner" && !isCloud),
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 	],
 

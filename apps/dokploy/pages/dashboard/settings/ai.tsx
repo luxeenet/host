@@ -1,4 +1,3 @@
-import { validateRequest } from "@dokploy/server";
 import { createServerSideHelpers } from "@trpc/react-query/server";
 import type { GetServerSidePropsContext } from "next";
 import type { ReactElement } from "react";
@@ -20,11 +19,17 @@ export default Page;
 Page.getLayout = (page: ReactElement) => {
 	return <DashboardLayout>{page}</DashboardLayout>;
 };
+import { requirePlatformAdminSession } from "@/utils/server-auth-guards";
+
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,
 ) {
 	const { req, res } = ctx;
-	const { user, session } = await validateRequest(req);
+	const authGuard = await requirePlatformAdminSession(ctx);
+	if ("redirect" in authGuard) {
+		return { redirect: authGuard.redirect };
+	}
+	const { user, session } = authGuard;
 
 	const helpers = createServerSideHelpers({
 		router: appRouter,
@@ -42,14 +47,6 @@ export async function getServerSideProps(
 
 	await helpers.user.get.prefetch();
 
-	if (!user || user.role === "member") {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/",
-			},
-		};
-	}
 	return {
 		props: {
 			trpcState: helpers.dehydrate(),

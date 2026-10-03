@@ -23,42 +23,11 @@ Page.getLayout = (page: ReactElement) => {
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,
 ) {
-	const { req, res } = ctx;
-	const { user, session } = await validateRequest(req);
-	if (!user) {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/",
-			},
-		};
-	}
-	if (user.role === "member") {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/dashboard/settings/profile",
-			},
-		};
-	}
-
-	const helpers = createServerSideHelpers({
-		router: appRouter,
-		ctx: {
-			req: req as any,
-			res: res as any,
-			db: null as any,
-			session: session as any,
-			user: user as any,
-		},
-		transformer: superjson,
-	});
-	await helpers.user.get.prefetch();
-	await helpers.settings.isCloud.prefetch();
+	const { requirePlatformAdminPage } = await import("@/utils/server-auth-guards");
+	const guardResult = await requirePlatformAdminPage(ctx);
+	if (guardResult) return guardResult;
 
 	return {
-		props: {
-			trpcState: helpers.dehydrate(),
-		},
+		props: {},
 	};
 }

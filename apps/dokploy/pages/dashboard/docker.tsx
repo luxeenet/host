@@ -138,49 +138,11 @@ Dashboard.getLayout = (page: ReactElement) => {
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,
 ) {
-	const { user, session } = await validateRequest(ctx.req);
-	if (!user) {
-		return {
-			redirect: {
-				permanent: true,
-				destination: "/",
-			},
-		};
-	}
-	const { req, res } = ctx;
+	const { requirePlatformAdminPage } = await import("@/utils/server-auth-guards");
+	const guardResult = await requirePlatformAdminPage(ctx);
+	if (guardResult) return guardResult;
 
-	const helpers = createServerSideHelpers({
-		router: appRouter,
-		ctx: {
-			req: req as any,
-			res: res as any,
-			db: null as any,
-			session: session as any,
-			user: user as any,
-		},
-		transformer: superjson,
-	});
-	try {
-		await helpers.project.all.prefetch();
-
-		const userPermissions = await helpers.user.getPermissions.fetch();
-
-		if (!userPermissions?.docker.read) {
-			return {
-				redirect: {
-					permanent: true,
-					destination: "/",
-				},
-			};
-		}
-		return {
-			props: {
-				trpcState: helpers.dehydrate(),
-			},
-		};
-	} catch {
-		return {
-			props: {},
-		};
-	}
+	return {
+		props: {},
+	};
 }

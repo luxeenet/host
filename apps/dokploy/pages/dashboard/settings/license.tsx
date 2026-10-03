@@ -1,4 +1,3 @@
-import { validateRequest } from "@dokploy/server";
 import { createServerSideHelpers } from "@trpc/react-query/server";
 import type { GetServerSidePropsContext } from "next";
 import type { ReactElement } from "react";
@@ -30,27 +29,17 @@ Page.getLayout = (page: ReactElement) => {
 	return <DashboardLayout metaName="License">{page}</DashboardLayout>;
 };
 
+import { requirePlatformAdminSession } from "@/utils/server-auth-guards";
+
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,
 ) {
 	const { req, res } = ctx;
-	const { user, session } = await validateRequest(ctx.req);
-	if (!user) {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/",
-			},
-		};
+	const authGuard = await requirePlatformAdminSession(ctx);
+	if ("redirect" in authGuard) {
+		return { redirect: authGuard.redirect };
 	}
-	if (user.role !== "owner") {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/dashboard/settings/profile",
-			},
-		};
-	}
+	const { user, session } = authGuard;
 
 	const helpers = createServerSideHelpers({
 		router: appRouter,

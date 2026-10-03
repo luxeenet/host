@@ -91,40 +91,9 @@ Dashboard.getLayout = (page: ReactElement) => {
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,
 ) {
-	if (IS_CLOUD) {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/dashboard/home",
-			},
-		};
-	}
-	const { user, session } = await validateRequest(ctx.req);
-	if (!user) {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/",
-			},
-		};
-	}
-
-	const canView = await hasPermission(
-		{
-			user: { id: user.id },
-			session: { activeOrganizationId: session?.activeOrganizationId || "" },
-		},
-		{ monitoring: ["read"] },
-	);
-
-	if (!canView) {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/dashboard/home",
-			},
-		};
-	}
+	const { requirePlatformAdminPage } = await import("@/utils/server-auth-guards");
+	const guardResult = await requirePlatformAdminPage(ctx);
+	if (guardResult) return guardResult;
 
 	return {
 		props: {},

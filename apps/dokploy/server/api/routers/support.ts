@@ -8,8 +8,8 @@ import { z } from "zod";
 import { db } from "../../db";
 import * as schema from "@dokploy/server/db/schema";
 import {
-	adminProcedure,
 	createTRPCRouter,
+	platformAdminProcedure,
 	protectedProcedure,
 } from "../trpc";
 
@@ -142,7 +142,7 @@ export const supportRouter = createTRPCRouter({
 	// ─── Admin ────────────────────────────────────────────────
 
 	/** Admin: list all tickets */
-	adminList: adminProcedure
+	adminList: platformAdminProcedure
 		.input(
 			z.object({
 				status: z.string().optional(),
@@ -176,7 +176,7 @@ export const supportRouter = createTRPCRouter({
 		}),
 
 	/** Admin: get a single ticket */
-	adminGet: adminProcedure
+	adminGet: platformAdminProcedure
 		.input(z.object({ ticketId: z.string().min(1) }))
 		.query(async ({ input }) => {
 			const ticket = await db.query.supportTickets.findFirst({
@@ -194,7 +194,7 @@ export const supportRouter = createTRPCRouter({
 		}),
 
 	/** Admin: reply to a ticket as staff */
-	adminReply: adminProcedure
+	adminReply: platformAdminProcedure
 		.input(schema.apiAddTicketMessage)
 		.mutation(async ({ ctx, input }) => {
 			const ticket = await db.query.supportTickets.findFirst({
@@ -224,7 +224,7 @@ export const supportRouter = createTRPCRouter({
 		}),
 
 	/** Admin: update ticket status */
-	adminUpdateStatus: adminProcedure
+	adminUpdateStatus: platformAdminProcedure
 		.input(schema.apiUpdateTicketStatus)
 		.mutation(async ({ input }) => {
 			const [updated] = await db

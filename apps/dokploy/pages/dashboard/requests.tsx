@@ -14,23 +14,9 @@ Requests.getLayout = (page: ReactElement) => {
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,
 ) {
-	if (IS_CLOUD) {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/dashboard/home",
-			},
-		};
-	}
-	const { user } = await validateRequest(ctx.req);
-	if (!user) {
-		return {
-			redirect: {
-				permanent: false,
-				destination: "/",
-			},
-		};
-	}
+	const { requirePlatformAdminPage } = await import("@/utils/server-auth-guards");
+	const guardResult = await requirePlatformAdminPage(ctx);
+	if (guardResult) return guardResult;
 
 	return {
 		props: {},

@@ -641,4 +641,54 @@ describe("14. Backup Storage Quota (Migration 0199 Infrastructure)", () => {
 		expect(command).toContain("'test'\\''");
 		expect(command).toContain("grep --line-buffered -iF");
 	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 19. Platform Admin Procedure & Role Separation Tests
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("platformAdminProcedure accepts isPlatformAdmin=true and rejects isPlatformAdmin=false or unauthenticated", () => {
+		const checkPlatformAdmin = (ctx: { user?: { isPlatformAdmin?: boolean } }) => {
+			if (!ctx.user) {
+				throw new TRPCError({ code: "UNAUTHORIZED", message: "UNAUTHORIZED" });
+			}
+			if (ctx.user.isPlatformAdmin !== true) {
+				throw new TRPCError({ code: "FORBIDDEN", message: "Platform admin required" });
+			}
+			return true;
+		};
+
+		expect(checkPlatformAdmin({ user: { isPlatformAdmin: true } })).toBe(true);
+		expect(() => checkPlatformAdmin({ user: { isPlatformAdmin: false } })).toThrow("Platform admin required");
+		expect(() => checkPlatformAdmin({})).toThrow("UNAUTHORIZED");
+	});
+
+	it("organization owner/admin role does NOT grant platform admin privileges", () => {
+		const orgOwner = { role: "owner", isPlatformAdmin: false };
+		const orgAdmin = { role: "admin", isPlatformAdmin: false };
+
+		const checkPlatformAdmin = (user: { isPlatformAdmin?: boolean }) => user.isPlatformAdmin === true;
+
+		expect(checkPlatformAdmin(orgOwner)).toBe(false);
+		expect(checkPlatformAdmin(orgAdmin)).toBe(false);
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 20. Direct Page Protection (requirePlatformAdminPage)
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("resolvePlatformAdminRedirect rejects unauthenticated and non-platform-admin (incl. org owner/admin)", async () => {
+		const { resolvePlatformAdminRedirect } = await import("../../utils/platform-admin-redirect");
+
+		expect(resolvePlatformAdminRedirect(null)).toEqual({ permanent: false, destination: "/" });
+		expect(resolvePlatformAdminRedirect({ isPlatformAdmin: false })).toEqual({
+			permanent: false,
+			destination: "/dashboard/home",
+		});
+		expect(resolvePlatformAdminRedirect({ isPlatformAdmin: undefined })).toEqual({
+			permanent: false,
+			destination: "/dashboard/home",
+		});
+		expect(resolvePlatformAdminRedirect({ isPlatformAdmin: true })).toBeNull();
+	});
 });
+

@@ -74,9 +74,9 @@ import { removeJob, schedule } from "@/server/utils/backup";
 import packageInfo from "../../../package.json";
 import { appRouter } from "../root";
 import {
-	adminProcedure,
 	createTRPCRouter,
 	enterpriseProcedure,
+	platformAdminProcedure,
 	protectedProcedure,
 	publicProcedure,
 } from "../trpc";
@@ -89,7 +89,7 @@ export const settingsRouter = createTRPCRouter({
 		const settings = await getWebServerSettings();
 		return settings;
 	}),
-	reloadServer: adminProcedure.mutation(async ({ ctx }) => {
+	reloadServer: platformAdminProcedure.mutation(async ({ ctx }) => {
 		if (IS_CLOUD) {
 			return true;
 		}
@@ -101,7 +101,7 @@ export const settingsRouter = createTRPCRouter({
 		});
 		return true;
 	}),
-	cleanAllDeploymentQueue: adminProcedure.mutation(async ({ ctx }) => {
+	cleanAllDeploymentQueue: platformAdminProcedure.mutation(async ({ ctx }) => {
 		if (IS_CLOUD) {
 			return true;
 		}
@@ -113,7 +113,7 @@ export const settingsRouter = createTRPCRouter({
 		});
 		return result;
 	}),
-	reloadTraefik: adminProcedure
+	reloadTraefik: platformAdminProcedure
 		.input(apiServerSchema)
 		.mutation(async ({ input, ctx }) => {
 			// Run in background so the request returns immediately; avoids proxy timeouts.
@@ -129,7 +129,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	toggleDashboard: adminProcedure
+	toggleDashboard: platformAdminProcedure
 		.input(apiEnableDashboard)
 		.mutation(async ({ input, ctx }) => {
 			const ports = await readPorts("dokploy-traefik", input.serverId);
@@ -177,7 +177,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	cleanUnusedImages: adminProcedure
+	cleanUnusedImages: platformAdminProcedure
 		.input(apiServerSchema)
 		.mutation(async ({ input, ctx }) => {
 			await cleanupImages(input?.serverId);
@@ -188,7 +188,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	cleanUnusedVolumes: adminProcedure
+	cleanUnusedVolumes: platformAdminProcedure
 		.input(apiServerSchema)
 		.mutation(async ({ input, ctx }) => {
 			await cleanupVolumes(input?.serverId);
@@ -199,7 +199,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	cleanStoppedContainers: adminProcedure
+	cleanStoppedContainers: platformAdminProcedure
 		.input(apiServerSchema)
 		.mutation(async ({ input, ctx }) => {
 			await cleanupContainers(input?.serverId);
@@ -210,7 +210,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	cleanDockerBuilder: adminProcedure
+	cleanDockerBuilder: platformAdminProcedure
 		.input(apiServerSchema)
 		.mutation(async ({ input, ctx }) => {
 			await cleanupBuilders(input?.serverId);
@@ -220,7 +220,7 @@ export const settingsRouter = createTRPCRouter({
 				resourceName: "clean-docker-builder",
 			});
 		}),
-	cleanDockerPrune: adminProcedure
+	cleanDockerPrune: platformAdminProcedure
 		.input(apiServerSchema)
 		.mutation(async ({ input, ctx }) => {
 			await cleanupSystem(input?.serverId);
@@ -232,7 +232,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	cleanAll: adminProcedure
+	cleanAll: platformAdminProcedure
 		.input(apiServerSchema)
 		.mutation(async ({ input, ctx }) => {
 			// Execute cleanup in background and return immediately to avoid gateway timeouts
@@ -244,7 +244,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return result;
 		}),
-	cleanMonitoring: adminProcedure.mutation(async ({ ctx }) => {
+	cleanMonitoring: platformAdminProcedure.mutation(async ({ ctx }) => {
 		if (IS_CLOUD) {
 			return true;
 		}
@@ -257,13 +257,13 @@ export const settingsRouter = createTRPCRouter({
 		});
 		return true;
 	}),
-	getDockerDiskUsage: adminProcedure.query(async () => {
+	getDockerDiskUsage: platformAdminProcedure.query(async () => {
 		if (IS_CLOUD) {
 			return [];
 		}
 		return getDockerDiskUsage();
 	}),
-	saveSSHPrivateKey: adminProcedure
+	saveSSHPrivateKey: platformAdminProcedure
 		.input(apiSaveSSHKey)
 		.mutation(async ({ input, ctx }) => {
 			if (IS_CLOUD) {
@@ -279,7 +279,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	assignDomainServer: adminProcedure
+	assignDomainServer: platformAdminProcedure
 		.input(apiAssignDomain)
 		.mutation(async ({ input, ctx }) => {
 			if (IS_CLOUD) {
@@ -311,7 +311,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return settings;
 		}),
-	cleanSSHPrivateKey: adminProcedure.mutation(async ({ ctx }) => {
+	cleanSSHPrivateKey: platformAdminProcedure.mutation(async ({ ctx }) => {
 		if (IS_CLOUD) {
 			return true;
 		}
@@ -325,7 +325,7 @@ export const settingsRouter = createTRPCRouter({
 		});
 		return true;
 	}),
-	updateDockerCleanup: adminProcedure
+	updateDockerCleanup: platformAdminProcedure
 		.input(apiUpdateDockerCleanup)
 		.mutation(async ({ input, ctx }) => {
 			if (input.serverId) {
@@ -432,7 +432,7 @@ export const settingsRouter = createTRPCRouter({
 			return true;
 		}),
 
-	updateBuildsConcurrency: adminProcedure
+	updateBuildsConcurrency: platformAdminProcedure
 		.input(apiUpdateWebServerBuildsConcurrency)
 		.mutation(async ({ input, ctx }) => {
 			if (IS_CLOUD) {
@@ -476,7 +476,7 @@ export const settingsRouter = createTRPCRouter({
 			return true;
 		}),
 
-	readTraefikConfig: adminProcedure.query(() => {
+	readTraefikConfig: platformAdminProcedure.query(() => {
 		if (IS_CLOUD) {
 			return true;
 		}
@@ -484,7 +484,7 @@ export const settingsRouter = createTRPCRouter({
 		return traefikConfig;
 	}),
 
-	updateTraefikConfig: adminProcedure
+	updateTraefikConfig: platformAdminProcedure
 		.input(apiTraefikConfig)
 		.mutation(async ({ input, ctx }) => {
 			if (IS_CLOUD) {
@@ -499,14 +499,14 @@ export const settingsRouter = createTRPCRouter({
 			return true;
 		}),
 
-	readWebServerTraefikConfig: adminProcedure.query(() => {
+	readWebServerTraefikConfig: platformAdminProcedure.query(() => {
 		if (IS_CLOUD) {
 			return true;
 		}
 		const traefikConfig = readConfig("dokploy");
 		return traefikConfig;
 	}),
-	updateWebServerTraefikConfig: adminProcedure
+	updateWebServerTraefikConfig: platformAdminProcedure
 		.input(apiTraefikConfig)
 		.mutation(async ({ input, ctx }) => {
 			if (IS_CLOUD) {
@@ -521,7 +521,7 @@ export const settingsRouter = createTRPCRouter({
 			return true;
 		}),
 
-	readMiddlewareTraefikConfig: adminProcedure.query(() => {
+	readMiddlewareTraefikConfig: platformAdminProcedure.query(() => {
 		if (IS_CLOUD) {
 			return true;
 		}
@@ -529,7 +529,7 @@ export const settingsRouter = createTRPCRouter({
 		return traefikConfig;
 	}),
 
-	updateMiddlewareTraefikConfig: adminProcedure
+	updateMiddlewareTraefikConfig: platformAdminProcedure
 		.input(apiTraefikConfig)
 		.mutation(async ({ input, ctx }) => {
 			if (IS_CLOUD) {
@@ -550,7 +550,7 @@ export const settingsRouter = createTRPCRouter({
 
 		return await getUpdateData(packageInfo.version);
 	}),
-	updateServer: adminProcedure.mutation(async ({ ctx }) => {
+	updateServer: platformAdminProcedure.mutation(async ({ ctx }) => {
 		if (IS_CLOUD) {
 			return true;
 		}
@@ -633,7 +633,7 @@ export const settingsRouter = createTRPCRouter({
 		const settings = await getWebServerSettings();
 		return settings?.serverIp || "";
 	}),
-	updateServerIp: adminProcedure
+	updateServerIp: platformAdminProcedure
 		.input(
 			z.object({
 				serverIp: z.string(),
@@ -738,7 +738,7 @@ export const settingsRouter = createTRPCRouter({
 			return openApiDocument;
 		},
 	),
-	readTraefikEnv: adminProcedure
+	readTraefikEnv: platformAdminProcedure
 		.input(apiServerSchema)
 		.query(async ({ input }) => {
 			const envVars = await readEnvironmentVariables(
@@ -748,7 +748,7 @@ export const settingsRouter = createTRPCRouter({
 			return envVars;
 		}),
 
-	writeTraefikEnv: adminProcedure
+	writeTraefikEnv: platformAdminProcedure
 		.input(z.object({ env: z.string(), serverId: z.string().optional() }))
 		.mutation(async ({ input, ctx }) => {
 			const envs = prepareEnvironmentVariables(input.env);
@@ -769,7 +769,7 @@ export const settingsRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	haveTraefikDashboardPortEnabled: adminProcedure
+	haveTraefikDashboardPortEnabled: platformAdminProcedure
 		.input(apiServerSchema)
 		.query(async ({ input }) => {
 			const ports = await readPorts("dokploy-traefik", input?.serverId);
@@ -808,7 +808,7 @@ export const settingsRouter = createTRPCRouter({
 
 			return parsedConfig;
 		}),
-	readStats: adminProcedure
+	readStats: platformAdminProcedure
 		.meta({
 			openapi: {
 				path: "/read-stats",
@@ -918,7 +918,7 @@ export const settingsRouter = createTRPCRouter({
 			throw error;
 		}
 	}),
-	checkInfrastructureHealth: adminProcedure.query(async () => {
+	checkInfrastructureHealth: platformAdminProcedure.query(async () => {
 		if (IS_CLOUD) {
 			return {
 				postgres: { status: "healthy" as const },
@@ -933,7 +933,7 @@ export const settingsRouter = createTRPCRouter({
 
 		return { postgres, traefik };
 	}),
-	setupGPU: adminProcedure
+	setupGPU: platformAdminProcedure
 		.input(
 			z.object({
 				serverId: z.string().optional(),
@@ -957,7 +957,7 @@ export const settingsRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	checkGPUStatus: adminProcedure
+	checkGPUStatus: platformAdminProcedure
 		.input(
 			z.object({
 				serverId: z.string().optional(),
@@ -991,7 +991,7 @@ export const settingsRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateTraefikPorts: adminProcedure
+	updateTraefikPorts: platformAdminProcedure
 		.input(
 			z.object({
 				serverId: z.string().optional(),
@@ -1059,7 +1059,7 @@ export const settingsRouter = createTRPCRouter({
 				});
 			}
 		}),
-	getTraefikPorts: adminProcedure
+	getTraefikPorts: platformAdminProcedure
 		.input(apiServerSchema)
 		.query(async ({ input }) => {
 			const ports = await readPorts("dokploy-traefik", input?.serverId);
@@ -1093,7 +1093,7 @@ export const settingsRouter = createTRPCRouter({
 		return getLogCleanupStatus();
 	}),
 
-	getDokployCloudIps: adminProcedure.query(async () => {
+	getDokployCloudIps: platformAdminProcedure.query(async () => {
 		if (!IS_CLOUD) {
 			return [];
 		}

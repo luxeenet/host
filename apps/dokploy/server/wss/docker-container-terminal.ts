@@ -168,11 +168,6 @@ export const setupDockerContainerTerminalWebSocketServer = (
 						privateKey: server.sshKey?.privateKey,
 					});
 			} else {
-				if (IS_CLOUD) {
-					ws.send("This feature is not available in the cloud version.");
-					ws.close();
-					return;
-				}
 				const ptyProcess = spawn(
 					"docker",
 					["exec", "-it", "-w", "/", containerId, shell],

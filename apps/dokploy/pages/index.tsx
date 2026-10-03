@@ -143,7 +143,7 @@ export default function Home({ IS_CLOUD, enforceSSO }: Props) {
 			}
 
 			toast.success("Logged in successfully");
-			router.push("/dashboard");
+			router.push("/dashboard/home");
 		} catch {
 			toast.error("An error occurred while logging in");
 		} finally {

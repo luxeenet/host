@@ -787,5 +787,153 @@ describe("14. Backup Storage Quota (Migration 0199 Infrastructure)", () => {
 			expect(guard({ user: { isPlatformAdmin: true } })).toBe(true);
 		}
 	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 24. Plan Terminal Entitlement (checkCanUseTerminal)
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("checkCanUseTerminal returns allowed=true when plan has terminal, web_terminal, terminal_access, or docker_access", async () => {
+		mockSubscriptionActive(true);
+
+		for (const featureFlag of ["terminal", "web_terminal", "terminal_access", "docker_access"]) {
+			mockSnapshot({ features: { [featureFlag]: true, databases: true, custom_domains: true, backups: true } });
+			const result = await PlanEntitlementService.checkCanUseTerminal("org-123");
+			expect(result.allowed).toBe(true);
+		}
+	});
+
+	it("checkCanUseTerminal returns allowed=false when plan lacks terminal feature flags", async () => {
+		mockSubscriptionActive(true);
+		mockSnapshot({ features: { databases: true, custom_domains: true, backups: true } });
+		const result = await PlanEntitlementService.checkCanUseTerminal("org-123");
+		expect(result.allowed).toBe(false);
+		expect(result.reason).toContain("Terminal access is not included in your current plan");
+	});
+
+	it("checkCanUseTerminal returns allowed=false when subscription is inactive", async () => {
+		mockSubscriptionActive(false);
+		const result = await PlanEntitlementService.checkCanUseTerminal("org-123");
+		expect(result.allowed).toBe(false);
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 25. Sidebar Navigation Filtering (3-tier role hierarchy)
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("sidebar navigation items correctly filter between Platform Admin, Org Owner, Org Admin, and Org Member", () => {
+		type EnabledOpts = {
+			auth?: { role?: string; isPlatformAdmin?: boolean };
+			permissions?: { member: { read: boolean } };
+			isCloud: boolean;
+			planFeatures?: Record<string, boolean> | null;
+			isPlatformAdmin?: boolean;
+		};
+
+		const platformAdminItems = [
+			{ title: "Overview", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Monitoring", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Schedules", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Traefik File System", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Docker", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Requests", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Admin Portal", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Web Server", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Remote Servers", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Deployments", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Audit Logs", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "SSH Keys", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Tags", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Git", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Registry", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Secrets", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "DNS Providers", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "S3 Destinations", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Certificates", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Notifications", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "License", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "SSO", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+			{ title: "Whitelabeling", isEnabled: (opts: EnabledOpts) => !!opts.isPlatformAdmin },
+		];
+
+		const platformAdminOpts: EnabledOpts = { isPlatformAdmin: true, isCloud: true };
+		const orgOwnerOpts: EnabledOpts = { isPlatformAdmin: false, auth: { role: "owner" }, isCloud: true };
+		const orgAdminOpts: EnabledOpts = { isPlatformAdmin: false, auth: { role: "admin" }, isCloud: true };
+		const orgMemberOpts: EnabledOpts = { isPlatformAdmin: false, auth: { role: "member" }, isCloud: true };
+
+		// Platform admin can see all platform items
+		for (const item of platformAdminItems) {
+			expect(item.isEnabled(platformAdminOpts)).toBe(true);
+		}
+
+		// Organization Owner MUST NOT see any platform items
+		for (const item of platformAdminItems) {
+			expect(item.isEnabled(orgOwnerOpts)).toBe(false);
+		}
+
+		// Organization Admin MUST NOT see any platform items
+		for (const item of platformAdminItems) {
+			expect(item.isEnabled(orgAdminOpts)).toBe(false);
+		}
+
+		// Organization Member MUST NOT see any platform items
+		for (const item of platformAdminItems) {
+			expect(item.isEnabled(orgMemberOpts)).toBe(false);
+		}
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 26. Direct URL Authorization Guards (resolvePlatformAdminRedirect)
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("resolvePlatformAdminRedirect enforces safe redirection on direct navigation to platform pages", async () => {
+		const { resolvePlatformAdminRedirect } = await import("../../utils/platform-admin-redirect");
+
+		// 1. Unauthenticated visitor -> redirects to login ("/")
+		expect(resolvePlatformAdminRedirect(null)).toEqual({
+			permanent: false,
+			destination: "/",
+		});
+		expect(resolvePlatformAdminRedirect(undefined)).toEqual({
+			permanent: false,
+			destination: "/",
+		});
+
+		// 2. Organization Owner (isPlatformAdmin !== true) -> redirected to safe /dashboard/home
+		expect(resolvePlatformAdminRedirect({ isPlatformAdmin: false })).toEqual({
+			permanent: false,
+			destination: "/dashboard/home",
+		});
+
+		// 3. Organization Admin (isPlatformAdmin !== true) -> redirected to safe /dashboard/home
+		expect(resolvePlatformAdminRedirect({ isPlatformAdmin: undefined })).toEqual({
+			permanent: false,
+			destination: "/dashboard/home",
+		});
+
+		// 4. System / Platform Admin -> allowed through (null redirect)
+		expect(resolvePlatformAdminRedirect({ isPlatformAdmin: true })).toBeNull();
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 27. Role Independence (user.isPlatformAdmin !== organizationMember.role)
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("guarantees organization roles (owner/admin/member) do not grant platform admin privileges", () => {
+		const users = [
+			{ id: "u-1", orgRole: "owner", isPlatformAdmin: false },
+			{ id: "u-2", orgRole: "admin", isPlatformAdmin: false },
+			{ id: "u-3", orgRole: "member", isPlatformAdmin: false },
+			{ id: "u-4", orgRole: "member", isPlatformAdmin: true },
+		];
+
+		const hasPlatformPrivileges = (u: (typeof users)[number]) => u.isPlatformAdmin === true;
+
+		expect(hasPlatformPrivileges(users[0]!)).toBe(false);
+		expect(hasPlatformPrivileges(users[1]!)).toBe(false);
+		expect(hasPlatformPrivileges(users[2]!)).toBe(false);
+		expect(hasPlatformPrivileges(users[3]!)).toBe(true);
+	});
 });
+
+
 

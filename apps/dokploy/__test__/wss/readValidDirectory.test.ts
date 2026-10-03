@@ -23,7 +23,7 @@ const { readValidDirectory } = await import("@dokploy/server");
 describe("readValidDirectory (path traversal)", () => {
 	it("returns true when directory is exactly BASE_PATH", () => {
 		expect(readValidDirectory(BASE)).toBe(true);
-		expect(readValidDirectory(path.resolve(BASE))).toBe(true);
+		expect(readValidDirectory(path.posix.resolve(BASE))).toBe(true);
 	});
 
 	it("returns true when directory is under BASE_PATH", () => {

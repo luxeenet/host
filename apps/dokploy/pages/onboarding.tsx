@@ -36,7 +36,7 @@ export default function OnboardingPage() {
 	const subscribeMutation = api.subscription.create.useMutation({
 		onSuccess: async () => {
 			toast.success("Subscription created! Welcome aboard 🎉");
-			await router.push("/dashboard");
+			await router.push("/dashboard/home");
 		},
 		onError: (err) => {
 			toast.error(err.message);

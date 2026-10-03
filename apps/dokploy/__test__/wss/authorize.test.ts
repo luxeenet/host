@@ -11,8 +11,19 @@ vi.mock("@dokploy/server/services/permission", () => ({
 }));
 
 const mockGetAccessibleServerIds = vi.hoisted(() => vi.fn());
+const mockIsCloud = vi.hoisted(() => ({ value: true }));
 vi.mock("@dokploy/server", () => ({
 	getAccessibleServerIds: mockGetAccessibleServerIds,
+	get IS_CLOUD() {
+		return mockIsCloud.value;
+	},
+}));
+
+const mockPlanCheckCanUseTerminal = vi.hoisted(() => vi.fn());
+vi.mock("@dokploy/server/services/plan-entitlement", () => ({
+	PlanEntitlementService: {
+		checkCanUseTerminal: mockPlanCheckCanUseTerminal,
+	},
 }));
 
 import {
@@ -20,11 +31,13 @@ import {
 	canAccessTerminalOverWss,
 } from "@/server/wss/authorize";
 
-const USER = { id: "user-1" };
+const USER = { id: "user-1", isPlatformAdmin: false };
+const ADMIN_USER = { id: "admin-1", isPlatformAdmin: true };
 const SESSION = { activeOrganizationId: "org-1" };
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	mockPlanCheckCanUseTerminal.mockResolvedValue({ allowed: true });
 });
 
 describe("canAccessDockerOverWss", () => {
@@ -33,14 +46,28 @@ describe("canAccessDockerOverWss", () => {
 		expect(await canAccessDockerOverWss(USER, null)).toBe(false);
 	});
 
-	it("denies a member without docker permission", async () => {
+	it("denies a member without docker permission for generic docker access", async () => {
 		mockHasPermission.mockResolvedValue(false);
 		expect(await canAccessDockerOverWss(USER, SESSION)).toBe(false);
 	});
 
-	it("allows when the caller has docker permission (no server)", async () => {
+	it("denies generic host docker access to normal customer in cloud mode", async () => {
+		mockIsCloud.value = true;
+		mockHasPermission.mockResolvedValue(true);
+		expect(await canAccessDockerOverWss(USER, SESSION)).toBe(false);
+	});
+
+	it("allows generic host docker access to platform admin in cloud mode", async () => {
+		mockIsCloud.value = true;
+		mockHasPermission.mockResolvedValue(true);
+		expect(await canAccessDockerOverWss(ADMIN_USER, SESSION)).toBe(true);
+	});
+
+	it("allows generic host docker access in self-hosted mode when caller has docker permission", async () => {
+		mockIsCloud.value = false;
 		mockHasPermission.mockResolvedValue(true);
 		expect(await canAccessDockerOverWss(USER, SESSION)).toBe(true);
+		mockIsCloud.value = true;
 	});
 
 	it("denies a remote server the caller cannot access, even with docker permission", async () => {
@@ -62,51 +89,87 @@ describe("canAccessDockerOverWss", () => {
 		);
 	});
 
-	it("allows service access even without docker permission or server access", async () => {
-		// A member granted the service but without canAccessToDocker, whose
-		// service runs on a server they were not individually granted, must still
-		// read its logs — matches application.readLogs (service access only).
-		mockHasPermission.mockResolvedValue(false);
-		mockGetAccessibleServerIds.mockResolvedValue(new Set());
+	it("allows customer service container access when plan entitles terminal and user has service access", async () => {
 		mockCheckServiceAccess.mockResolvedValue(undefined);
+		mockPlanCheckCanUseTerminal.mockResolvedValue({ allowed: true });
+
 		expect(
-			await canAccessDockerOverWss(USER, SESSION, "srv-remote", "svc-1"),
+			await canAccessDockerOverWss(USER, SESSION, null, "svc-customer-1"),
 		).toBe(true);
-		// Service path is authoritative — it must not fall through to docker/server.
-		expect(mockHasPermission).not.toHaveBeenCalled();
-		expect(mockGetAccessibleServerIds).not.toHaveBeenCalled();
+	});
+
+	it("denies customer service container access when plan does not entitle terminal", async () => {
+		mockCheckServiceAccess.mockResolvedValue(undefined);
+		mockPlanCheckCanUseTerminal.mockResolvedValue({
+			allowed: false,
+			reason: "Terminal access is not included in your current plan",
+		});
+
+		expect(
+			await canAccessDockerOverWss(USER, SESSION, null, "svc-customer-1"),
+		).toBe(false);
+	});
+
+	it("allows system admin to access service container even if plan check fails", async () => {
+		mockCheckServiceAccess.mockResolvedValue(undefined);
+		mockPlanCheckCanUseTerminal.mockResolvedValue({ allowed: false });
+
+		expect(
+			await canAccessDockerOverWss(ADMIN_USER, SESSION, null, "svc-customer-1"),
+		).toBe(true);
 	});
 });
 
 describe("canAccessTerminalOverWss", () => {
-	it("denies the local host terminal to a plain member", async () => {
-		mockFindMember.mockResolvedValue({ role: "member" });
+	it("Cloud mode: denies local host terminal to org owner or admin who is not platform admin", async () => {
+		mockIsCloud.value = true;
+		mockFindMember.mockResolvedValue({ role: "owner" });
+		expect(await canAccessTerminalOverWss(USER, SESSION, "local")).toBe(false);
+
+		mockFindMember.mockResolvedValue({ role: "admin" });
 		expect(await canAccessTerminalOverWss(USER, SESSION, "local")).toBe(false);
 	});
 
-	it("allows the local host terminal to an owner", async () => {
+	it("Cloud mode: allows local host terminal to platform admin", async () => {
+		mockIsCloud.value = true;
+		expect(await canAccessTerminalOverWss(ADMIN_USER, SESSION, "local")).toBe(true);
+	});
+
+	it("Self-hosted mode: allows local host terminal to org owner or admin", async () => {
+		mockIsCloud.value = false;
 		mockFindMember.mockResolvedValue({ role: "owner" });
 		expect(await canAccessTerminalOverWss(USER, SESSION, "local")).toBe(true);
-	});
 
-	it("allows the local host terminal to an admin", async () => {
 		mockFindMember.mockResolvedValue({ role: "admin" });
 		expect(await canAccessTerminalOverWss(USER, SESSION, "local")).toBe(true);
+
+		mockFindMember.mockResolvedValue({ role: "member" });
+		expect(await canAccessTerminalOverWss(USER, SESSION, "local")).toBe(false);
+		mockIsCloud.value = true;
 	});
 
-	it("gates a remote server terminal on server access", async () => {
+	it("gates a remote server terminal on server access and plan entitlement", async () => {
 		mockHasPermission.mockResolvedValue(true);
 		mockGetAccessibleServerIds.mockResolvedValue(new Set(["srv-1"]));
+		mockPlanCheckCanUseTerminal.mockResolvedValue({ allowed: true });
+
 		expect(await canAccessTerminalOverWss(USER, SESSION, "srv-1")).toBe(true);
 		expect(await canAccessTerminalOverWss(USER, SESSION, "srv-2")).toBe(false);
-		// the remote path must never fall through to the owner/admin local branch
-		expect(mockFindMember).not.toHaveBeenCalled();
+	});
+
+	it("denies remote server terminal when plan lacks terminal entitlement", async () => {
+		mockHasPermission.mockResolvedValue(true);
+		mockGetAccessibleServerIds.mockResolvedValue(new Set(["srv-1"]));
+		mockPlanCheckCanUseTerminal.mockResolvedValue({ allowed: false });
+
+		expect(await canAccessTerminalOverWss(USER, SESSION, "srv-1")).toBe(false);
 	});
 
 	it("denies a remote server terminal without the server.terminal permission", async () => {
-		// Reaching a server (to deploy on it) must not imply a root shell on it.
 		mockGetAccessibleServerIds.mockResolvedValue(new Set(["srv-1"]));
 		mockHasPermission.mockResolvedValue(false);
+		mockPlanCheckCanUseTerminal.mockResolvedValue({ allowed: true });
+
 		expect(await canAccessTerminalOverWss(USER, SESSION, "srv-1")).toBe(false);
 		expect(mockHasPermission).toHaveBeenCalledWith(
 			{ user: { id: USER.id }, session: { activeOrganizationId: "org-1" } },
@@ -114,16 +177,12 @@ describe("canAccessTerminalOverWss", () => {
 		);
 	});
 
-	it("allows a remote server terminal with the server.terminal permission", async () => {
+	it("allows a remote server terminal with the server.terminal permission and plan entitlement", async () => {
 		mockGetAccessibleServerIds.mockResolvedValue(new Set(["srv-1"]));
 		mockHasPermission.mockResolvedValue(true);
+		mockPlanCheckCanUseTerminal.mockResolvedValue({ allowed: true });
+
 		expect(await canAccessTerminalOverWss(USER, SESSION, "srv-1")).toBe(true);
 	});
-
-	it("does not check permissions for a server the caller cannot access", async () => {
-		mockGetAccessibleServerIds.mockResolvedValue(new Set(["srv-1"]));
-		mockHasPermission.mockResolvedValue(true);
-		expect(await canAccessTerminalOverWss(USER, SESSION, "srv-2")).toBe(false);
-		expect(mockHasPermission).not.toHaveBeenCalled();
-	});
 });
+

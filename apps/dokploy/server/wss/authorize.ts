@@ -4,6 +4,7 @@ import {
 	findMemberByUserId,
 	hasPermission,
 } from "@dokploy/server/services/permission";
+import { PlanEntitlementService } from "@dokploy/server/services/plan-entitlement";
 
 type WssUser = { id: string; isPlatformAdmin?: boolean } | null | undefined;
 type WssSession = { activeOrganizationId?: string | null } | null | undefined;
@@ -14,9 +15,7 @@ const buildCtx = (user: { id: string }, activeOrganizationId: string) => ({
 });
 
 // Authorizes docker/container operations opened over a WebSocket (container
-// terminal, container logs, container stats). Requires the docker permission
-// (owner/admin, or a member explicitly granted canAccessToDocker) and, for a
-// remote server, that the server is accessible to the caller.
+// terminal, container logs, container stats).
 export const canAccessDockerOverWss = async (
 	user: WssUser,
 	session: WssSession,
@@ -27,21 +26,38 @@ export const canAccessDockerOverWss = async (
 
 	const ctx = buildCtx(user, session.activeOrganizationId);
 
-	// When the container belongs to a specific Dokploy service (opened from a
-	// service page, so serviceId is present), access to that service is the
-	// authoritative gate — matching the service tRPC endpoints (e.g.
-	// application.readLogs, which check service access only).
+	// Case 1: Customer application/database/compose container (scoped by serviceId)
 	if (serviceId) {
 		try {
+			// Verify service belongs to active organization and caller has read access
 			await checkServiceAccess(ctx, serviceId, "read");
+
+			// In cloud, verify organization plan entitles container terminal / docker access
+			if (IS_CLOUD && !user.isPlatformAdmin) {
+				const termCheck = await PlanEntitlementService.checkCanUseTerminal(
+					session.activeOrganizationId,
+				);
+				if (!termCheck.allowed) {
+					return false;
+				}
+			}
+
+			if (serverId && serverId !== "local") {
+				const accessible = await getAccessibleServerIds({
+					userId: user.id,
+					activeOrganizationId: session.activeOrganizationId,
+				});
+				if (!accessible.has(serverId)) return false;
+			}
+
 			return true;
 		} catch {
 			return false;
 		}
 	}
 
-	// Generic Docker overview (no service context): mirror the docker tRPC router
-	// — require the docker permission and access to the target server.
+	// Case 2: Generic Docker overview (no service context)
+	// In cloud, generic host Docker daemon inspection is platform-admin only.
 	if (IS_CLOUD && (!serverId || serverId === "local") && !user.isPlatformAdmin) {
 		return false;
 	}
@@ -59,10 +75,12 @@ export const canAccessDockerOverWss = async (
 	return true;
 };
 
-// Authorizes the host/server SSH terminal opened over a WebSocket. The local
-// host terminal is a root shell on the control-plane host, so it is restricted
-// to owner/admin. A remote server terminal needs server access plus
-// server.terminal.
+// Authorizes the host/server SSH terminal opened over a WebSocket (/terminal).
+// The local host terminal (serverId === "local" or null) is a root shell on the control-plane host,
+// so in Cloud it is strictly restricted to isPlatformAdmin === true.
+// In self-hosted, it requires owner/admin (or isPlatformAdmin).
+// A remote server terminal (serverId !== "local") needs server access + server: ["terminal"] permission,
+// and in cloud requires plan terminal entitlement.
 export const canAccessTerminalOverWss = async (
 	user: WssUser,
 	session: WssSession,
@@ -76,6 +94,13 @@ export const canAccessTerminalOverWss = async (
 			activeOrganizationId: session.activeOrganizationId,
 		});
 		if (!accessible.has(serverId)) return false;
+
+		if (IS_CLOUD && !user.isPlatformAdmin) {
+			const termCheck = await PlanEntitlementService.checkCanUseTerminal(
+				session.activeOrganizationId,
+			);
+			if (!termCheck.allowed) return false;
+		}
 
 		return await hasPermission(buildCtx(user, session.activeOrganizationId), {
 			server: ["terminal"],
@@ -91,7 +116,7 @@ export const canAccessTerminalOverWss = async (
 			user.id,
 			session.activeOrganizationId,
 		);
-		return member?.role === "owner" || member?.role === "admin";
+		return member?.role === "owner" || member?.role === "admin" || !!user.isPlatformAdmin;
 	} catch {
 		return false;
 	}

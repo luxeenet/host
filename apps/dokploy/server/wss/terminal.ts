@@ -112,7 +112,7 @@ export const setupTerminalWebSocketServer = (
 		const isLocalServer = serverId === "local";
 
 		if (isLocalServer) {
-			if (IS_CLOUD) {
+			if (IS_CLOUD && !(user as any)?.isPlatformAdmin) {
 				ws.send("This feature is not available in the cloud version.");
 				ws.close();
 				return;

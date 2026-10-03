@@ -476,6 +476,40 @@ export class PlanEntitlementService {
 	}
 
 	/**
+	 * Check if terminal access is enabled on the organization's plan.
+	 */
+	static async checkCanUseTerminal(
+		organizationId: string,
+		executor: any = db,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		const terminalAllowed =
+			snapshot.features["terminal"] ||
+			snapshot.features["web_terminal"] ||
+			snapshot.features["terminal_access"] ||
+			snapshot.features["docker_access"] ||
+			false;
+
+		if (!terminalAllowed) {
+			return {
+				allowed: false,
+				reason:
+					"Terminal access is not included in your current plan. Please upgrade to access container terminals.",
+			};
+		}
+
+		return { allowed: true };
+	}
+
+	/**
 	 * Check if org can add another team member.
 	 */
 	static async checkCanAddTeamMember(

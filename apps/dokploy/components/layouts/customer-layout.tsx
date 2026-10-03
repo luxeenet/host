@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
 
 const NAV_ITEMS = [
-	{ label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
+	{ label: "Overview", icon: LayoutDashboard, href: "/dashboard/home" },
 	{ label: "Projects", icon: Cloud, href: "/dashboard/projects" },
 	{ label: "Databases", icon: Database, href: "/dashboard/databases" },
 	{ label: "Domains", icon: Globe, href: "/dashboard/domains" },
@@ -52,7 +52,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
 		<div className="flex flex-col h-full">
 			{/* Logo */}
 			<div className="p-5 border-b border-slate-800">
-				<Link href="/dashboard" className="flex items-center gap-2.5">
+				<Link href="/dashboard/home" className="flex items-center gap-2.5">
 					<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center shrink-0">
 						<svg viewBox="0 0 24 24" className="w-4 h-4 text-white fill-current">
 							<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />

@@ -443,6 +443,39 @@ export class PlanEntitlementService {
 	}
 
 	/**
+	 * Check if AI assistant / agent features are enabled on the org's plan.
+	 */
+	static async checkCanUseAi(
+		organizationId: string,
+		executor: any = db,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		const aiAllowed =
+			snapshot.features["ai"] ||
+			snapshot.features["ai_agent"] ||
+			snapshot.features["ai_assistant"] ||
+			false;
+
+		if (!aiAllowed) {
+			return {
+				allowed: false,
+				reason:
+					"AI assistant/agent is not included in your current plan. Please upgrade to access AI features.",
+			};
+		}
+
+		return { allowed: true };
+	}
+
+	/**
 	 * Check if org can add another team member.
 	 */
 	static async checkCanAddTeamMember(

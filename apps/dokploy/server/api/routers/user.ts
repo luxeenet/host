@@ -45,6 +45,7 @@ import {
 import {
 	adminProcedure,
 	createTRPCRouter,
+	platformAdminProcedure,
 	protectedProcedure,
 	publicProcedure,
 	withPermission,
@@ -194,7 +195,7 @@ export const userRouter = createTRPCRouter({
 		}
 		return false;
 	}),
-	getBackups: adminProcedure.query(async ({ ctx }) => {
+	getBackups: platformAdminProcedure.query(async ({ ctx }) => {
 		const memberResult = await db.query.member.findFirst({
 			where: and(
 				eq(member.userId, ctx.user.id),

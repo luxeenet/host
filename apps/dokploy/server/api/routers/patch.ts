@@ -17,8 +17,8 @@ import { checkServicePermissionAndAccess } from "@dokploy/server/services/permis
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
-	adminProcedure,
 	createTRPCRouter,
+	platformAdminProcedure,
 	protectedProcedure,
 } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
@@ -317,7 +317,7 @@ export const patchRouter = createTRPCRouter({
 			return result;
 		}),
 
-	cleanPatchRepos: adminProcedure
+	cleanPatchRepos: platformAdminProcedure
 		.input(z.object({ serverId: z.string().optional() }))
 		.mutation(async ({ input, ctx }) => {
 			await cleanPatchRepos(input.serverId);

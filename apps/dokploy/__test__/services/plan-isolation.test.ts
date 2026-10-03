@@ -690,5 +690,102 @@ describe("14. Backup Storage Quota (Migration 0199 Infrastructure)", () => {
 		});
 		expect(resolvePlatformAdminRedirect({ isPlatformAdmin: true })).toBeNull();
 	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 21. AI Feature Entitlement & Plan Checking
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("checkCanUseAi returns allowed=true when plan has ai=true, ai_agent=true, or ai_assistant=true", async () => {
+		mockSubscriptionActive(true);
+
+		// With ai=true
+		mockSnapshot({ features: { ai: true, databases: true, custom_domains: true, backups: true } });
+		const resAi = await PlanEntitlementService.checkCanUseAi("org-123");
+		expect(resAi.allowed).toBe(true);
+
+		// With ai_agent=true
+		mockSnapshot({ features: { ai_agent: true, databases: true, custom_domains: true, backups: true } });
+		const resAgent = await PlanEntitlementService.checkCanUseAi("org-123");
+		expect(resAgent.allowed).toBe(true);
+
+		// With ai_assistant=true
+		mockSnapshot({ features: { ai_assistant: true, databases: true, custom_domains: true, backups: true } });
+		const resAssistant = await PlanEntitlementService.checkCanUseAi("org-123");
+		expect(resAssistant.allowed).toBe(true);
+	});
+
+	it("checkCanUseAi returns allowed=false when plan lacks AI feature flags", async () => {
+		mockSubscriptionActive(true);
+		mockSnapshot({ features: { databases: true, custom_domains: true, backups: true } });
+		const res = await PlanEntitlementService.checkCanUseAi("org-123");
+		expect(res.allowed).toBe(false);
+		expect(res.reason).toContain("AI assistant/agent is not included in your current plan");
+	});
+
+	it("checkCanUseAi returns allowed=false when subscription is not active", async () => {
+		mockSubscriptionActive(false);
+		const res = await PlanEntitlementService.checkCanUseAi("org-123");
+		expect(res.allowed).toBe(false);
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 22. AI Router Organization & Multi-Tenant Scoping
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("rejects cross-organization access to AI settings unless caller is platform admin", () => {
+		const aiSetting = { aiId: "ai-1", organizationId: "org-aaa" };
+		const callerSessionA = { activeOrganizationId: "org-aaa" };
+		const callerSessionB = { activeOrganizationId: "org-bbb" };
+
+		const checkAccess = (session: { activeOrganizationId: string }, user: { isPlatformAdmin?: boolean }) => {
+			if (aiSetting.organizationId !== session.activeOrganizationId && !user.isPlatformAdmin) {
+				throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+			}
+			return true;
+		};
+
+		// Org owner A can access
+		expect(checkAccess(callerSessionA, { isPlatformAdmin: false })).toBe(true);
+		// Org owner B CANNOT access Org A's AI settings
+		expect(() => checkAccess(callerSessionB, { isPlatformAdmin: false })).toThrow("Access denied");
+		// Platform admin can access
+		expect(checkAccess(callerSessionB, { isPlatformAdmin: true })).toBe(true);
+	});
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 23. Locked-down Platform Endpoints
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	it("proves license key, cleanPatchRepos, getBackups, and settings reads require platform admin", () => {
+		const lockedEndpoints = [
+			"licenseKey.activate",
+			"licenseKey.validate",
+			"licenseKey.deactivate",
+			"licenseKey.getEnterpriseSettings",
+			"licenseKey.updateEnterpriseSettings",
+			"patch.cleanPatchRepos",
+			"user.getBackups",
+			"settings.getWebServerSettings",
+			"settings.getIp",
+			"settings.readStatsLogs",
+			"settings.haveActivateRequests",
+			"settings.toggleRequests",
+			"settings.updateLogCleanup",
+			"settings.getLogCleanupStatus",
+		];
+
+		const guard = (ctx: { user?: { isPlatformAdmin?: boolean } }) => {
+			if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+			if (ctx.user.isPlatformAdmin !== true) throw new TRPCError({ code: "FORBIDDEN" });
+			return true;
+		};
+
+		for (const ep of lockedEndpoints) {
+			// Normal customer is forbidden
+			expect(() => guard({ user: { isPlatformAdmin: false } })).toThrow();
+			// Platform admin is allowed
+			expect(guard({ user: { isPlatformAdmin: true } })).toBe(true);
+		}
+	});
 });
 

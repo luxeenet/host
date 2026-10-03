@@ -34,6 +34,10 @@ import {
 import { TRPCError } from "@trpc/server";
 import { generateText } from "ai";
 import { z } from "zod";
+import {
+	assertEntitlement,
+	PlanEntitlementService,
+} from "@dokploy/server/services/plan-entitlement";
 import { slugify } from "@/lib/slug";
 import {
 	adminProcedure,
@@ -43,15 +47,38 @@ import {
 import { generatePassword } from "@/templates/utils";
 
 export const aiRouter = createTRPCRouter({
-	one: adminProcedure
+	one: protectedProcedure
 		.input(z.object({ aiId: z.string() }))
-		.query(async ({ input }) => {
-			return await getAiSettingById(input.aiId);
+		.query(async ({ ctx, input }) => {
+			const setting = await getAiSettingById(input.aiId);
+			if (!setting) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "AI setting not found",
+				});
+			}
+			if (
+				setting.organizationId !== ctx.session.activeOrganizationId &&
+				!ctx.user.isPlatformAdmin
+			) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Access denied",
+				});
+			}
+			return setting;
 		}),
 
 	getModels: protectedProcedure
 		.input(z.object({ apiUrl: z.string().min(1), apiKey: z.string() }))
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkCanUseAi(
+						ctx.session.activeOrganizationId,
+					),
+				);
+			}
 			try {
 				const providerName = getProviderName(input.apiUrl);
 				const headers = getProviderHeaders(input.apiUrl, input.apiKey);
@@ -178,10 +205,20 @@ export const aiRouter = createTRPCRouter({
 			}
 		}),
 	create: adminProcedure.input(apiCreateAi).mutation(async ({ ctx, input }) => {
+		if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
+			await assertEntitlement(
+				PlanEntitlementService.checkCanUseAi(ctx.session.activeOrganizationId),
+			);
+		}
 		return await saveAiSettings(ctx.session.activeOrganizationId, input);
 	}),
 
 	update: adminProcedure.input(apiUpdateAi).mutation(async ({ ctx, input }) => {
+		if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
+			await assertEntitlement(
+				PlanEntitlementService.checkCanUseAi(ctx.session.activeOrganizationId),
+			);
+		}
 		return await saveAiSettings(ctx.session.activeOrganizationId, input);
 	}),
 
@@ -191,15 +228,47 @@ export const aiRouter = createTRPCRouter({
 		);
 	}),
 
-	get: adminProcedure
+	get: protectedProcedure
 		.input(z.object({ aiId: z.string() }))
-		.query(async ({ input }) => {
-			return await getAiSettingById(input.aiId);
+		.query(async ({ ctx, input }) => {
+			const setting = await getAiSettingById(input.aiId);
+			if (!setting) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "AI setting not found",
+				});
+			}
+			if (
+				setting.organizationId !== ctx.session.activeOrganizationId &&
+				!ctx.user.isPlatformAdmin
+			) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Access denied",
+				});
+			}
+			return setting;
 		}),
 
 	delete: adminProcedure
 		.input(z.object({ aiId: z.string() }))
-		.mutation(async ({ input }) => {
+		.mutation(async ({ ctx, input }) => {
+			const setting = await getAiSettingById(input.aiId);
+			if (!setting) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "AI setting not found",
+				});
+			}
+			if (
+				setting.organizationId !== ctx.session.activeOrganizationId &&
+				!ctx.user.isPlatformAdmin
+			) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Access denied",
+				});
+			}
 			return await deleteAiSettings(input.aiId);
 		}),
 
@@ -210,6 +279,13 @@ export const aiRouter = createTRPCRouter({
 	saveCustomProviders: adminProcedure
 		.input(apiSaveAiCustomProviders)
 		.mutation(async ({ ctx, input }) => {
+			if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkCanUseAi(
+						ctx.session.activeOrganizationId,
+					),
+				);
+			}
 			return await saveCustomAiProviders(
 				ctx.session.activeOrganizationId,
 				input.providers,
@@ -234,6 +310,13 @@ export const aiRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkCanUseAi(
+						ctx.session.activeOrganizationId,
+					),
+				);
+			}
 			try {
 				const aiSettings = await getAiSettingById(input.aiId);
 				if (!aiSettings?.isEnabled) {
@@ -243,7 +326,10 @@ export const aiRouter = createTRPCRouter({
 					});
 				}
 
-				if (aiSettings.organizationId !== ctx.session.activeOrganizationId) {
+				if (
+					aiSettings.organizationId !== ctx.session.activeOrganizationId &&
+					!ctx.user.isPlatformAdmin
+				) {
 					throw new TRPCError({
 						code: "FORBIDDEN",
 						message: "Access denied",
@@ -291,7 +377,14 @@ ${input.logs}`,
 				model: z.string().min(1),
 			}),
 		)
-		.mutation(async ({ input }) => {
+		.mutation(async ({ input, ctx }) => {
+			if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkCanUseAi(
+						ctx.session.activeOrganizationId,
+					),
+				);
+			}
 			try {
 				const provider = selectAIProvider({
 					apiUrl: input.apiUrl,
@@ -326,6 +419,13 @@ ${input.logs}`,
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
+			if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkCanUseAi(
+						ctx.session.activeOrganizationId,
+					),
+				);
+			}
 			try {
 				return await suggestVariants({
 					...input,
@@ -341,6 +441,13 @@ ${input.logs}`,
 	deploy: protectedProcedure
 		.input(deploySuggestionSchema)
 		.mutation(async ({ ctx, input }) => {
+			if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkCanUseAi(
+						ctx.session.activeOrganizationId,
+					),
+				);
+			}
 			const environment = await findEnvironmentById(input.environmentId);
 			const project = await findProjectById(environment.projectId);
 			await checkServiceAccess(ctx, environment.projectId, "create");

@@ -350,7 +350,17 @@ const MENU: Menu = {
 			icon: BotIcon,
 			url: "/dashboard/settings/ai",
 			isSingle: true,
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
+			isEnabled: ({ isPlatformAdmin, planFeatures, isCloud, permissions }) => {
+				if (isPlatformAdmin) return true;
+				if (isCloud) {
+					return !!(
+						planFeatures?.ai ||
+						planFeatures?.ai_agent ||
+						planFeatures?.ai_assistant
+					);
+				}
+				return !!permissions?.organization?.update;
+			},
 		},
 		{
 			isSingle: true,

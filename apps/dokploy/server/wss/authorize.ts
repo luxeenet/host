@@ -1,11 +1,11 @@
-import { getAccessibleServerIds } from "@dokploy/server";
+import { getAccessibleServerIds, IS_CLOUD } from "@dokploy/server";
 import {
 	checkServiceAccess,
 	findMemberByUserId,
 	hasPermission,
 } from "@dokploy/server/services/permission";
 
-type WssUser = { id: string } | null | undefined;
+type WssUser = { id: string; isPlatformAdmin?: boolean } | null | undefined;
 type WssSession = { activeOrganizationId?: string | null } | null | undefined;
 
 const buildCtx = (user: { id: string }, activeOrganizationId: string) => ({
@@ -16,16 +16,13 @@ const buildCtx = (user: { id: string }, activeOrganizationId: string) => ({
 // Authorizes docker/container operations opened over a WebSocket (container
 // terminal, container logs, container stats). Requires the docker permission
 // (owner/admin, or a member explicitly granted canAccessToDocker) and, for a
-// remote server, that the server is accessible to the caller. Previously these
-// handlers only checked session + organization, so any member could reach a
-// root shell / logs of any container.
+// remote server, that the server is accessible to the caller.
 export const canAccessDockerOverWss = async (
 	user: WssUser,
 	session: WssSession,
 	serverId?: string | null,
 	serviceId?: string | null,
 ): Promise<boolean> => {
-	// return false;
 	if (!user || !session?.activeOrganizationId) return false;
 
 	const ctx = buildCtx(user, session.activeOrganizationId);
@@ -33,9 +30,7 @@ export const canAccessDockerOverWss = async (
 	// When the container belongs to a specific Dokploy service (opened from a
 	// service page, so serviceId is present), access to that service is the
 	// authoritative gate — matching the service tRPC endpoints (e.g.
-	// application.readLogs, which check service access only). A member granted
-	// the service can read its logs / open its terminal even without the broad
-	// "docker" permission or explicit access to the server it runs on.
+	// application.readLogs, which check service access only).
 	if (serviceId) {
 		try {
 			await checkServiceAccess(ctx, serviceId, "read");
@@ -47,6 +42,10 @@ export const canAccessDockerOverWss = async (
 
 	// Generic Docker overview (no service context): mirror the docker tRPC router
 	// — require the docker permission and access to the target server.
+	if (IS_CLOUD && (!serverId || serverId === "local") && !user.isPlatformAdmin) {
+		return false;
+	}
+
 	if (!(await hasPermission(ctx, { docker: ["read"] }))) return false;
 
 	if (serverId && serverId !== "local") {
@@ -81,6 +80,10 @@ export const canAccessTerminalOverWss = async (
 		return await hasPermission(buildCtx(user, session.activeOrganizationId), {
 			server: ["terminal"],
 		});
+	}
+
+	if (IS_CLOUD) {
+		return !!user.isPlatformAdmin;
 	}
 
 	try {

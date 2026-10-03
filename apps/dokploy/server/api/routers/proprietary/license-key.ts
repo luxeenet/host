@@ -5,8 +5,8 @@ import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
-	adminProcedure,
 	createTRPCRouter,
+	platformAdminProcedure,
 	protectedProcedure,
 } from "@/server/api/trpc";
 import {
@@ -15,7 +15,7 @@ import {
 } from "@/server/utils/enterprise";
 
 export const licenseKeyRouter = createTRPCRouter({
-	activate: adminProcedure
+	activate: platformAdminProcedure
 		.input(z.object({ licenseKey: z.string().min(1) }))
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -65,7 +65,7 @@ export const licenseKeyRouter = createTRPCRouter({
 				});
 			}
 		}),
-	validate: adminProcedure.mutation(async ({ ctx }) => {
+	validate: platformAdminProcedure.mutation(async ({ ctx }) => {
 		try {
 			const currentUserId = ctx.user.id;
 			const currentUser = await db.query.user.findFirst({
@@ -117,7 +117,7 @@ export const licenseKeyRouter = createTRPCRouter({
 			});
 		}
 	}),
-	deactivate: adminProcedure.mutation(async ({ ctx }) => {
+	deactivate: platformAdminProcedure.mutation(async ({ ctx }) => {
 		try {
 			const currentUserId = ctx.user.id;
 			const currentUser = await db.query.user.findFirst({
@@ -167,7 +167,7 @@ export const licenseKeyRouter = createTRPCRouter({
 			});
 		}
 	}),
-	getEnterpriseSettings: adminProcedure.query(async ({ ctx }) => {
+	getEnterpriseSettings: platformAdminProcedure.query(async ({ ctx }) => {
 		const currentUserId = ctx.user.id;
 		const currentUser = await db.query.user.findFirst({
 			where: eq(user.id, currentUserId),
@@ -195,7 +195,7 @@ export const licenseKeyRouter = createTRPCRouter({
 	haveValidLicenseKey: protectedProcedure.query(async ({ ctx }) => {
 		return await hasValidLicense(ctx.session.activeOrganizationId);
 	}),
-	updateEnterpriseSettings: adminProcedure
+	updateEnterpriseSettings: platformAdminProcedure
 		.input(
 			z.object({
 				enableEnterpriseFeatures: z.boolean().optional(),

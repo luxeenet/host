@@ -1,5 +1,7 @@
 import type { GetServerSidePropsContext } from "next";
 import { validateRequest } from "@dokploy/server/lib/auth";
+import { IS_CLOUD } from "@dokploy/server/constants";
+import { PlanEntitlementService } from "@dokploy/server/services/plan-entitlement";
 import { resolvePlatformAdminRedirect } from "./platform-admin-redirect";
 
 export { resolvePlatformAdminRedirect };
@@ -28,6 +30,39 @@ export async function requirePlatformAdminSession(
 		return {
 			redirect: redirect ?? { permanent: false as const, destination: "/" },
 		};
+	}
+	return { user, session };
+}
+
+/**
+ * Guard for AI features page. Allows platform admins or cloud users whose plan
+ * includes AI (or self-hosted authenticated users).
+ */
+export async function requireAiFeatureSession(
+	ctx: GetServerSidePropsContext,
+) {
+	const { user, session } = await validateRequest(ctx.req);
+	if (!user || !session) {
+		return {
+			redirect: { permanent: false as const, destination: "/" },
+		};
+	}
+	if (user.isPlatformAdmin) {
+		return { user, session };
+	}
+	if (IS_CLOUD) {
+		const orgId = session.activeOrganizationId;
+		if (!orgId) {
+			return {
+				redirect: { permanent: false as const, destination: "/dashboard/home" },
+			};
+		}
+		const aiCheck = await PlanEntitlementService.checkCanUseAi(orgId);
+		if (!aiCheck.allowed) {
+			return {
+				redirect: { permanent: false as const, destination: "/dashboard/home" },
+			};
+		}
 	}
 	return { user, session };
 }

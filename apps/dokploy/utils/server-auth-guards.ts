@@ -47,7 +47,7 @@ export async function requireAiFeatureSession(
 			redirect: { permanent: false as const, destination: "/" },
 		};
 	}
-	if (user.isPlatformAdmin) {
+	if ((user as any)?.isPlatformAdmin) {
 		return { user, session };
 	}
 	if (IS_CLOUD) {

@@ -290,7 +290,7 @@ const MENU: Menu = {
 			icon: KeyRound,
 			url: "/dashboard/settings/ssh-keys",
 			isEnabled: ({ permissions }) =>
-				permissions ? !!permissions?.sshKey?.read : true,
+				permissions ? !!permissions?.sshKeys?.read : true,
 		},
 		{
 			title: "AI",

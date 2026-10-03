@@ -88,7 +88,7 @@ describe("Sidebar Navigation Menu Filtering", () => {
 		{ title: "Deployments", isEnabled: ({ isPlatformAdmin }: any) => !!isPlatformAdmin },
 		{ title: "Users", isEnabled: ({ permissions }: any) => permissions ? !!permissions?.member?.read : true },
 		{ title: "Audit Logs", isEnabled: ({ isPlatformAdmin, permissions }: any) => !!(isPlatformAdmin || permissions?.auditLog?.read) },
-		{ title: "SSH Keys", isEnabled: ({ permissions }: any) => permissions ? !!permissions?.sshKey?.read : true },
+		{ title: "SSH Keys", isEnabled: ({ permissions }: any) => permissions ? !!permissions?.sshKeys?.read : true },
 		{ title: "AI", isEnabled: ({ isPlatformAdmin, planFeatures }: any) => isPlatformAdmin || !!planFeatures?.ai },
 		{ title: "Tags", isEnabled: undefined },
 		{ title: "Git", isEnabled: undefined },
@@ -128,7 +128,7 @@ describe("Sidebar Navigation Menu Filtering", () => {
 			permissions: {
 				member: { read: true },
 				auditLog: { read: true },
-				sshKey: { read: true },
+				sshKeys: { read: true },
 				certificate: { read: true },
 				notification: { read: true },
 			},

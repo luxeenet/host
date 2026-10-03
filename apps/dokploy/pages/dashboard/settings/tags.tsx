@@ -19,13 +19,13 @@ export default Page;
 Page.getLayout = (page: ReactElement) => {
 	return <DashboardLayout>{page}</DashboardLayout>;
 };
-import { requirePlatformAdminSession } from "@/utils/server-auth-guards";
+import { requireAuthSession } from "@/utils/server-auth-guards";
 
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,
 ) {
 	const { req, res } = ctx;
-	const authGuard = await requirePlatformAdminSession(ctx);
+	const authGuard = await requireAuthSession(ctx);
 	if ("redirect" in authGuard) {
 		return { redirect: authGuard.redirect };
 	}

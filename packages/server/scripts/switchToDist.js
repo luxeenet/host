@@ -17,6 +17,9 @@ pkg.exports = {
 	"./db": {
 		import: "./dist/db/index.js",
 	},
+	"./constants": {
+		import: "./dist/constants/index.js",
+	},
 	"./*": {
 		import: "./dist/*",
 	},

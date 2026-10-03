@@ -66,3 +66,33 @@ export async function requireAiFeatureSession(
 	}
 	return { user, session };
 }
+
+/**
+ * Server-side guard helper for standard authenticated customer pages.
+ * Redirects unauthenticated users to `/`.
+ * Returns `{ user, session }` for authenticated users.
+ */
+export async function requireAuthSession(ctx: GetServerSidePropsContext) {
+	const { user, session } = await validateRequest(ctx.req);
+	if (!user || !session) {
+		return {
+			redirect: { permanent: false as const, destination: "/" },
+		};
+	}
+	return { user, session };
+}
+
+/**
+ * Server-side guard helper for standard authenticated pages (without server-side session prefetch).
+ * Redirects unauthenticated users to `/`.
+ * Returns null if the caller is authenticated.
+ */
+export async function requireAuthPage(ctx: GetServerSidePropsContext) {
+	const { user, session } = await validateRequest(ctx.req);
+	if (!user || !session) {
+		return {
+			redirect: { permanent: false as const, destination: "/" },
+		};
+	}
+	return null;
+}

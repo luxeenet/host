@@ -231,62 +231,6 @@ const MENU: Menu = {
 			icon: ShieldCheck,
 			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
-
-		// Legacy unused menu, adjusted to the new structure
-		// {
-		// 	isSingle: true,
-		// 	title: "Projects",
-		// 	url: "/dashboard/projects",
-		// 	icon: Folder,
-		// },
-		// {
-		// 	isSingle: true,
-		// 	title: "Monitoring",
-		// 	icon: BarChartHorizontalBigIcon,
-		// 	url: "/dashboard/settings/monitoring",
-		// },
-		// {
-		//   isSingle: false,
-		//   title: "Settings",
-		//   icon: Settings2,
-		//   items: [
-		//     {
-		//       title: "Profile",
-		//       url: "/dashboard/settings/profile",
-		//     },
-		//     {
-		//       title: "Users",
-		//       url: "/dashboard/settings/users",
-		//     },
-		//     {
-		//       title: "SSH Key",
-		//       url: "/dashboard/settings/ssh-keys",
-		//     },
-		//     {
-		//       title: "Git",
-		//       url: "/dashboard/settings/git-providers",
-		//     },
-		//   ],
-		// },
-		// {
-		//   isSingle: false,
-		//   title: "Integrations",
-		//   icon: BlocksIcon,
-		//   items: [
-		//     {
-		//       title: "S3 Destinations",
-		//       url: "/dashboard/settings/destinations",
-		//     },
-		//     {
-		//       title: "Registry",
-		//       url: "/dashboard/settings/registry",
-		//     },
-		//     {
-		//       title: "Notifications",
-		//       url: "/dashboard/settings/notifications",
-		//     },
-		//   ],
-		// },
 	],
 
 	settings: [
@@ -329,21 +273,24 @@ const MENU: Menu = {
 			icon: Users,
 			url: "/dashboard/settings/users",
 			// Only enabled for users with member.read permission
-			isEnabled: ({ permissions }) => !!permissions?.member.read,
+			isEnabled: ({ permissions }) =>
+				permissions ? !!permissions?.member?.read : true,
 		},
 		{
 			isSingle: true,
 			title: "Audit Logs",
 			icon: ClipboardList,
 			url: "/dashboard/settings/audit-logs",
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
+			isEnabled: ({ isPlatformAdmin, permissions }) =>
+				!!(isPlatformAdmin || permissions?.auditLog?.read),
 		},
 		{
 			isSingle: true,
 			title: "SSH Keys",
 			icon: KeyRound,
 			url: "/dashboard/settings/ssh-keys",
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
+			isEnabled: ({ permissions }) =>
+				permissions ? !!permissions?.sshKey?.read : true,
 		},
 		{
 			title: "AI",
@@ -367,62 +314,65 @@ const MENU: Menu = {
 			title: "Tags",
 			url: "/dashboard/settings/tags",
 			icon: Tags,
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Git",
 			url: "/dashboard/settings/git-providers",
 			icon: GitBranch,
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Registry",
 			url: "/dashboard/settings/registry",
 			icon: Package,
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "Secrets",
 			url: "/dashboard/settings/secrets",
 			icon: Vault,
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "DNS Providers",
 			url: "/dashboard/settings/dns",
 			icon: Globe,
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "S3 Destinations",
 			url: "/dashboard/settings/destinations",
 			icon: HardDrive,
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
-
 		{
 			isSingle: true,
 			title: "Certificates",
 			url: "/dashboard/settings/certificates",
 			icon: ShieldCheck,
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
+			isEnabled: ({ permissions }) =>
+				permissions ? !!permissions?.certificate?.read : true,
 		},
 		{
 			isSingle: true,
 			title: "Notifications",
 			url: "/dashboard/settings/notifications",
 			icon: Bell,
-			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
+			isEnabled: ({ permissions }) =>
+				permissions ? !!permissions?.notification?.read : true,
 		},
 		{
 			isSingle: true,
 			title: "Billing",
 			url: "/dashboard/settings/billing",
+			icon: CreditCard,
+			// Only enabled for owners in cloud environments
+			isEnabled: ({ auth, isCloud }) => !!(auth?.role === "owner" && isCloud),
+		},
+		{
+			isSingle: true,
+			title: "Invoices",
+			url: "/dashboard/settings/invoices",
 			icon: CreditCard,
 			// Only enabled for owners in cloud environments
 			isEnabled: ({ auth, isCloud }) => !!(auth?.role === "owner" && isCloud),

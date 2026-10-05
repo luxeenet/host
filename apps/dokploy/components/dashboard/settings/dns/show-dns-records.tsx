@@ -267,7 +267,7 @@ export const ShowDnsRecords = ({ dnsProviderId, zoneId }: Props) => {
 								<Tooltip>
 									<DialogAction
 										title="Delete Record"
-										description={`Delete the ${record.type} record "${record.name}"? This removes it from the DNS provider, not just from Dokploy.`}
+										description={`Delete the ${record.type} record "${record.name}"? This removes it from the DNS provider, not just from the dashboard.`}
 										type="destructive"
 										onClick={() => handleDelete(record)}
 									>

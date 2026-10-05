@@ -1,3 +1,4 @@
+import { brand } from "@paas/branding";
 import { IS_CLOUD, isAdminPresent, validateRequest } from "@dokploy/server";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
 import { generateServerSideHelper } from "@/utils/create-server-helpers";
@@ -215,7 +216,7 @@ const Register = ({ isCloud }: Props) => {
 												<FormItem>
 													<FormLabel>Email</FormLabel>
 													<FormControl>
-														<Input placeholder="email@dokploy.com" {...field} />
+														<Input placeholder="name@example.com" {...field} />
 													</FormControl>
 													<FormMessage />
 												</FormItem>
@@ -281,10 +282,9 @@ const Register = ({ isCloud }: Props) => {
 									Need help?
 									<Link
 										className="underline"
-										href="https://dokploy.com"
-										target="_blank"
+										href={`mailto:${brand.SUPPORT_EMAIL}`}
 									>
-										Contact us
+										Contact support
 									</Link>
 								</div>
 							</div>

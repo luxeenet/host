@@ -1,5 +1,6 @@
 import type { findEnvironmentById } from "@dokploy/server";
 import { validateRequest } from "@dokploy/server/lib/auth";
+import { brand } from "@paas/branding";
 import { createServerSideHelpers } from "@trpc/react-query/server";
 import {
 	Ban,
@@ -401,7 +402,7 @@ const EnvironmentPage = (
 			{ enabled: !!selectedTargetProject },
 		);
 	const { config: whitelabeling } = useWhitelabeling();
-	const appName = whitelabeling?.appName || "Dokploy";
+	const appName = whitelabeling?.appName || brand.APP_NAME;
 
 	const emptyServices =
 		!currentEnvironment ||
@@ -1581,7 +1582,7 @@ const EnvironmentPage = (
 														<SelectItem value="dokploy-server">
 															<div className="flex items-center gap-2">
 																<ServerIcon className="size-4" />
-																<span>Dokploy server</span>
+																<span>Primary server</span>
 															</div>
 														</SelectItem>
 													)}

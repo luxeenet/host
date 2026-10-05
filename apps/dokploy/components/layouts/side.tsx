@@ -98,6 +98,7 @@ import {
 	useSidebar,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
+import { brand } from "@paas/branding";
 import { cn } from "@/lib/utils";
 import type { AppRouter } from "@/server/api/root";
 import { api } from "@/utils/api";
@@ -107,7 +108,6 @@ import { DialogAction } from "../shared/dialog-action";
 import { Logo } from "../shared/logo";
 import { Button } from "../ui/button";
 import { TimeBadge } from "../ui/time-badge";
-import { UpdateServerButton } from "./update-server";
 import { UserNav } from "./user-nav";
 
 // The types of the queries we are going to use
@@ -401,14 +401,17 @@ const MENU: Menu = {
 	],
 
 	help: [
+		// URLs are intentionally empty: HatDot-facing documentation is supplied via
+		// whitelabeling (docsUrl). Support falls back to the HatDot support email.
+		// Items without a resolved URL are not rendered.
 		{
 			name: "Documentation",
-			url: "https://docs.dokploy.com/docs/core",
+			url: "",
 			icon: BookIcon,
 		},
 		{
 			name: "Support",
-			url: "https://discord.gg/2tBnJ3jDJc",
+			url: `mailto:${brand.SUPPORT_EMAIL}`,
 			icon: CircleHelp,
 		},
 	],
@@ -459,10 +462,13 @@ function createMenuForAuthUser(opts: {
 		return item;
 	});
 
+	// Drop help items that have no HatDot-facing destination configured.
+	const resolvedHelpItems = helpItems.filter((item) => !!item.url);
+
 	return {
 		home: filterEnabled(MENU.home),
 		settings: filterEnabled(MENU.settings),
-		help: helpItems,
+		help: resolvedHelpItems,
 	};
 }
 
@@ -906,7 +912,6 @@ export default function Page({ children }: Props) {
 	const pathname = usePathname();
 	const { data: auth } = api.user.get.useQuery();
 	const { data: permissions } = api.user.getPermissions.useQuery();
-	const { data: dokployVersion } = api.settings.getDokployVersion.useQuery();
 	const { data: whitelabeling } = api.whitelabeling.get.useQuery(undefined, {
 		staleTime: 5 * 60 * 1000,
 		refetchOnWindowFocus: false,
@@ -1188,22 +1193,12 @@ export default function Page({ children }: Props) {
 				</SidebarContent>
 				<SidebarFooter>
 					<SidebarMenu className="flex flex-col gap-2">
-						{!isCloud && permissions?.organization.update && (
-							<SidebarMenuItem>
-								<UpdateServerButton />
-							</SidebarMenuItem>
-						)}
 						<SidebarMenuItem>
 							<UserNav />
 						</SidebarMenuItem>
 						{whitelabeling?.footerText && (
 							<div className="px-3 text-xs text-muted-foreground text-center group-data-[collapsible=icon]:hidden">
 								{whitelabeling.footerText}
-							</div>
-						)}
-						{dokployVersion && (
-							<div className="px-3 text-xs text-muted-foreground text-center group-data-[collapsible=icon]:hidden">
-								Version {dokployVersion}
 							</div>
 						)}
 					</SidebarMenu>

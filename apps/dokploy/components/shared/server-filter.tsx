@@ -125,7 +125,7 @@ export const ServerFilter = ({ children }: Props) => {
 								{!isCloud && (
 									<SelectItem value={DOKPLOY_SERVER}>
 										<div className="flex items-center gap-2">
-											<span>Dokploy Server</span>
+											<span>Primary Server</span>
 											<Badge
 												variant="secondary"
 												className="text-[10px] px-1.5 py-0"

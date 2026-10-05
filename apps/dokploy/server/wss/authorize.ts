@@ -6,7 +6,10 @@ import {
 } from "@dokploy/server/services/permission";
 import { PlanEntitlementService } from "@dokploy/server/services/plan-entitlement";
 
-type WssUser = { id: string; isPlatformAdmin?: boolean } | null | undefined;
+type WssUser =
+	| { id: string; isPlatformAdmin?: boolean | null }
+	| null
+	| undefined;
 type WssSession = { activeOrganizationId?: string | null } | null | undefined;
 
 const buildCtx = (user: { id: string }, activeOrganizationId: string) => ({

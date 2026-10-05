@@ -1,3 +1,4 @@
+import { brand } from "@paas/branding";
 import { IS_CLOUD } from "@dokploy/server";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
 import { generateServerSideHelper } from "@/utils/create-server-helpers";
@@ -94,7 +95,7 @@ export default function Home() {
 						}
 					/>
 					<span className="font-medium text-sm">
-						{whitelabeling?.appName || "Dokploy"}
+						{whitelabeling?.appName || brand.APP_NAME}
 					</span>
 				</Link>
 				<CardTitle className="text-2xl font-bold">Reset Password</CardTitle>

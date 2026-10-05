@@ -1,3 +1,4 @@
+import { brand } from "@paas/branding";
 import { Key, Loader2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -79,9 +80,7 @@ export function LicenseKeySettings() {
 							To unlock extra features you need an enterprise license key.
 							Contact us{" "}
 							<Link
-								href="https://dokploy.com/contact"
-								target="_blank"
-								rel="noreferrer"
+								href={`mailto:${brand.SUPPORT_EMAIL}`}
 								className="underline underline-offset-4"
 							>
 								here

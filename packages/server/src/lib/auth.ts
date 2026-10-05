@@ -471,6 +471,14 @@ const createBetterAuth = () =>
 					required: false,
 					input: false,
 				},
+				// Platform-level administrator flag. Read-only from the client; it is
+				// resolved from the database in `validateRequest` so that server-side
+				// guards and tRPC procedures see the same value as the dashboard UI.
+				isPlatformAdmin: {
+					type: "boolean",
+					required: false,
+					input: false,
+				},
 			},
 		},
 		plugins: [
@@ -624,6 +632,7 @@ export const validateRequest = async (request: IncomingMessage) => {
 					ownerId: member?.organization.ownerId || apiKeyRecord.user.id,
 					enableEnterpriseFeatures: userFromDb.enableEnterpriseFeatures,
 					isValidEnterpriseLicense: userFromDb.isValidEnterpriseLicense,
+					isPlatformAdmin: userFromDb.isPlatformAdmin === true,
 				},
 			};
 
@@ -676,6 +685,18 @@ export const validateRequest = async (request: IncomingMessage) => {
 			member?.user.enableEnterpriseFeatures || false;
 		session.user.isValidEnterpriseLicense =
 			member?.user.isValidEnterpriseLicense || false;
+		// Resolve the platform-admin flag straight from the DB row. Better-auth
+		// only returns declared fields, and a user may have no membership row in
+		// the active organization, so fall back to a direct user lookup.
+		let isPlatformAdmin = member?.user?.isPlatformAdmin;
+		if (isPlatformAdmin === undefined) {
+			const dbUser = await db.query.user.findFirst({
+				where: eq(schema.user.id, session.user.id),
+				columns: { isPlatformAdmin: true },
+			});
+			isPlatformAdmin = dbUser?.isPlatformAdmin;
+		}
+		session.user.isPlatformAdmin = isPlatformAdmin === true;
 		session.session.activeOrganizationId = member?.organization.id || "";
 		if (member) {
 			session.user.ownerId = member.organization.ownerId;

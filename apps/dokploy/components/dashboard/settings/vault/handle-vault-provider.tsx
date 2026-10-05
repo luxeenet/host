@@ -577,7 +577,7 @@ export const HandleVaultProvider = ({ vaultProviderId }: Props) => {
 					<DialogDescription>
 						Reference secrets in your environment variables with{" "}
 						<code>{"${{vault.<name>.<secret>}}"}</code>. Secrets are fetched at
-						deploy time and never stored in Dokploy.
+						deploy time and never stored in the platform.
 					</DialogDescription>
 				</DialogHeader>
 				{isError && <AlertBlock type="error">{error?.message}</AlertBlock>}

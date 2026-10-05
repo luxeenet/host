@@ -8,6 +8,8 @@ import NextDocument, {
 	NextScript,
 } from "next/document";
 
+import { brand } from "@paas/branding";
+
 interface WhitelabelingDocumentProps {
 	appName: string | null;
 	appDescription: string | null;
@@ -25,9 +27,9 @@ export default function Document({
 	customCss,
 	baseUrl,
 }: WhitelabelingDocumentProps) {
-	const title = appName || "Dokploy";
+	const title = appName || brand.APP_NAME;
 	const description =
-		appDescription || "The Open Source alternative to Netlify, Vercel, Heroku.";
+		appDescription || brand.TAGLINE;
 
 	let ogImage = ogImageUrl || "/og.png";
 	if (ogImage.startsWith("/")) {

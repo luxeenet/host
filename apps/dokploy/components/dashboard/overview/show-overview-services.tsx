@@ -342,7 +342,7 @@ export const ShowOverviewServices = () => {
 									<SelectItem value="all">All servers</SelectItem>
 									{hasServicesWithoutServer && (
 										<SelectItem value="dokploy-server">
-											Dokploy server
+											Primary server
 										</SelectItem>
 									)}
 									{availableServers.map((s) => (
@@ -428,7 +428,7 @@ export const ShowOverviewServices = () => {
 												<div className="flex items-center gap-1.5 text-muted-foreground">
 													<ServerIcon className="size-3.5" />
 													<span className="truncate">
-														{service.serverName ?? "Dokploy server"}
+														{service.serverName ?? "Primary server"}
 													</span>
 												</div>
 											</TableCell>

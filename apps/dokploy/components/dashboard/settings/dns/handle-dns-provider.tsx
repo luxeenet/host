@@ -354,7 +354,7 @@ export const HandleDnsProvider = ({ dnsProviderId }: Props) => {
 										</FormControl>
 										<FormDescription>
 											Create a token scoped to Zone → DNS → Edit for the zones
-											you want Dokploy to manage. Avoid the Global API Key.
+											you want the platform to manage. Avoid the Global API Key.
 										</FormDescription>
 										<FormMessage />
 									</FormItem>
@@ -426,7 +426,7 @@ export const HandleDnsProvider = ({ dnsProviderId }: Props) => {
 											</FormControl>
 											<FormDescription>
 												Create API keys at porkbun.com/account/api and make sure
-												API access is enabled for the domains you want Dokploy
+												API access is enabled for the domains you want the platform
 												to manage.
 											</FormDescription>
 											<FormMessage />

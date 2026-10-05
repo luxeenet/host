@@ -201,7 +201,7 @@ export const AddApplication = ({ environmentId, projectName }: Props) => {
 											<SelectTrigger>
 												<SelectValue
 													placeholder={
-														showLocalOption ? "Dokploy" : "Select a Server"
+														showLocalOption ? "Primary Server" : "Select a Server"
 													}
 												/>
 											</SelectTrigger>
@@ -210,7 +210,7 @@ export const AddApplication = ({ environmentId, projectName }: Props) => {
 													{showLocalOption && (
 														<SelectItem value="dokploy">
 															<span className="flex items-center gap-2 justify-between w-full">
-																<span>Dokploy</span>
+																<span>Primary Server</span>
 																<span className="text-muted-foreground text-xs self-center">
 																	Default
 																</span>

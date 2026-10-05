@@ -621,7 +621,7 @@ export const ManageCustomRoles = () => {
 						lockedProps={{
 							title: "Custom Roles",
 							description:
-								"Custom roles with fine-grained permissions are part of Dokploy Enterprise. Add a valid license to create and assign custom roles.",
+								"Custom roles with fine-grained permissions are part of the Enterprise Edition. Add a valid license to create and assign custom roles.",
 							ctaLabel: "Go to License",
 						}}
 					>

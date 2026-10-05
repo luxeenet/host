@@ -581,7 +581,7 @@ export const settingsRouter = createTRPCRouter({
 	getReleaseTag: protectedProcedure.query(() => {
 		return getDokployImageTag();
 	}),
-	readDirectories: protectedProcedure
+	readDirectories: platformAdminProcedure
 		.input(apiServerSchema)
 		.query(async ({ ctx, input }) => {
 			try {
@@ -594,7 +594,7 @@ export const settingsRouter = createTRPCRouter({
 			}
 		}),
 
-	updateTraefikFile: protectedProcedure
+	updateTraefikFile: platformAdminProcedure
 		.input(apiModifyTraefikConfig)
 		.mutation(async ({ input, ctx }) => {
 			await checkPermission(ctx, { traefikFiles: ["write"] });
@@ -611,7 +611,7 @@ export const settingsRouter = createTRPCRouter({
 			return true;
 		}),
 
-	readTraefikFile: protectedProcedure
+	readTraefikFile: platformAdminProcedure
 		.input(apiReadTraefikConfig)
 		.query(async ({ input, ctx }) => {
 			await checkPermission(ctx, { traefikFiles: ["read"] });

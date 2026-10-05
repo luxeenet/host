@@ -45,8 +45,8 @@ export const ShowDnsProviders = () => {
 								DNS Providers
 							</CardTitle>
 							<CardDescription>
-								Connect a DNS provider so Dokploy can create the A/CNAME record
-								for a domain instead of you setting it up by hand.
+								Connect a DNS provider to automatically create and manage A/CNAME
+								records for your domains.
 							</CardDescription>
 						</CardHeader>
 						{permissions?.dnsProvider.create && <HandleDnsProvider />}
@@ -66,7 +66,7 @@ export const ShowDnsProviders = () => {
 								</span>
 								<span className="max-w-sm text-center text-sm text-muted-foreground">
 									Add Cloudflare or Route53 credentials to manage domain records
-									without leaving Dokploy.
+									directly from the dashboard.
 								</span>
 							</div>
 						) : (

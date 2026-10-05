@@ -465,22 +465,12 @@ export default function Home({ IS_CLOUD, enforceSSO }: Props) {
 					</div>
 
 					<div className="mt-4 text-sm flex flex-row justify-center gap-2">
-						{IS_CLOUD ? (
-							<Link
-								className="hover:underline text-muted-foreground"
-								href="/send-reset-password"
-							>
-								Lost your password?
-							</Link>
-						) : (
-							<Link
-								className="hover:underline text-muted-foreground"
-								href="https://docs.dokploy.com/docs/core/reset-password"
-								target="_blank"
-							>
-								Lost your password?
-							</Link>
-						)}
+						<Link
+							className="hover:underline text-muted-foreground"
+							href="/send-reset-password"
+						>
+							Lost your password?
+						</Link>
 					</div>
 				</div>
 				<div className="p-2" />

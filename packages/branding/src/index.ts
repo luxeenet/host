@@ -8,7 +8,7 @@
 
 export const BRAND = {
   /** Platform display name shown in UI */
-  APP_NAME: process.env.BRAND_APP_NAME ?? "Hatdot",
+  APP_NAME: process.env.BRAND_APP_NAME ?? "HatDot",
   /** Impressive, high-converting tagline */
   TAGLINE:
     process.env.BRAND_TAGLINE ?? "Deploy Instantly. Scale Effortlessly. Own Your Cloud.",
@@ -31,7 +31,7 @@ export const BRAND = {
     process.env.BRAND_EMAIL_FROM ?? "noreply@hatdot.cloud",
   /** Company legal name */
   COMPANY_NAME:
-    process.env.BRAND_COMPANY_NAME ?? "Hatdot Cloud Inc.",
+    process.env.BRAND_COMPANY_NAME ?? "HatDot Cloud Inc.",
   /** Default currency ISO code */
   DEFAULT_CURRENCY: process.env.BRAND_DEFAULT_CURRENCY ?? "TZS",
   /** Default billing locale */
@@ -53,7 +53,7 @@ export const BRAND = {
   /** Social: GitHub org */
   GITHUB_URL: process.env.BRAND_GITHUB_URL ?? "https://github.com/hatdot",
   /** Copyright line */
-  COPYRIGHT: process.env.BRAND_COPYRIGHT ?? `© ${new Date().getFullYear()} Hatdot Cloud Inc. All rights reserved.`,
+  COPYRIGHT: process.env.BRAND_COPYRIGHT ?? `© ${new Date().getFullYear()} HatDot Cloud Inc. All rights reserved.`,
 } as const;
 
 export type Brand = typeof BRAND;

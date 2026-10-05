@@ -206,7 +206,7 @@ export const ServerStep = ({ onNext, plainTitle }: Props) => {
 				</span>
 				<h1 className={titleClassName}>Connect a server.</h1>
 				<p className="text-muted-foreground text-lg max-w-md leading-relaxed">
-					Dokploy deploys to servers you own. Buy one from any VPS provider
+					HatDot deploys to servers you own. Buy one from any VPS provider
 					(Hetzner, DigitalOcean, Hostinger...) and paste its IP below.
 				</p>
 				<div className="flex items-start gap-2.5 rounded-lg border p-3 max-w-md">
@@ -214,7 +214,7 @@ export const ServerStep = ({ onNext, plainTitle }: Props) => {
 					<div className="flex flex-col gap-0.5">
 						<span className="text-sm font-medium">Requirements</span>
 						<span className="text-sm text-muted-foreground">
-							To ensure a smooth experience with Dokploy, your server should
+							To ensure a smooth experience with HatDot, your server should
 							have at least 1GB of RAM and 30GB of disk space.
 						</span>
 					</div>
@@ -231,7 +231,7 @@ export const ServerStep = ({ onNext, plainTitle }: Props) => {
 					)}
 					<div className="flex flex-col gap-2 rounded-lg border p-3">
 						<span className="text-xs font-medium text-muted-foreground">
-							1. Run this on your server to authorize Dokploy
+							1. Run this on your server to authorize HatDot
 						</span>
 						<div className="flex items-center gap-2">
 							<code className="flex-1 min-w-0 truncate rounded bg-muted px-2 py-1.5 text-xs">
@@ -318,7 +318,7 @@ export const ServerStep = ({ onNext, plainTitle }: Props) => {
 									pending={!validation?.docker?.enabled && !isReady}
 								/>
 								<StatusRow
-									label="Dokploy network created"
+									label="Internal network created"
 									ok={validation?.isDokployNetworkInstalled}
 									pending={!validation?.isDokployNetworkInstalled && !isReady}
 								/>

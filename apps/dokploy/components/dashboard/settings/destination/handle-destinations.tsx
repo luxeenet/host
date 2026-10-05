@@ -351,7 +351,7 @@ export const HandleDestinations = ({ destinationId }: Props) => {
 										<FormLabel>Bucket</FormLabel>
 									</div>
 									<FormControl>
-										<Input placeholder={"dokploy-bucket"} {...field} />
+										<Input placeholder={"my-backup-bucket"} {...field} />
 									</FormControl>
 									<FormMessage />
 								</FormItem>

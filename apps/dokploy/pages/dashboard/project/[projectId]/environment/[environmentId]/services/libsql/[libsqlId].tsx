@@ -1,4 +1,5 @@
 import { validateRequest } from "@dokploy/server/lib/auth";
+import { brand } from "@paas/branding";
 import { createServerSideHelpers } from "@trpc/react-query/server";
 import copy from "copy-to-clipboard";
 import { HelpCircle, ServerOff } from "lucide-react";
@@ -74,8 +75,8 @@ const Libsql = (
 			<div className="flex flex-col gap-4">
 				<Head>
 					<title>
-						Database: {data?.name} - {data?.environment?.project?.name} |
-						Dokploy
+						Database: {data?.name} - {data?.environment?.project?.name} |{" "}
+						{brand.APP_NAME}
 					</title>
 				</Head>
 				<Card className="h-full bg-sidebar  p-2.5 rounded-xl w-full">
@@ -119,7 +120,7 @@ const Libsql = (
 													: "destructive"
 										}
 									>
-										{data?.server?.name || "Dokploy Server"}
+										{data?.server?.name || "Primary Server"}
 									</Badge>
 									{data?.server?.serverStatus === "inactive" && (
 										<TooltipProvider delayDuration={0}>

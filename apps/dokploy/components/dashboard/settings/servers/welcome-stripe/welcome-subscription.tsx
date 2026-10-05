@@ -56,7 +56,7 @@ const WelcomeIntro = ({ onNext }: { onNext: () => void }) => (
 				Welcome
 			</span>
 			<h1 className="text-xl font-semibold tracking-tight">
-				Welcome to Dokploy Cloud
+				Welcome to HatDot Cloud
 			</h1>
 			<p className="text-muted-foreground leading-relaxed">
 				Thanks for subscribing — you're all set up. Next, connect a server so

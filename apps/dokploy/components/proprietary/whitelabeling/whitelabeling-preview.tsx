@@ -1,5 +1,6 @@
 "use client";
 
+import { brand } from "@paas/branding";
 import {
 	Card,
 	CardContent,
@@ -17,7 +18,7 @@ interface WhitelabelingPreviewProps {
 }
 
 export function WhitelabelingPreview({ config }: WhitelabelingPreviewProps) {
-	const appName = config.appName || "Dokploy";
+	const appName = config.appName || brand.APP_NAME;
 
 	return (
 		<Card className="bg-transparent">

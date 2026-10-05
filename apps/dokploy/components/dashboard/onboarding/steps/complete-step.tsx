@@ -117,16 +117,6 @@ export const CompleteStep = ({ projectId, environmentId, onFinish }: Props) => {
 				>
 					Go to my project
 				</Button>
-				<Button variant="ghost" asChild>
-					<Link
-						href="https://docs.dokploy.com/docs/core"
-						target="_blank"
-						className="flex items-center gap-1.5"
-					>
-						<BookIcon size={14} />
-						Read the docs
-					</Link>
-				</Button>
 			</div>
 		</div>
 	);

@@ -1,3 +1,4 @@
+import { brand } from "@paas/branding";
 import type { NextPageContext } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
@@ -11,7 +12,7 @@ interface Props {
 export default function ErrorPage({ statusCode }: Props) {
 	const displayStatusCode = statusCode || 500;
 	const { config: whitelabeling } = useWhitelabelingPublic();
-	const appName = whitelabeling?.appName || "Dokploy";
+	const appName = whitelabeling?.appName || brand.APP_NAME;
 	const logoUrl = whitelabeling?.logoUrl || undefined;
 	const errorTitle = whitelabeling?.errorPageTitle;
 	const errorDescription = whitelabeling?.errorPageDescription;
@@ -79,11 +80,10 @@ export default function ErrorPage({ statusCode }: Props) {
 								whitelabeling.footerText
 							) : (
 								<Link
-									href="https://github.com/Dokploy/dokploy/issues"
-									target="_blank"
+									href={`mailto:${brand.SUPPORT_EMAIL}`}
 									className="underline hover:text-primary transition-colors"
 								>
-									Submit Log in issue on Github
+									Contact Support ({brand.SUPPORT_EMAIL})
 								</Link>
 							)}
 						</p>

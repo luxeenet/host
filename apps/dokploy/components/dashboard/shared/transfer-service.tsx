@@ -66,7 +66,7 @@ export const TransferService = ({ id, type, serverId }: Props) => {
 
 	const targets = [
 		...(!isCloud && serverId
-			? [{ serverId: LOCAL_SERVER, name: "Dokploy Server" }]
+			? [{ serverId: LOCAL_SERVER, name: "Primary Server" }]
 			: []),
 		...(servers ?? []).filter((server) => server.serverId !== serverId),
 	];

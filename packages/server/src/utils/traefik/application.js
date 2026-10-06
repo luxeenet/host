@@ -45,12 +45,14 @@ export const removeTraefikConfig = async (appName, serverId) => {
     try {
         const { DYNAMIC_TRAEFIK_PATH } = paths(!!serverId);
         const configPath = path.join(DYNAMIC_TRAEFIK_PATH, `${appName}.yml`);
-        const command = `rm -f ${quote([configPath])}`;
         if (serverId) {
+            const command = `rm -f ${quote([configPath])}`;
             await execAsyncRemote(serverId, command);
         }
         else {
-            await execAsync(command);
+            if (fs.existsSync(configPath)) {
+                fs.unlinkSync(configPath);
+            }
         }
     }
     catch (error) {

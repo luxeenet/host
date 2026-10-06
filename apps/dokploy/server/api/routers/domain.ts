@@ -7,6 +7,7 @@ import {
 	findPreviewDeploymentById,
 	findServerById,
 	generateTraefikMeDomain,
+	getDnsInstructionsForDomain,
 	getServerIpCandidates,
 	getWebServerSettings,
 	manageDomain,
@@ -283,5 +284,41 @@ export const domainRouter = createTRPCRouter({
 
 			const expectedIps = await getServerIpCandidates(input.serverId);
 			return validateDomain(input.domain, expectedIps);
+		}),
+
+	dnsInstructions: withPermission("domain", "read")
+		.input(
+			z.object({
+				host: z.string(),
+				serverId: z.string().optional().nullable(),
+			}),
+		)
+		.query(async ({ input, ctx }) => {
+			if (input.serverId) {
+				const server = await findServerById(input.serverId);
+				if (server.organizationId !== ctx.session.activeOrganizationId) {
+					throw new TRPCError({
+						code: "UNAUTHORIZED",
+						message: "You are not authorized to access this server",
+					});
+				}
+			}
+			return await getDnsInstructionsForDomain(input.host, input.serverId);
+		}),
+
+	verifyDomainHealth: withPermission("domain", "read")
+		.input(
+			z.object({
+				domainId: z.string(),
+			}),
+		)
+		.query(async ({ input, ctx }) => {
+			const domain = await findDomainById(input.domainId);
+			let serverId: string | null | undefined = null;
+			if (domain.applicationId) {
+				const app = await findApplicationById(domain.applicationId);
+				serverId = app.serverId;
+			}
+			return await getDnsInstructionsForDomain(domain.host, serverId);
 		}),
 });

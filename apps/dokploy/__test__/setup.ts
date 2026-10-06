@@ -7,33 +7,45 @@ import { vi } from "vitest";
  * connect to localhost:5432 and cause ECONNREFUSED.
  */
 vi.mock("@dokploy/server/db", () => {
-	const chain = () => chain;
-	chain.set = () => chain;
-	chain.where = () => chain;
-	chain.values = () => chain;
-	chain.returning = () => Promise.resolve([{}]);
-	chain.from = () => chain;
-	chain.innerJoin = () => chain;
-	chain.then = (resolve: (value: unknown) => void) => {
-		resolve([]);
+	const createChain = () => {
+		const chain: any = {
+			set: () => chain,
+			where: () => chain,
+			values: () => chain,
+			returning: () => Promise.resolve([{}]),
+			from: () => chain,
+			innerJoin: () => chain,
+			leftJoin: () => chain,
+			rightJoin: () => chain,
+			fullJoin: () => chain,
+			orderBy: () => chain,
+			limit: () => chain,
+			offset: () => chain,
+			groupBy: () => chain,
+			having: () => chain,
+			then: (resolve: (value: unknown) => void) => {
+				resolve([]);
+			},
+		};
+		return chain;
 	};
 
 	const tableMock = {
 		findFirst: vi.fn(() => Promise.resolve(undefined)),
 		findMany: vi.fn(() => Promise.resolve([])),
 		insert: vi.fn(() => Promise.resolve([{}])),
-		update: vi.fn(() => chain),
-		delete: vi.fn(() => chain),
+		update: vi.fn(() => createChain()),
+		delete: vi.fn(() => createChain()),
 	};
 
 	return {
 		db: {
-			select: vi.fn(() => chain),
+			select: vi.fn(() => createChain()),
 			insert: vi.fn(() => ({
 				values: () => ({ returning: () => Promise.resolve([{}]) }),
 			})),
-			update: vi.fn(() => chain),
-			delete: vi.fn(() => chain),
+			update: vi.fn(() => createChain()),
+			delete: vi.fn(() => createChain()),
 			query: new Proxy({} as Record<string, typeof tableMock>, {
 				get: () => tableMock,
 			}),

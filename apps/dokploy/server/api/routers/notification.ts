@@ -13,7 +13,6 @@ import {
 	createTelegramNotification,
 	findNotificationById,
 	getWebServerSettings,
-	IS_CLOUD,
 	removeNotificationById,
 	sendCustomNotification,
 	sendDiscordNotification,
@@ -47,6 +46,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
 	createTRPCRouter,
+	platformAdminProcedure,
 	publicProcedure,
 	withPermission,
 } from "@/server/api/trpc";
@@ -94,7 +94,7 @@ import {
 } from "@/server/db/schema";
 
 export const notificationRouter = createTRPCRouter({
-	createSlack: withPermission("notification", "create")
+	createSlack: platformAdminProcedure
 		.input(apiCreateSlack)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -113,20 +113,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateSlack: withPermission("notification", "update")
+	updateSlack: platformAdminProcedure
 		.input(apiUpdateSlack)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (notification.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateSlackNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -139,7 +133,7 @@ export const notificationRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	testSlackConnection: withPermission("notification", "create")
+	testSlackConnection: platformAdminProcedure
 		.input(apiTestSlackConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -156,7 +150,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createTelegram: withPermission("notification", "create")
+	createTelegram: platformAdminProcedure
 		.input(apiCreateTelegram)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -178,20 +172,14 @@ export const notificationRouter = createTRPCRouter({
 			}
 		}),
 
-	updateTelegram: withPermission("notification", "update")
+	updateTelegram: platformAdminProcedure
 		.input(apiUpdateTelegram)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (notification.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateTelegramNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -208,7 +196,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	testTelegramConnection: withPermission("notification", "create")
+	testTelegramConnection: platformAdminProcedure
 		.input(apiTestTelegramConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -222,7 +210,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createDiscord: withPermission("notification", "create")
+	createDiscord: platformAdminProcedure
 		.input(apiCreateDiscord)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -244,20 +232,14 @@ export const notificationRouter = createTRPCRouter({
 			}
 		}),
 
-	updateDiscord: withPermission("notification", "update")
+	updateDiscord: platformAdminProcedure
 		.input(apiUpdateDiscord)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (notification.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateDiscordNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -275,7 +257,7 @@ export const notificationRouter = createTRPCRouter({
 			}
 		}),
 
-	testDiscordConnection: withPermission("notification", "create")
+	testDiscordConnection: platformAdminProcedure
 		.input(apiTestDiscordConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -297,7 +279,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createEmail: withPermission("notification", "create")
+	createEmail: platformAdminProcedure
 		.input(apiCreateEmail)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -315,20 +297,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateEmail: withPermission("notification", "update")
+	updateEmail: platformAdminProcedure
 		.input(apiUpdateEmail)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (notification.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateEmailNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -345,7 +321,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	testEmailConnection: withPermission("notification", "create")
+	testEmailConnection: platformAdminProcedure
 		.input(apiTestEmailConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -363,7 +339,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createResend: withPermission("notification", "create")
+	createResend: platformAdminProcedure
 		.input(apiCreateResend)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -381,20 +357,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateResend: withPermission("notification", "update")
+	updateResend: platformAdminProcedure
 		.input(apiUpdateResend)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (notification.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateResendNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -411,7 +381,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	testResendConnection: withPermission("notification", "create")
+	testResendConnection: platformAdminProcedure
 		.input(apiTestResendConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -429,17 +399,11 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	remove: withPermission("notification", "delete")
+	remove: platformAdminProcedure
 		.input(apiFindOneNotification)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (notification.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to delete this notification",
-					});
-				}
 				await audit(ctx, {
 					action: "delete",
 					resourceType: "notification",
@@ -457,38 +421,38 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	one: withPermission("notification", "read")
+	one: platformAdminProcedure
 		.input(apiFindOneNotification)
-		.query(async ({ input, ctx }) => {
-			const notification = await findNotificationById(input.notificationId);
-			if (notification.organizationId !== ctx.session.activeOrganizationId) {
-				throw new TRPCError({
-					code: "UNAUTHORIZED",
-					message: "You are not authorized to access this notification",
-				});
-			}
-			return notification;
+		.query(async ({ input }) => {
+			return await findNotificationById(input.notificationId);
 		}),
-	all: withPermission("notification", "read").query(async ({ ctx }) => {
-		return await db.query.notifications.findMany({
-			with: {
-				slack: true,
-				telegram: true,
-				discord: true,
-				email: true,
-				resend: true,
-				gotify: true,
-				ntfy: true,
-				mattermost: true,
-				custom: true,
-				lark: true,
-				pushover: true,
-				teams: true,
-			},
-			orderBy: desc(notifications.createdAt),
-			where: eq(notifications.organizationId, ctx.session.activeOrganizationId),
-		});
-	}),
+	all: platformAdminProcedure
+		.input(
+			z.object({ organizationId: z.string().min(1).optional() }).optional(),
+		)
+		.query(async ({ ctx, input }) => {
+			return await db.query.notifications.findMany({
+				with: {
+					slack: true,
+					telegram: true,
+					discord: true,
+					email: true,
+					resend: true,
+					gotify: true,
+					ntfy: true,
+					mattermost: true,
+					custom: true,
+					lark: true,
+					pushover: true,
+					teams: true,
+				},
+				orderBy: desc(notifications.createdAt),
+				where: eq(
+					notifications.organizationId,
+					input?.organizationId ?? ctx.session.activeOrganizationId,
+				),
+			});
+		}),
 	receiveNotification: publicProcedure
 		.input(
 			z.object({
@@ -550,7 +514,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createGotify: withPermission("notification", "create")
+	createGotify: platformAdminProcedure
 		.input(apiCreateGotify)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -568,23 +532,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateGotify: withPermission("notification", "update")
+	updateGotify: platformAdminProcedure
 		.input(apiUpdateGotify)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (
-					IS_CLOUD &&
-					notification.organizationId !== ctx.session.activeOrganizationId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateGotifyNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -597,7 +552,7 @@ export const notificationRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	testGotifyConnection: withPermission("notification", "create")
+	testGotifyConnection: platformAdminProcedure
 		.input(apiTestGotifyConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -615,7 +570,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createNtfy: withPermission("notification", "create")
+	createNtfy: platformAdminProcedure
 		.input(apiCreateNtfy)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -633,23 +588,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateNtfy: withPermission("notification", "update")
+	updateNtfy: platformAdminProcedure
 		.input(apiUpdateNtfy)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (
-					IS_CLOUD &&
-					notification.organizationId !== ctx.session.activeOrganizationId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateNtfyNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -662,7 +608,7 @@ export const notificationRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	testNtfyConnection: withPermission("notification", "create")
+	testNtfyConnection: platformAdminProcedure
 		.input(apiTestNtfyConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -685,7 +631,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createMattermost: withPermission("notification", "create")
+	createMattermost: platformAdminProcedure
 		.input(apiCreateMattermost)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -706,23 +652,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateMattermost: withPermission("notification", "update")
+	updateMattermost: platformAdminProcedure
 		.input(apiUpdateMattermost)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (
-					IS_CLOUD &&
-					notification.organizationId !== ctx.session.activeOrganizationId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateMattermostNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -735,7 +672,7 @@ export const notificationRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	testMattermostConnection: withPermission("notification", "create")
+	testMattermostConnection: platformAdminProcedure
 		.input(apiTestMattermostConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -753,7 +690,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createCustom: withPermission("notification", "create")
+	createCustom: platformAdminProcedure
 		.input(apiCreateCustom)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -771,20 +708,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateCustom: withPermission("notification", "update")
+	updateCustom: platformAdminProcedure
 		.input(apiUpdateCustom)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (notification.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateCustomNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -797,7 +728,7 @@ export const notificationRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	testCustomConnection: withPermission("notification", "create")
+	testCustomConnection: platformAdminProcedure
 		.input(apiTestCustomConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -815,7 +746,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createLark: withPermission("notification", "create")
+	createLark: platformAdminProcedure
 		.input(apiCreateLark)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -833,23 +764,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateLark: withPermission("notification", "update")
+	updateLark: platformAdminProcedure
 		.input(apiUpdateLark)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (
-					IS_CLOUD &&
-					notification.organizationId !== ctx.session.activeOrganizationId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateLarkNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -862,7 +784,7 @@ export const notificationRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	testLarkConnection: withPermission("notification", "create")
+	testLarkConnection: platformAdminProcedure
 		.input(apiTestLarkConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -881,7 +803,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createTeams: withPermission("notification", "create")
+	createTeams: platformAdminProcedure
 		.input(apiCreateTeams)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -899,23 +821,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updateTeams: withPermission("notification", "update")
+	updateTeams: platformAdminProcedure
 		.input(apiUpdateTeams)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (
-					IS_CLOUD &&
-					notification.organizationId !== ctx.session.activeOrganizationId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updateTeamsNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -928,7 +841,7 @@ export const notificationRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	testTeamsConnection: withPermission("notification", "create")
+	testTeamsConnection: platformAdminProcedure
 		.input(apiTestTeamsConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -945,7 +858,7 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	createPushover: withPermission("notification", "create")
+	createPushover: platformAdminProcedure
 		.input(apiCreatePushover)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -966,23 +879,14 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	updatePushover: withPermission("notification", "update")
+	updatePushover: platformAdminProcedure
 		.input(apiUpdatePushover)
 		.mutation(async ({ input, ctx }) => {
 			try {
 				const notification = await findNotificationById(input.notificationId);
-				if (
-					IS_CLOUD &&
-					notification.organizationId !== ctx.session.activeOrganizationId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this notification",
-					});
-				}
 				const result = await updatePushoverNotification({
 					...input,
-					organizationId: ctx.session.activeOrganizationId,
+					organizationId: notification.organizationId,
 				});
 				await audit(ctx, {
 					action: "update",
@@ -995,7 +899,7 @@ export const notificationRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	testPushoverConnection: withPermission("notification", "create")
+	testPushoverConnection: platformAdminProcedure
 		.input(apiTestPushoverConnection)
 		.mutation(async ({ input }) => {
 			try {
@@ -1013,9 +917,13 @@ export const notificationRouter = createTRPCRouter({
 				});
 			}
 		}),
-	getEmailProviders: withPermission("notification", "read").query(
+	// Read-only helper for the "invite member" dialog. This is NOT notification
+	// configuration: it only lists the provider names of the caller's own
+	// organization (needed to pick which one sends an invitation email) and never
+	// returns SMTP/Resend credentials.
+	getEmailProviders: withPermission("member", "create").query(
 		async ({ ctx }) => {
-			return await db.query.notifications.findMany({
+			const rows = await db.query.notifications.findMany({
 				where: eq(
 					notifications.organizationId,
 					ctx.session.activeOrganizationId,
@@ -1025,6 +933,13 @@ export const notificationRouter = createTRPCRouter({
 					resend: true,
 				},
 			});
+			return rows
+				.filter((row) => !!row.email || !!row.resend)
+				.map((row) => ({
+					notificationId: row.notificationId,
+					name: row.name,
+					notificationType: row.notificationType,
+				}));
 		},
 	),
 });

@@ -3,7 +3,20 @@ import {
 	VALID_HOSTNAME_REGEX,
 } from "@dokploy/server/utils/hostname-validation";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
-import { DatabaseZap, Dices, RefreshCw, X } from "lucide-react";
+import {
+	AlertCircle,
+	CheckCircle2,
+	ChevronDown,
+	ChevronRight,
+	Copy,
+	DatabaseZap,
+	Dices,
+	Globe,
+	Loader2,
+	RefreshCw,
+	ShieldCheck,
+	X,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -147,6 +160,7 @@ interface Props {
 
 export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 	const [isOpen, setIsOpen] = useState(false);
+	const [showAdvanced, setShowAdvanced] = useState(false);
 	const [cacheType, setCacheType] = useState<CacheType>("cache");
 	const [isManualInput, setIsManualInput] = useState(false);
 
@@ -217,14 +231,14 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 		resolver: zodResolver(domain),
 		defaultValues: {
 			host: "",
-			path: undefined,
-			internalPath: undefined,
+			path: "/",
+			internalPath: "/",
 			stripPath: false,
-			port: undefined,
+			port: 3000,
 			useCustomEntrypoint: false,
 			customEntrypoint: undefined,
-			https: false,
-			certificateType: undefined,
+			https: true,
+			certificateType: "letsencrypt",
 			customCertResolver: undefined,
 			serviceName: undefined,
 			domainType: type,
@@ -238,20 +252,37 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 	const https = form.watch("https");
 	const domainType = form.watch("domainType");
 	const host = form.watch("host");
-	const isTraefikMeDomain = host?.includes("sslip.io") || false;
+	const isTraefikMeDomain =
+		host?.includes("sslip.io") || host?.includes("traefik.me") || false;
+
+	// DNS instructions query for custom domains
+	const isCustomDomain = !!host && !isTraefikMeDomain && host.includes(".");
+	const {
+		data: dnsInfo,
+		isFetching: isCheckingDns,
+		refetch: refetchDns,
+	} = api.domain.dnsInstructions.useQuery(
+		{
+			host: host || "",
+			serverId: application?.serverId || null,
+		},
+		{
+			enabled: isOpen && isCustomDomain,
+			refetchOnWindowFocus: false,
+		},
+	);
 
 	useEffect(() => {
 		if (data) {
 			form.reset({
 				...data,
-				/* Convert null to undefined */
-				path: data?.path || undefined,
-				internalPath: data?.internalPath || undefined,
+				path: data?.path || "/",
+				internalPath: data?.internalPath || "/",
 				stripPath: data?.stripPath || false,
-				port: data?.port || undefined,
+				port: data?.port || 3000,
 				useCustomEntrypoint: !!data.customEntrypoint,
 				customEntrypoint: data.customEntrypoint || undefined,
-				certificateType: data?.certificateType || undefined,
+				certificateType: data?.certificateType || (data?.https ? "letsencrypt" : "none"),
 				customCertResolver: data?.customCertResolver || undefined,
 				serviceName: data?.serviceName || undefined,
 				domainType: data?.domainType || type,
@@ -262,14 +293,14 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 		if (!domainId) {
 			form.reset({
 				host: "",
-				path: undefined,
-				internalPath: undefined,
+				path: "/",
+				internalPath: "/",
 				stripPath: false,
-				port: undefined,
+				port: 3000,
 				useCustomEntrypoint: false,
 				customEntrypoint: undefined,
-				https: false,
-				certificateType: undefined,
+				https: true,
+				certificateType: "letsencrypt",
 				customCertResolver: undefined,
 				domainType: type,
 				middlewares: [],
@@ -277,7 +308,6 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 		}
 	}, [form, data, isPending, domainId]);
 
-	// Separate effect for handling custom cert resolver validation
 	useEffect(() => {
 		if (certificateType === "custom") {
 			form.trigger("customCertResolver");
@@ -285,42 +315,58 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 	}, [certificateType, form]);
 
 	const dictionary = {
-		success: domainId ? "Domain Updated" : "Domain Created",
-		error: domainId ? "Error updating the domain" : "Error creating the domain",
-		submit: domainId ? "Update" : "Create",
+		success: domainId ? "Domain Updated" : "Domain Connected Successfully",
+		error: domainId ? "Error updating the domain" : "Error connecting domain",
+		submit: domainId ? "Update Domain" : "Connect Domain",
 		dialogDescription: domainId
-			? "In this section you can edit a domain"
-			: "In this section you can add domains",
+			? "Modify the domain settings for this application."
+			: "Connect a custom domain or generate a free test subdomain.",
 	};
 
-	const onSubmit = async (data: Domain) => {
+	const copyToClipboard = (text: string) => {
+		navigator.clipboard.writeText(text);
+		toast.success(`Copied "${text}" to clipboard`);
+	};
+
+	const onSubmit = async (formData: Domain) => {
+		const payload = {
+			...formData,
+			path: formData.path || "/",
+			port: formData.port || 3000,
+			certificateType: formData.https
+				? formData.certificateType || "letsencrypt"
+				: "none",
+			customEntrypoint: formData.useCustomEntrypoint
+				? formData.customEntrypoint
+				: null,
+		};
+
 		await mutateAsync({
 			domainId,
-			...(data.domainType === "application" && {
+			...(formData.domainType === "application" && {
 				applicationId: id,
 			}),
-			...(data.domainType === "compose" && {
+			...(formData.domainType === "compose" && {
 				composeId: id,
 			}),
-			...data,
-			customEntrypoint: data.useCustomEntrypoint ? data.customEntrypoint : null,
+			...payload,
 		})
 			.then(async () => {
 				toast.success(
 					dictionary.success,
-					data.domainType === "compose"
+					formData.domainType === "compose"
 						? { description: COMPOSE_REDEPLOY_TOAST }
 						: undefined,
 				);
 
-				if (data.domainType === "application") {
+				if (formData.domainType === "application") {
 					await utils.domain.byApplicationId.invalidate({
 						applicationId: id,
 					});
 					await utils.application.readTraefikConfig.invalidate({
 						applicationId: id,
 					});
-				} else if (data.domainType === "compose") {
+				} else if (formData.domainType === "compose") {
 					await utils.domain.byComposeId.invalidate({
 						composeId: id,
 					});
@@ -332,612 +378,528 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 				setIsOpen(false);
 			})
 			.catch((e) => {
-				console.log(e);
-				toast.error(dictionary.error);
+				toast.error(e?.message || dictionary.error);
 			});
 	};
+
 	return (
 		<Dialog open={isOpen} onOpenChange={setIsOpen}>
-			<DialogTrigger className="" asChild>
-				{children}
-			</DialogTrigger>
-			<DialogContent className="sm:max-w-2xl">
+			<DialogTrigger asChild>{children}</DialogTrigger>
+			<DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
 				<DialogHeader>
-					<DialogTitle>Domain</DialogTitle>
+					<DialogTitle className="flex items-center gap-2 text-xl">
+						<Globe className="size-5 text-primary" />
+						{domainId ? "Edit Domain" : "Add Domain"}
+					</DialogTitle>
 					<DialogDescription>{dictionary.dialogDescription}</DialogDescription>
 				</DialogHeader>
-				{isError && <AlertBlock type="error">{error?.message}</AlertBlock>}
 
+				{isError && <AlertBlock type="error">{error?.message}</AlertBlock>}
 				{type === "compose" && <ComposeRedeployAlert className="mb-4" />}
 
 				<Form {...form}>
 					<form
 						id="hook-form"
 						onSubmit={form.handleSubmit(onSubmit)}
-						className="grid w-full gap-8 "
+						className="grid w-full gap-5"
 					>
-						<div className="flex flex-col gap-4">
-							<div className="flex flex-col gap-2">
-								<div className="flex flex-row items-end w-full gap-4">
-									{domainType === "compose" && (
-										<div className="flex flex-col gap-2 w-full">
-											{errorServices && (
-												<AlertBlock type="warning" className="wrap-anywhere">
-													{errorServices?.message}
-												</AlertBlock>
-											)}
-											<FormField
-												control={form.control}
-												name="serviceName"
-												render={({ field }) => (
-													<FormItem className="w-full">
-														<FormLabel>Service Name</FormLabel>
-														<div className="flex gap-2">
-															{isManualInput ? (
-																<FormControl>
-																	<Input
-																		placeholder="Enter service name manually"
-																		{...field}
-																		className="w-full"
-																	/>
-																</FormControl>
-															) : (
-																<Select
-																	onValueChange={field.onChange}
-																	defaultValue={field.value || ""}
-																>
-																	<FormControl>
-																		<SelectTrigger>
-																			<SelectValue placeholder="Select a service name" />
-																		</SelectTrigger>
-																	</FormControl>
-
-																	<SelectContent>
-																		{services?.map((service, index) => (
-																			<SelectItem
-																				value={service}
-																				key={`${service}-${index}`}
-																			>
-																				{service}
-																			</SelectItem>
-																		))}
-																		<SelectItem value="none" disabled>
-																			Empty
-																		</SelectItem>
-																	</SelectContent>
-																</Select>
-															)}
-															{!isManualInput && (
-																<>
-																	<TooltipProvider delayDuration={0}>
-																		<Tooltip>
-																			<TooltipTrigger asChild>
-																				<Button
-																					variant="secondary"
-																					type="button"
-																					isLoading={isLoadingServices}
-																					onClick={() => {
-																						if (cacheType === "fetch") {
-																							refetchServices();
-																						} else {
-																							setCacheType("fetch");
-																						}
-																					}}
-																				>
-																					<RefreshCw className="size-4 text-muted-foreground" />
-																				</Button>
-																			</TooltipTrigger>
-																			<TooltipContent
-																				side="left"
-																				sideOffset={5}
-																				className="max-w-40"
-																			>
-																				<p>
-																					Fetch: Will clone the repository and
-																					load the services
-																				</p>
-																			</TooltipContent>
-																		</Tooltip>
-																	</TooltipProvider>
-																	<TooltipProvider delayDuration={0}>
-																		<Tooltip>
-																			<TooltipTrigger asChild>
-																				<Button
-																					variant="secondary"
-																					type="button"
-																					isLoading={isLoadingServices}
-																					onClick={() => {
-																						if (cacheType === "cache") {
-																							refetchServices();
-																						} else {
-																							setCacheType("cache");
-																						}
-																					}}
-																				>
-																					<DatabaseZap className="size-4 text-muted-foreground" />
-																				</Button>
-																			</TooltipTrigger>
-																			<TooltipContent
-																				side="left"
-																				sideOffset={5}
-																				className="max-w-40"
-																			>
-																				<p>
-																					Cache: If you previously deployed this
-																					compose, it will read the services
-																					from the last deployment/fetch from
-																					the repository
-																				</p>
-																			</TooltipContent>
-																		</Tooltip>
-																	</TooltipProvider>
-																</>
-															)}
-															<TooltipProvider delayDuration={0}>
-																<Tooltip>
-																	<TooltipTrigger asChild>
-																		<Button
-																			variant="secondary"
-																			type="button"
-																			onClick={() => {
-																				setIsManualInput(!isManualInput);
-																				if (!isManualInput) {
-																					field.onChange("");
-																				}
-																			}}
-																		>
-																			{isManualInput ? (
-																				<RefreshCw className="size-4 text-muted-foreground" />
-																			) : (
-																				<span className="text-xs text-muted-foreground">
-																					Manual
-																				</span>
-																			)}
-																		</Button>
-																	</TooltipTrigger>
-																	<TooltipContent
-																		side="left"
-																		sideOffset={5}
-																		className="max-w-40"
-																	>
-																		<p>
-																			{isManualInput
-																				? "Switch to service selection"
-																				: "Enter service name manually"}
-																		</p>
-																	</TooltipContent>
-																</Tooltip>
-															</TooltipProvider>
-														</div>
-
-														<FormMessage />
-													</FormItem>
-												)}
+						{/* Host Field */}
+						<FormField
+							control={form.control}
+							name="host"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel className="text-sm font-semibold">
+										Domain Name
+									</FormLabel>
+									<div className="flex gap-2">
+										<FormControl>
+											<Input
+												placeholder="app.yourdomain.com or mywebsite.com"
+												{...field}
+												className="font-mono text-sm"
 											/>
-										</div>
-									)}
+										</FormControl>
+										<TooltipProvider delayDuration={0}>
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														variant="secondary"
+														type="button"
+														isLoading={isLoadingGenerate}
+														onClick={() => {
+															generateDomain({
+																appName: application?.appName || "",
+																serverId: application?.serverId || "",
+															})
+																.then((genDomain) => {
+																	field.onChange(genDomain);
+																	form.setValue("https", false);
+																	form.setValue("certificateType", "none");
+																})
+																.catch((err) => {
+																	toast.error(err.message);
+																});
+														}}
+													>
+														<Dices className="size-4 mr-1 text-muted-foreground" />
+														<span className="text-xs">Free Test Subdomain</span>
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent side="left" className="max-w-52">
+													<p>
+														Generate an instant development subdomain (.sslip.io)
+														requiring no DNS setup.
+													</p>
+												</TooltipContent>
+											</Tooltip>
+										</TooltipProvider>
+									</div>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+
+						{/* DNS Setup Guide Card for Custom Domains */}
+						{isCustomDomain && dnsInfo && (
+							<div className="p-4 rounded-lg border bg-muted/30 flex flex-col gap-3">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										{dnsInfo.verified ? (
+											<Badge
+												variant="outline"
+												className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 flex items-center gap-1.5"
+											>
+												<CheckCircle2 className="size-3.5" />
+												DNS Configured Correctly
+											</Badge>
+										) : (
+											<Badge
+												variant="outline"
+												className="bg-amber-500/10 text-amber-600 border-amber-500/20 flex items-center gap-1.5"
+											>
+												<AlertCircle className="size-3.5" />
+												Waiting for DNS Record
+											</Badge>
+										)}
+									</div>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-7 text-xs flex items-center gap-1"
+										disabled={isCheckingDns}
+										onClick={() => refetchDns()}
+									>
+										{isCheckingDns ? (
+											<Loader2 className="size-3 animate-spin" />
+										) : (
+											<RefreshCw className="size-3" />
+										)}
+										Check DNS
+									</Button>
 								</div>
-								<FormField
-									control={form.control}
-									name="host"
-									render={({ field }) => (
-										<FormItem>
-											{!canGenerateTraefikMeDomains &&
-												field.value.includes("sslip.io") && (
-													<AlertBlock type="warning">
-														You need to set an IP address in your{" "}
-														<Link
-															href="/dashboard/settings/server"
-															className="text-primary"
-														>
-															{application?.serverId
-																? "Remote Servers -> Server -> Edit Server -> Update IP Address"
-																: "Web Server -> Server -> Update Server IP"}
-														</Link>{" "}
-														to make your sslip.io domain work.
-													</AlertBlock>
-												)}
-											{isTraefikMeDomain && (
-												<AlertBlock type="info">
-													<strong>Note:</strong> sslip.io is a public HTTP
-													service and does not support SSL/HTTPS. HTTPS and
-													certificate options will not have any effect.
-												</AlertBlock>
-											)}
-											<FormLabel>Host</FormLabel>
-											<div className="flex gap-2">
-												<FormControl>
-													<Input placeholder="api.dokploy.com" {...field} />
-												</FormControl>
-												<TooltipProvider delayDuration={0}>
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<Button
-																variant="secondary"
-																type="button"
-																isLoading={isLoadingGenerate}
-																onClick={() => {
-																	generateDomain({
-																		appName: application?.appName || "",
-																		serverId: application?.serverId || "",
-																	})
-																		.then((domain) => {
-																			field.onChange(domain);
-																		})
-																		.catch((err) => {
-																			toast.error(err.message);
-																		});
-																}}
+
+								<div className="text-xs text-muted-foreground">
+									{dnsInfo.message}
+								</div>
+
+								{!dnsInfo.verified && (
+									<div className="p-3 bg-background rounded-md border text-xs flex flex-col gap-2">
+										<span className="font-semibold text-foreground">
+											Add this DNS record at your domain provider (Cloudflare,
+											GoDaddy, Namecheap, etc.):
+										</span>
+										<div className="grid grid-cols-3 gap-2 py-1 font-mono text-xs">
+											<div>
+												<span className="text-muted-foreground block text-[10px] uppercase font-sans">
+													Type
+												</span>
+												<span className="font-bold">{dnsInfo.recordType}</span>
+											</div>
+											<div>
+												<span className="text-muted-foreground block text-[10px] uppercase font-sans">
+													Name / Host
+												</span>
+												<span className="font-bold">{dnsInfo.recordName}</span>
+											</div>
+											<div className="flex items-center justify-between">
+												<div>
+													<span className="text-muted-foreground block text-[10px] uppercase font-sans">
+														Value / Target
+													</span>
+													<span className="font-bold">{dnsInfo.recordValue}</span>
+												</div>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon"
+													className="size-6"
+													onClick={() => copyToClipboard(dnsInfo.recordValue)}
+												>
+													<Copy className="size-3" />
+												</Button>
+											</div>
+										</div>
+									</div>
+								)}
+							</div>
+						)}
+
+						{/* Port Selection */}
+						<FormField
+							control={form.control}
+							name="port"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel className="text-sm font-semibold">
+										Application Port
+									</FormLabel>
+									<FormDescription className="text-xs">
+										The internal port your application listens on (e.g. 3000 for
+										Next.js/Node, 80 for Nginx, 8000 for Python).
+									</FormDescription>
+									<FormControl>
+										<NumberInput
+											placeholder="3000"
+											{...field}
+											className="font-mono text-sm"
+										/>
+									</FormControl>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+
+						{/* Automatic HTTPS Switch */}
+						{!isTraefikMeDomain && (
+							<FormField
+								control={form.control}
+								name="https"
+								render={({ field }) => (
+									<FormItem className="flex flex-row items-center justify-between p-3.5 border rounded-lg bg-card">
+										<div className="space-y-0.5">
+											<div className="flex items-center gap-1.5">
+												<ShieldCheck className="size-4 text-emerald-500" />
+												<FormLabel className="text-sm font-semibold cursor-pointer">
+													Automatic HTTPS & SSL
+												</FormLabel>
+											</div>
+											<FormDescription className="text-xs">
+												SSL certificate will be issued automatically with Let's
+												Encrypt once DNS points to this server.
+											</FormDescription>
+										</div>
+										<FormControl>
+											<Switch
+												checked={field.value}
+												onCheckedChange={(checked) => {
+													field.onChange(checked);
+													if (checked) {
+														form.setValue("certificateType", "letsencrypt");
+													} else {
+														form.setValue("certificateType", "none");
+													}
+												}}
+											/>
+										</FormControl>
+									</FormItem>
+								)}
+							/>
+						)}
+
+						{/* Advanced Settings Accordion */}
+						<div className="pt-2 border-t">
+							<button
+								type="button"
+								onClick={() => setShowAdvanced(!showAdvanced)}
+								className="flex items-center justify-between w-full text-xs font-medium text-muted-foreground hover:text-foreground py-1"
+							>
+								<span>Advanced Domain Configuration</span>
+								{showAdvanced ? (
+									<ChevronDown className="size-4" />
+								) : (
+									<ChevronRight className="size-4" />
+								)}
+							</button>
+
+							{showAdvanced && (
+								<div className="mt-4 flex flex-col gap-4 pl-1 border-l-2 border-primary/20">
+									{/* Compose Service Selection */}
+									{domainType === "compose" && (
+										<FormField
+											control={form.control}
+											name="serviceName"
+											render={({ field }) => (
+												<FormItem className="w-full">
+													<FormLabel>Service Name</FormLabel>
+													<div className="flex gap-2">
+														{isManualInput ? (
+															<FormControl>
+																<Input
+																	placeholder="Enter compose service name"
+																	{...field}
+																/>
+															</FormControl>
+														) : (
+															<Select
+																onValueChange={field.onChange}
+																defaultValue={field.value || ""}
 															>
-																<Dices className="size-4 text-muted-foreground" />
-															</Button>
-														</TooltipTrigger>
-														<TooltipContent
-															side="left"
-															sideOffset={5}
-															className="max-w-40"
+																<FormControl>
+																	<SelectTrigger>
+																		<SelectValue placeholder="Select service" />
+																	</SelectTrigger>
+																</FormControl>
+																<SelectContent>
+																	{services?.map((service, index) => (
+																		<SelectItem
+																			value={service}
+																			key={`${service}-${index}`}
+																		>
+																			{service}
+																		</SelectItem>
+																	))}
+																</SelectContent>
+															</Select>
+														)}
+														<Button
+															variant="secondary"
+															type="button"
+															onClick={() => setIsManualInput(!isManualInput)}
 														>
-															<p>Generate sslip.io domain</p>
-														</TooltipContent>
-													</Tooltip>
-												</TooltipProvider>
-											</div>
-
-											<FormMessage />
-										</FormItem>
+															{isManualInput ? "Dropdown" : "Manual"}
+														</Button>
+													</div>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
 									)}
-								/>
 
-								<FormField
-									control={form.control}
-									name="path"
-									render={({ field }) => {
-										return (
-											<FormItem>
-												<FormLabel>Path</FormLabel>
-												<FormControl>
-													<Input placeholder={"/"} {...field} />
-												</FormControl>
-												<FormMessage />
-											</FormItem>
-										);
-									}}
-								/>
-
-								<FormField
-									control={form.control}
-									name="internalPath"
-									render={({ field }) => {
-										return (
-											<FormItem>
-												<FormLabel>Internal Path</FormLabel>
-												<FormDescription>
-													The path where your application expects to receive
-													requests internally (defaults to "/")
-												</FormDescription>
-												<FormControl>
-													<Input placeholder={"/"} {...field} />
-												</FormControl>
-												<FormMessage />
-											</FormItem>
-										);
-									}}
-								/>
-
-								<FormField
-									control={form.control}
-									name="stripPath"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between p-3 border rounded-lg shadow-xs">
-											<div className="space-y-0.5">
-												<FormLabel>Strip Path</FormLabel>
-												<FormDescription>
-													Remove the external path from the request before
-													forwarding to the application
-												</FormDescription>
-												<FormMessage />
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value}
-													onCheckedChange={field.onChange}
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
-
-								<FormField
-									control={form.control}
-									name="port"
-									render={({ field }) => {
-										return (
-											<FormItem>
-												<FormLabel>Container Port</FormLabel>
-												<FormDescription>
-													The port where your application is running inside the
-													container (e.g., 3000 for Node.js, 80 for Nginx, 8080
-													for Java)
-												</FormDescription>
-												<FormControl>
-													<NumberInput placeholder={"3000"} {...field} />
-												</FormControl>
-												<FormMessage />
-											</FormItem>
-										);
-									}}
-								/>
-
-								<FormField
-									control={form.control}
-									name="useCustomEntrypoint"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between p-3 mt-4 border rounded-lg shadow-xs">
-											<div className="space-y-0.5">
-												<FormLabel>Custom Entrypoint</FormLabel>
-												<FormDescription>
-													Use custom entrypoint for domain
-													<br />
-													"web" and/or "websecure" is used by default.
-												</FormDescription>
-												<FormMessage />
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value}
-													onCheckedChange={(checked) => {
-														field.onChange(checked);
-														if (!checked) {
-															form.setValue("customEntrypoint", undefined);
-														}
-													}}
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
-
-								{useCustomEntrypoint && (
+									{/* Path */}
 									<FormField
 										control={form.control}
-										name="customEntrypoint"
+										name="path"
 										render={({ field }) => (
-											<FormItem className="w-full">
-												<FormLabel>Entrypoint Name</FormLabel>
+											<FormItem>
+												<FormLabel>URL Path</FormLabel>
+												<FormDescription className="text-xs">
+													Route traffic on a subpath (defaults to "/")
+												</FormDescription>
 												<FormControl>
-													<Input
-														placeholder="Enter entrypoint name manually"
-														{...field}
-														className="w-full"
-													/>
+													<Input placeholder="/" {...field} />
 												</FormControl>
 												<FormMessage />
 											</FormItem>
 										)}
 									/>
-								)}
 
-								<FormField
-									control={form.control}
-									name="https"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between p-3 mt-4 border rounded-lg shadow-xs">
-											<div className="space-y-0.5">
-												<FormLabel>HTTPS</FormLabel>
-												<FormDescription>
-													Automatically provision SSL Certificate.
+									{/* Internal Path */}
+									<FormField
+										control={form.control}
+										name="internalPath"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Internal Container Path</FormLabel>
+												<FormDescription className="text-xs">
+													Path forwarded to your application (defaults to "/")
 												</FormDescription>
+												<FormControl>
+													<Input placeholder="/" {...field} />
+												</FormControl>
 												<FormMessage />
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value}
-													onCheckedChange={field.onChange}
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
+											</FormItem>
+										)}
+									/>
 
-								{https && (
-									<>
+									{/* Strip Path */}
+									<FormField
+										control={form.control}
+										name="stripPath"
+										render={({ field }) => (
+											<FormItem className="flex flex-row items-center justify-between p-3 border rounded-lg">
+												<div className="space-y-0.5">
+													<FormLabel className="text-sm">Strip Path</FormLabel>
+													<FormDescription className="text-xs">
+														Strip URL path before sending request to container
+													</FormDescription>
+												</div>
+												<FormControl>
+													<Switch
+														checked={field.value}
+														onCheckedChange={field.onChange}
+													/>
+												</FormControl>
+											</FormItem>
+										)}
+									/>
+
+									{/* Certificate Provider */}
+									{https && (
 										<FormField
 											control={form.control}
 											name="certificateType"
-											render={({ field }) => {
-												return (
-													<FormItem>
-														<FormLabel>Certificate Provider</FormLabel>
-														<Select
-															onValueChange={(value) => {
-																field.onChange(value);
-																if (value !== "custom") {
-																	form.setValue(
-																		"customCertResolver",
-																		undefined,
-																	);
-																}
-															}}
-															value={field.value}
-														>
-															<FormControl>
-																<SelectTrigger>
-																	<SelectValue placeholder="Select a certificate provider" />
-																</SelectTrigger>
-															</FormControl>
-															<SelectContent>
-																<SelectItem value={"none"}>None</SelectItem>
-																<SelectItem value={"letsencrypt"}>
-																	Let's Encrypt
-																</SelectItem>
-																<SelectItem value={"custom"}>Custom</SelectItem>
-															</SelectContent>
-														</Select>
-														<FormDescription>
-															{field.value === "none" && (
-																<>
-																	<strong>None</strong> serves TLS using any
-																	certificate you created in the{" "}
-																	<Link
-																		href="/dashboard/settings/certificates"
-																		className="text-primary"
-																	>
-																		Certificates
-																	</Link>{" "}
-																	section whose CN/SAN matches this host —
-																	Traefik selects it automatically via SNI.
-																</>
-															)}
-															{field.value === "letsencrypt" && (
-																<>
-																	<strong>Let's Encrypt</strong> auto-provisions
-																	a certificate automatically for this host.
-																</>
-															)}
-															{field.value === "custom" && (
-																<>
-																	<strong>Custom</strong> uses a Traefik cert
-																	resolver by name (defined in your static
-																	configuration).
-																</>
-															)}
-															{!field.value &&
-																"Select a certificate provider to see how TLS will be served for this host."}
-														</FormDescription>
-														<FormMessage />
-													</FormItem>
-												);
-											}}
+											render={({ field }) => (
+												<FormItem>
+													<FormLabel>Certificate Provider</FormLabel>
+													<Select
+														onValueChange={(val) => {
+															field.onChange(val);
+															if (val !== "custom") {
+																form.setValue("customCertResolver", undefined);
+															}
+														}}
+														value={field.value || "letsencrypt"}
+													>
+														<FormControl>
+															<SelectTrigger>
+																<SelectValue placeholder="Certificate Provider" />
+															</SelectTrigger>
+														</FormControl>
+														<SelectContent>
+															<SelectItem value="letsencrypt">
+																Let's Encrypt (Automatic)
+															</SelectItem>
+															<SelectItem value="none">
+																Custom Certificate from Settings
+															</SelectItem>
+															<SelectItem value="custom">
+																Custom Traefik Resolver
+															</SelectItem>
+														</SelectContent>
+													</Select>
+													<FormMessage />
+												</FormItem>
+											)}
 										/>
+									)}
 
-										{certificateType === "custom" && (
-											<FormField
-												control={form.control}
-												name="customCertResolver"
-												render={({ field }) => {
-													return (
-														<FormItem>
-															<FormLabel>Custom Certificate Resolver</FormLabel>
-															<FormDescription>
-																Enter the <strong>name</strong> of a Traefik
-																cert resolver defined in your static
-																configuration (e.g. <code>letsencrypt</code>) —
-																not certificate or private key content. To use a
-																certificate you pasted in the Certificates
-																section, choose <strong>None</strong> instead
-																and Traefik will match it by SNI.
-															</FormDescription>
-															<FormControl>
-																<Input
-																	className="w-full"
-																	placeholder="e.g. letsencrypt"
-																	{...field}
-																	value={field.value || ""}
-																	onChange={(e) => {
-																		field.onChange(e);
-																		form.trigger("customCertResolver");
-																	}}
-																/>
-															</FormControl>
-															<FormMessage />
-														</FormItem>
-													);
-												}}
-											/>
-										)}
-									</>
-								)}
-								<FormField
-									control={form.control}
-									name="middlewares"
-									render={({ field }) => (
-										<FormItem>
-											<div className="flex items-center gap-2">
-												<FormLabel>Middlewares</FormLabel>
-												<TooltipProvider>
-													<Tooltip>
-														<TooltipTrigger type="button">
-															<div className="size-4 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold">
-																?
-															</div>
-														</TooltipTrigger>
-														<TooltipContent className="max-w-[300px]">
-															<p>
-																Add Traefik middleware references. Middlewares
-																must be defined in your Traefik configuration.
-															</p>
-														</TooltipContent>
-													</Tooltip>
-												</TooltipProvider>
-											</div>
-											<div className="flex flex-wrap gap-2 mb-2">
-												{field.value?.map((name, index) => (
-													<Badge key={index} variant="secondary">
-														{name}
-														<X
-															className="ml-1 size-3 cursor-pointer"
-															onClick={() => {
-																const newMiddlewares = [...(field.value || [])];
-																newMiddlewares.splice(index, 1);
-																form.setValue("middlewares", newMiddlewares);
-															}}
+									{/* Custom Cert Resolver */}
+									{certificateType === "custom" && (
+										<FormField
+											control={form.control}
+											name="customCertResolver"
+											render={({ field }) => (
+												<FormItem>
+													<FormLabel>Custom Resolver Name</FormLabel>
+													<FormControl>
+														<Input
+															placeholder="e.g. myresolver"
+															{...field}
+															value={field.value || ""}
 														/>
-													</Badge>
-												))}
-											</div>
-											<FormControl>
-												<div className="flex gap-2">
-													<Input
-														placeholder="e.g., rate-limit@file, auth@file"
-														onKeyDown={(e) => {
-															if (e.key === "Enter") {
-																e.preventDefault();
-																const input = e.currentTarget;
-																const value = input.value.trim();
-																if (value && !field.value?.includes(value)) {
-																	form.setValue("middlewares", [
-																		...(field.value || []),
-																		value,
-																	]);
-																	input.value = "";
-																}
+													</FormControl>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+									)}
+
+									{/* Custom Entrypoint */}
+									<FormField
+										control={form.control}
+										name="useCustomEntrypoint"
+										render={({ field }) => (
+											<FormItem className="flex flex-row items-center justify-between p-3 border rounded-lg">
+												<div className="space-y-0.5">
+													<FormLabel className="text-sm">
+														Custom Entrypoint
+													</FormLabel>
+													<FormDescription className="text-xs">
+														Override Traefik web/websecure entrypoints
+													</FormDescription>
+												</div>
+												<FormControl>
+													<Switch
+														checked={field.value}
+														onCheckedChange={(checked) => {
+															field.onChange(checked);
+															if (!checked) {
+																form.setValue("customEntrypoint", undefined);
 															}
 														}}
 													/>
-													<Button
-														type="button"
-														variant="secondary"
-														onClick={() => {
-															const input = document.querySelector(
-																'input[placeholder="e.g., rate-limit@file, auth@file"]',
-															) as HTMLInputElement;
-															const value = input.value.trim();
-															if (value && !field.value?.includes(value)) {
-																form.setValue("middlewares", [
-																	...(field.value || []),
-																	value,
-																]);
-																input.value = "";
-															}
-														}}
-													>
-														Add
-													</Button>
-												</div>
-											</FormControl>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-							</div>
-						</div>
-					</form>
+												</FormControl>
+											</FormItem>
+										)}
+									/>
 
-					<DialogFooter>
-						<Button isLoading={isPending} form="hook-form" type="submit">
-							{dictionary.submit}
-						</Button>
-					</DialogFooter>
+									{useCustomEntrypoint && (
+										<FormField
+											control={form.control}
+											name="customEntrypoint"
+											render={({ field }) => (
+												<FormItem>
+													<FormLabel>Entrypoint Identifier</FormLabel>
+													<FormControl>
+														<Input
+															placeholder="e.g. custom-port"
+															{...field}
+														/>
+													</FormControl>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+									)}
+
+									{/* Middlewares */}
+									<FormField
+										control={form.control}
+										name="middlewares"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Traefik Middlewares</FormLabel>
+												<div className="flex flex-wrap gap-2 mb-2">
+													{field.value?.map((name, index) => (
+														<Badge key={index} variant="secondary">
+															{name}
+															<X
+																className="ml-1 size-3 cursor-pointer"
+																onClick={() => {
+																	const updated = [...(field.value || [])];
+																	updated.splice(index, 1);
+																	form.setValue("middlewares", updated);
+																}}
+															/>
+														</Badge>
+													))}
+												</div>
+												<FormControl>
+													<div className="flex gap-2">
+														<Input
+															placeholder="e.g., rate-limit@file, auth@file"
+															onKeyDown={(e) => {
+																if (e.key === "Enter") {
+																	e.preventDefault();
+																	const val = e.currentTarget.value.trim();
+																	if (val && !field.value?.includes(val)) {
+																		form.setValue("middlewares", [
+																			...(field.value || []),
+																			val,
+																		]);
+																		e.currentTarget.value = "";
+																	}
+																}
+															}}
+														/>
+													</div>
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+								</div>
+							)}
+						</div>
+
+						<DialogFooter className="pt-2">
+							<Button isLoading={isPending} form="hook-form" type="submit">
+								{dictionary.submit}
+							</Button>
+						</DialogFooter>
+					</form>
 				</Form>
 			</DialogContent>
 		</Dialog>

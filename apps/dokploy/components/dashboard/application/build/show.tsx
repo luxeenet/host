@@ -1,5 +1,14 @@
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
-import { Cog } from "lucide-react";
+import {
+	Box,
+	ChevronDown,
+	ChevronRight,
+	Cog,
+	FileCode,
+	Layers,
+	Settings2,
+	Sparkles,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -29,7 +38,6 @@ import {
 } from "@/components/ui/select";
 import { api } from "@/utils/api";
 
-// Railpack versions from https://github.com/railwayapp/railpack/releases
 export const RAILPACK_VERSIONS = [
 	"0.39.0",
 	"0.38.0",
@@ -110,15 +118,6 @@ export enum BuildType {
 	static = "static",
 	railpack = "railpack",
 }
-
-const buildTypeDisplayMap: Record<BuildType, string> = {
-	[BuildType.dockerfile]: "Dockerfile",
-	[BuildType.railpack]: "Railpack",
-	[BuildType.nixpacks]: "Nixpacks",
-	[BuildType.heroku_buildpacks]: "Heroku Buildpacks",
-	[BuildType.paketo_buildpacks]: "Paketo Buildpacks",
-	[BuildType.static]: "Static",
-};
 
 const mySchema = z.discriminatedUnion("buildType", [
 	z.object({
@@ -214,11 +213,16 @@ const resetData = (data: ApplicationData): AddTemplate => {
 };
 
 export const ShowBuildChooseForm = ({ applicationId }: Props) => {
+	const [showAdvanced, setShowAdvanced] = useState(false);
 	const { mutateAsync, isPending } =
 		api.application.saveBuildType.useMutation();
 	const { data, refetch } = api.application.one.useQuery(
 		{ applicationId },
 		{ enabled: !!applicationId },
+	);
+	const { data: inspection } = api.application.inspectApp.useQuery(
+		{ applicationId },
+		{ enabled: !!applicationId, refetchOnWindowFocus: false },
 	);
 
 	const form = useForm({
@@ -230,7 +234,6 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 
 	const buildType = form.watch("buildType");
 	const railpackVersion = form.watch("railpackVersion");
-	const publishDirectory = form.watch("publishDirectory");
 	const [isManualRailpackVersion, setIsManualRailpackVersion] = useState(false);
 
 	useEffect(() => {
@@ -239,12 +242,11 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 				...data,
 				buildType: isValidBuildType(data.buildType)
 					? (data.buildType as BuildType)
-					: BuildType.nixpacks, // fallback
+					: BuildType.nixpacks,
 			};
 
 			form.reset(resetData(typedData));
 
-			// Check if railpack version is manual (not in the predefined list)
 			if (
 				data.railpackVersion &&
 				!RAILPACK_VERSIONS.includes(data.railpackVersion as any)
@@ -252,154 +254,178 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 				setIsManualRailpackVersion(true);
 			}
 		}
-	}, [data, form]);
+	}, [form, data]);
 
-	// Hide builder section when Docker provider is selected
-	if (data?.sourceType === "docker") {
-		return null;
-	}
-
-	const onSubmit = async (data: AddTemplate) => {
-		await mutateAsync({
+	const onSubmit = async (formData: AddTemplate) => {
+		const payload = {
 			applicationId,
-			buildType: data.buildType,
-			publishDirectory:
-				data.buildType === BuildType.nixpacks ? data.publishDirectory : null,
-			dockerfile:
-				data.buildType === BuildType.dockerfile ? data.dockerfile : null,
+			buildType: formData.buildType,
+			dockerfile: "dockerfile" in formData ? formData.dockerfile : null,
 			dockerContextPath:
-				data.buildType === BuildType.dockerfile ? data.dockerContextPath : null,
+				"dockerContextPath" in formData ? formData.dockerContextPath : null,
 			dockerBuildStage:
-				data.buildType === BuildType.dockerfile ? data.dockerBuildStage : null,
+				"dockerBuildStage" in formData ? formData.dockerBuildStage : null,
 			herokuVersion:
-				data.buildType === BuildType.heroku_buildpacks
-					? data.herokuVersion
-					: null,
-			isStaticSpa:
-				data.buildType === BuildType.static ||
-				data.buildType === BuildType.nixpacks
-					? data.isStaticSpa
-					: null,
+				"herokuVersion" in formData ? formData.herokuVersion : null,
+			publishDirectory:
+				"publishDirectory" in formData ? formData.publishDirectory : undefined,
+			isStaticSpa: "isStaticSpa" in formData ? formData.isStaticSpa : false,
 			railpackVersion:
-				data.buildType === BuildType.railpack
-					? data.railpackVersion || "0.15.4"
-					: null,
-		})
+				"railpackVersion" in formData ? formData.railpackVersion : null,
+		};
+
+		await mutateAsync(payload)
 			.then(async () => {
-				toast.success("Build type saved");
-				await refetch();
+				toast.success("Build settings saved successfully");
+				refetch();
 			})
 			.catch(() => {
-				toast.error("Error saving the build type");
+				toast.error("Error updating build settings");
 			});
 	};
 
+	const isStandardBuilder =
+		buildType === BuildType.nixpacks ||
+		buildType === BuildType.dockerfile ||
+		buildType === BuildType.static;
+
 	return (
-		<Card className="group relative w-full bg-transparent">
+		<Card className="bg-background">
 			<CardHeader>
-				<CardTitle className="flex items-start justify-between">
-					<div className="flex flex-col gap-2">
-						<span className="flex flex-col space-y-0.5">Build Type</span>
-						<p className="flex items-center text-sm font-normal text-muted-foreground">
-							Select the way of building your code
-						</p>
-					</div>
-					<div className="hidden space-y-1 text-sm font-normal md:block">
-						<Cog className="size-6 text-muted-foreground" />
-					</div>
+				<CardTitle className="text-xl flex items-center justify-between">
+					<span>Build Configuration</span>
+					{inspection?.detected && (
+						<Badge
+							variant="outline"
+							className="bg-primary/10 text-primary border-primary/20 flex items-center gap-1.5 font-normal text-xs"
+						>
+							<Sparkles className="size-3.5" />
+							Detected: {inspection.detected.framework} (Port:{" "}
+							{inspection.detected.suggestedPort})
+						</Badge>
+					)}
 				</CardTitle>
 			</CardHeader>
 			<CardContent>
 				<Form {...form}>
-					<AlertBlock>
-						Builders can consume significant memory and CPU resources
-						(recommended: 4+ GB RAM and 2+ CPU cores). For production
-						environments, please review our{" "}
-						<a
-							href="https://docs.dokploy.com/docs/core/applications/going-production"
-							target="_blank"
-							rel="noreferrer"
-							className="font-medium underline underline-offset-4"
-						>
-							Production Guide
-						</a>{" "}
-						for best practices and optimization recommendations. Builders are
-						suitable for development and prototyping purposes when you have
-						sufficient resources available.
-					</AlertBlock>
 					<form
 						onSubmit={form.handleSubmit(onSubmit)}
-						className="grid w-full gap-4 p-2"
+						className="grid w-full gap-6"
 					>
+						{/* Main Build Options */}
 						<FormField
 							control={form.control}
 							name="buildType"
-							defaultValue={form.control._defaultValues.buildType}
 							render={({ field }) => (
 								<FormItem className="space-y-3">
-									<FormLabel>Build Type</FormLabel>
+									<FormLabel className="text-sm font-semibold">
+										How should HatDot build this application?
+									</FormLabel>
 									<FormControl>
 										<RadioGroup
 											onValueChange={field.onChange}
 											value={field.value}
-											className="flex flex-col space-y-1"
+											className="grid grid-cols-1 md:grid-cols-3 gap-3"
 										>
-											{Object.entries(buildTypeDisplayMap).map(
-												([value, label]) => (
-													<FormItem
-														key={value}
-														className="flex items-center space-x-3 space-y-0"
-													>
-														<FormControl>
-															<RadioGroupItem value={value} />
-														</FormControl>
-														<FormLabel className="font-normal">
-															{label}
-															{value === BuildType.railpack && (
-																<Badge className="ml-2 px-1 text-xs">New</Badge>
-															)}
-														</FormLabel>
-													</FormItem>
-												),
-											)}
+											{/* Recommended / Nixpacks */}
+											<FormItem>
+												<FormLabel className="[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/5 cursor-pointer">
+													<FormControl>
+														<RadioGroupItem
+															value={BuildType.nixpacks}
+															className="sr-only"
+														/>
+													</FormControl>
+													<div className="p-4 rounded-lg border flex flex-col gap-2 transition-all">
+														<div className="flex items-center justify-between">
+															<span className="font-semibold text-sm flex items-center gap-1.5">
+																<Sparkles className="size-4 text-primary" />
+																Recommended
+															</span>
+															<Badge variant="secondary" className="text-[10px]">
+																Auto-detect
+															</Badge>
+														</div>
+														<p className="text-xs text-muted-foreground">
+															Automatically detects Next.js, Vite, Python, Go,
+															Node, etc. and builds with zero configuration.
+														</p>
+													</div>
+												</FormLabel>
+											</FormItem>
+
+											{/* Dockerfile */}
+											<FormItem>
+												<FormLabel className="[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/5 cursor-pointer">
+													<FormControl>
+														<RadioGroupItem
+															value={BuildType.dockerfile}
+															className="sr-only"
+														/>
+													</FormControl>
+													<div className="p-4 rounded-lg border flex flex-col gap-2 transition-all">
+														<div className="flex items-center justify-between">
+															<span className="font-semibold text-sm flex items-center gap-1.5">
+																<FileCode className="size-4 text-primary" />
+																Dockerfile
+															</span>
+														</div>
+														<p className="text-xs text-muted-foreground">
+															Uses the custom Dockerfile included in your
+															project repository.
+														</p>
+													</div>
+												</FormLabel>
+											</FormItem>
+
+											{/* Static */}
+											<FormItem>
+												<FormLabel className="[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/5 cursor-pointer">
+													<FormControl>
+														<RadioGroupItem
+															value={BuildType.static}
+															className="sr-only"
+														/>
+													</FormControl>
+													<div className="p-4 rounded-lg border flex flex-col gap-2 transition-all">
+														<div className="flex items-center justify-between">
+															<span className="font-semibold text-sm flex items-center gap-1.5">
+																<Layers className="size-4 text-primary" />
+																Static Site
+															</span>
+														</div>
+														<p className="text-xs text-muted-foreground">
+															Serve pre-built HTML, CSS, client-side React/Vue,
+															or Single Page Apps via Nginx.
+														</p>
+													</div>
+												</FormLabel>
+											</FormItem>
 										</RadioGroup>
 									</FormControl>
 									<FormMessage />
 								</FormItem>
 							)}
 						/>
-						{buildType === BuildType.heroku_buildpacks && (
-							<FormField
-								control={form.control}
-								name="herokuVersion"
-								render={({ field }) => (
-									<FormItem>
-										<FormLabel>Heroku Version (Optional)</FormLabel>
-										<FormControl>
-											<Input
-												placeholder="Heroku Version (Default: 24)"
-												{...field}
-												value={field.value ?? ""}
-											/>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-						)}
+
+						{/* Dockerfile specific fields */}
 						{buildType === BuildType.dockerfile && (
-							<>
+							<div className="p-4 rounded-lg border bg-muted/20 grid grid-cols-1 md:grid-cols-2 gap-4">
 								<FormField
 									control={form.control}
 									name="dockerfile"
 									render={({ field }) => (
 										<FormItem>
-											<FormLabel>Docker File</FormLabel>
+											<FormLabel>Dockerfile Path</FormLabel>
+											<FormDescription className="text-xs">
+												Relative path to Dockerfile (leave empty for
+												"./Dockerfile")
+											</FormDescription>
 											<FormControl>
 												<Input
-													placeholder="Path of your docker file (default: Dockerfile)"
+													placeholder="./Dockerfile"
 													{...field}
-													value={field.value ?? ""}
+													value={field.value || ""}
 												/>
 											</FormControl>
 											<FormMessage />
@@ -412,11 +438,14 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 									render={({ field }) => (
 										<FormItem>
 											<FormLabel>Docker Context Path</FormLabel>
+											<FormDescription className="text-xs">
+												Build context directory (leave empty for root)
+											</FormDescription>
 											<FormControl>
 												<Input
-													placeholder="Path of your docker context (default: .)"
+													placeholder="."
 													{...field}
-													value={field.value ?? ""}
+													value={field.value || ""}
 												/>
 											</FormControl>
 											<FormMessage />
@@ -427,188 +456,179 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 									control={form.control}
 									name="dockerBuildStage"
 									render={({ field }) => (
-										<FormItem>
-											<div className="space-y-0.5">
-												<FormLabel>Docker Build Stage</FormLabel>
-												<FormDescription>
-													Allows you to target a specific stage in a Multi-stage
-													Dockerfile. If empty, Docker defaults to build the
-													last defined stage.
-												</FormDescription>
-											</div>
+										<FormItem className="col-span-full">
+											<FormLabel>Build Stage (Target)</FormLabel>
+											<FormDescription className="text-xs">
+												Specific multi-stage target to build (optional)
+											</FormDescription>
 											<FormControl>
 												<Input
-													placeholder="E.g. production"
+													placeholder="runner or production"
 													{...field}
-													value={field.value ?? ""}
+													value={field.value || ""}
 												/>
 											</FormControl>
-										</FormItem>
-									)}
-								/>
-							</>
-						)}
-						{buildType === BuildType.nixpacks && (
-							<FormField
-								control={form.control}
-								name="publishDirectory"
-								render={({ field }) => (
-									<FormItem>
-										<div className="space-y-0.5">
-											<FormLabel>Publish Directory</FormLabel>
-											<FormDescription>
-												Allows you to serve a single directory via NGINX after
-												the build phase. Useful if the final build assets should
-												be served as a static site.
-											</FormDescription>
-										</div>
-										<FormControl>
-											<Input
-												placeholder="Publish Directory"
-												{...field}
-												value={field.value ?? ""}
-											/>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-						)}
-						{buildType === BuildType.nixpacks && publishDirectory && (
-							<FormField
-								control={form.control}
-								name="isStaticSpa"
-								render={({ field }) => (
-									<FormItem>
-										<FormControl>
-											<div className="flex items-center gap-x-2 p-2">
-												<Checkbox
-													id="checkboxIsStaticSpaNixpacks"
-													value={String(field.value)}
-													checked={field.value}
-													onCheckedChange={field.onChange}
-												/>
-												<FormLabel htmlFor="checkboxIsStaticSpaNixpacks">
-													Single Page Application (SPA)
-												</FormLabel>
-											</div>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-						)}
-						{buildType === BuildType.static && (
-							<FormField
-								control={form.control}
-								name="isStaticSpa"
-								render={({ field }) => (
-									<FormItem>
-										<FormControl>
-											<div className="flex items-center gap-x-2 p-2">
-												<Checkbox
-													id="checkboxIsStaticSpa"
-													value={String(field.value)}
-													checked={field.value}
-													onCheckedChange={field.onChange}
-												/>
-												<FormLabel htmlFor="checkboxIsStaticSpa">
-													Single Page Application (SPA)
-												</FormLabel>
-											</div>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-						)}
-						{buildType === BuildType.railpack && (
-							<>
-								<FormField
-									control={form.control}
-									name="railpackVersion"
-									render={({ field }) => (
-										<FormItem>
-											<FormLabel>Railpack Version</FormLabel>
-											<FormControl>
-												{isManualRailpackVersion ? (
-													<div className="space-y-2">
-														<Input
-															placeholder="Enter custom version (e.g., 0.15.4)"
-															{...field}
-															value={field.value ?? ""}
-														/>
-														<Button
-															type="button"
-															variant="outline"
-															size="sm"
-															onClick={() => {
-																setIsManualRailpackVersion(false);
-																field.onChange("0.15.4");
-															}}
-														>
-															Use predefined versions
-														</Button>
-													</div>
-												) : (
-													<Select
-														onValueChange={(value) => {
-															if (value === "manual") {
-																setIsManualRailpackVersion(true);
-																field.onChange("");
-															} else {
-																field.onChange(value);
-															}
-														}}
-														value={field.value ?? "0.15.4"}
-													>
-														<SelectTrigger>
-															<SelectValue placeholder="Select Railpack version" />
-														</SelectTrigger>
-														<SelectContent>
-															<SelectItem value="manual">
-																<span className="font-medium">
-																	✏️ Manual (Custom Version)
-																</span>
-															</SelectItem>
-															{RAILPACK_VERSIONS.map((version) => (
-																<SelectItem key={version} value={version}>
-																	v{version}
-																	{version === "0.15.4" && (
-																		<Badge
-																			variant="secondary"
-																			className="ml-2 px-1 text-xs"
-																		>
-																			Latest
-																		</Badge>
-																	)}
-																</SelectItem>
-															))}
-														</SelectContent>
-													</Select>
-												)}
-											</FormControl>
-											<FormDescription>
-												Select a Railpack version or choose manual to enter a
-												custom version.{" "}
-												<a
-													href="https://github.com/railwayapp/railpack/releases"
-													target="_blank"
-													rel="noreferrer"
-													className="text-primary underline underline-offset-4"
-												>
-													View releases
-												</a>
-											</FormDescription>
 											<FormMessage />
 										</FormItem>
 									)}
 								/>
-							</>
+							</div>
 						)}
-						<div className="flex w-full justify-end">
-							<Button isLoading={isPending} type="submit">
-								Save
+
+						{/* Static Site specific fields */}
+						{buildType === BuildType.static && (
+							<div className="p-4 rounded-lg border bg-muted/20">
+								<FormField
+									control={form.control}
+									name="isStaticSpa"
+									render={({ field }) => (
+										<FormItem className="flex flex-row items-center justify-between">
+											<div className="space-y-0.5">
+												<FormLabel className="text-sm">
+													Single Page Application (SPA) Routing
+												</FormLabel>
+												<FormDescription className="text-xs">
+													Redirect all 404 requests to index.html for client-side
+													routers (React Router, Vue Router).
+												</FormDescription>
+											</div>
+											<FormControl>
+												<Checkbox
+													checked={field.value}
+													onCheckedChange={field.onChange}
+												/>
+											</FormControl>
+										</FormItem>
+									)}
+								/>
+							</div>
+						)}
+
+						{/* Advanced Builders & Settings Collapsible */}
+						<div className="pt-2 border-t">
+							<button
+								type="button"
+								onClick={() => setShowAdvanced(!showAdvanced)}
+								className="flex items-center justify-between w-full text-xs font-medium text-muted-foreground hover:text-foreground py-1"
+							>
+								<span className="flex items-center gap-1.5">
+									<Settings2 className="size-3.5" />
+									Advanced Builders & Legacy Buildpacks
+								</span>
+								{showAdvanced ? (
+									<ChevronDown className="size-4" />
+								) : (
+									<ChevronRight className="size-4" />
+								)}
+							</button>
+
+							{showAdvanced && (
+								<div className="mt-4 flex flex-col gap-4 pl-2 border-l-2 border-primary/20">
+									<FormField
+										control={form.control}
+										name="buildType"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Alternative Builders</FormLabel>
+												<Select
+													onValueChange={field.onChange}
+													value={field.value}
+												>
+													<FormControl>
+														<SelectTrigger>
+															<SelectValue placeholder="Select builder" />
+														</SelectTrigger>
+													</FormControl>
+													<SelectContent>
+														<SelectItem value={BuildType.nixpacks}>
+															Nixpacks (Default Auto-detect)
+														</SelectItem>
+														<SelectItem value={BuildType.dockerfile}>
+															Dockerfile
+														</SelectItem>
+														<SelectItem value={BuildType.static}>
+															Static HTML / SPA
+														</SelectItem>
+														<SelectItem value={BuildType.railpack}>
+															Railpack (Railway Builder)
+														</SelectItem>
+														<SelectItem value={BuildType.heroku_buildpacks}>
+															Heroku Buildpacks
+														</SelectItem>
+														<SelectItem value={BuildType.paketo_buildpacks}>
+															Paketo Cloud Native Buildpacks
+														</SelectItem>
+													</SelectContent>
+												</Select>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+
+									{/* Railpack options */}
+									{buildType === BuildType.railpack && (
+										<div className="p-3 bg-muted/30 rounded-lg flex flex-col gap-2">
+											<FormField
+												control={form.control}
+												name="railpackVersion"
+												render={({ field }) => (
+													<FormItem>
+														<FormLabel>Railpack Version</FormLabel>
+														<FormControl>
+															<Select
+																onValueChange={field.onChange}
+																value={field.value || "0.15.4"}
+															>
+																<SelectTrigger>
+																	<SelectValue placeholder="Select version" />
+																</SelectTrigger>
+																<SelectContent>
+																	{RAILPACK_VERSIONS.map((ver) => (
+																		<SelectItem key={ver} value={ver}>
+																			{ver}
+																		</SelectItem>
+																	))}
+																</SelectContent>
+															</Select>
+														</FormControl>
+														<FormMessage />
+													</FormItem>
+												)}
+											/>
+										</div>
+									)}
+
+									{/* Nixpacks publish directory */}
+									{buildType === BuildType.nixpacks && (
+										<FormField
+											control={form.control}
+											name="publishDirectory"
+											render={({ field }) => (
+												<FormItem>
+													<FormLabel>Publish Directory (Optional)</FormLabel>
+													<FormDescription className="text-xs">
+														Directory containing output artifacts to serve
+														(e.g. dist, out, build)
+													</FormDescription>
+													<FormControl>
+														<Input
+															placeholder="dist"
+															{...field}
+															value={field.value || ""}
+														/>
+													</FormControl>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+									)}
+								</div>
+							)}
+						</div>
+
+						<div className="flex justify-end">
+							<Button type="submit" isLoading={isPending}>
+								Save Build Configuration
 							</Button>
 						</div>
 					</form>

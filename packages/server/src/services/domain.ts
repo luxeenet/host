@@ -11,22 +11,124 @@ import { getPublicIpWithFallback } from "@dokploy/server/wss/utils";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import type { z } from "zod";
-import { type apiCreateDomain, domains } from "../db/schema";
+import { type apiCreateDomain, domains, applications, compose } from "../db/schema";
 import { findApplicationById } from "./application";
 import { detectCDNProvider } from "./cdn";
 import { findServerById } from "./server";
 
 export type Domain = typeof domains.$inferSelect;
 
+export const getServiceOrganizationId = async (
+	options: {
+		applicationId?: string | null;
+		composeId?: string | null;
+		previewDeploymentId?: string | null;
+	},
+	tx: any = db,
+): Promise<string | null> => {
+	if (options.applicationId) {
+		const app = await tx.query.applications.findFirst({
+			where: eq(applications.applicationId, options.applicationId),
+			with: {
+				environment: {
+					with: {
+						project: true,
+					},
+				},
+			},
+		});
+		return app?.environment?.project?.organizationId || null;
+	}
+
+	if (options.composeId) {
+		const comp = await tx.query.compose.findFirst({
+			where: eq(compose.composeId, options.composeId),
+			with: {
+				environment: {
+					with: {
+						project: true,
+					},
+				},
+			},
+		});
+		return comp?.environment?.project?.organizationId || null;
+	}
+
+	return null;
+};
+
+export const checkDomainTenantConflict = async (
+	host: string,
+	targetOrgId: string | null,
+	currentDomainId?: string,
+	tx: any = db,
+) => {
+	if (!host || !targetOrgId) return;
+	const cleanHost = host.trim().toLowerCase();
+
+	const existingDomains = await tx.query.domains.findMany({
+		with: {
+			application: {
+				with: {
+					environment: {
+						with: {
+							project: true,
+						},
+					},
+				},
+			},
+			compose: {
+				with: {
+					environment: {
+						with: {
+							project: true,
+						},
+					},
+				},
+			},
+		},
+	});
+
+	for (const d of existingDomains) {
+		if (currentDomainId && d.domainId === currentDomainId) continue;
+		if (d.host?.trim().toLowerCase() === cleanHost) {
+			const ownerOrgId =
+				d.application?.environment?.project?.organizationId ||
+				d.compose?.environment?.project?.organizationId ||
+				null;
+
+			if (ownerOrgId && ownerOrgId !== targetOrgId) {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: `The domain "${host}" is already registered to another organization. To use it here, remove it from the other organization first or verify DNS ownership.`,
+				});
+			}
+		}
+	}
+};
+
 export const createDomain = async (
 	input: z.infer<typeof apiCreateDomain>,
 	tx: any = db,
 ) => {
+	const host = input.host?.trim();
+	if (host) {
+		const targetOrgId = await getServiceOrganizationId(
+			{
+				applicationId: input.applicationId,
+				composeId: input.composeId,
+				previewDeploymentId: input.previewDeploymentId,
+			},
+			tx,
+		);
+		await checkDomainTenantConflict(host, targetOrgId, undefined, tx);
+	}
+
 	const domain = await tx
 		.insert(domains)
 		.values({
 			...input,
-			host: input.host?.trim(),
+			host: host,
 		} as typeof domains.$inferInsert)
 		.returning()
 		.then((response: any) => response[0]);
@@ -300,3 +402,57 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T | null> => {
 		new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
 	]).catch(() => null);
 };
+
+export interface DnsInstructions {
+	host: string;
+	recordType: "A" | "CNAME";
+	recordName: string;
+	recordValue: string;
+	serverIp: string;
+	isSubdomain: boolean;
+	verified: boolean;
+	currentIps: string[];
+	message: string;
+	cdnProvider?: string;
+}
+
+export const getDnsInstructionsForDomain = async (
+	host: string,
+	serverId?: string | null,
+): Promise<DnsInstructions> => {
+	const cleanHost = host.replace(/^https?:\/\//, "").split("/")[0]?.trim().toLowerCase() || "";
+	const serverCandidates = await getServerIpCandidates(serverId);
+	const settings = await getWebServerSettings();
+	const expectedIp = serverCandidates?.[0] || settings?.serverIp || "127.0.0.1";
+
+	const parts = cleanHost.split(".");
+	const isSubdomain = parts.length > 2;
+	const recordName = isSubdomain ? parts.slice(0, parts.length - 2).join(".") : "@";
+
+	const validation = await validateDomain(cleanHost, [expectedIp]);
+
+	let message = "Domain is verified and pointing to this server.";
+	if (!validation.isValid) {
+		if (validation.resolvedIp) {
+			message = `Domain currently resolves to ${validation.resolvedIp}, but expected ${expectedIp}. Update your DNS A record.`;
+		} else {
+			message = `DNS record not found yet. Add an A record with Name "${recordName}" and Value "${expectedIp}" at your DNS provider.`;
+		}
+	} else if (validation.cdnProvider) {
+		message = `Domain is routed through ${validation.cdnProvider}. SSL and traffic will proxy through the CDN.`;
+	}
+
+	return {
+		host: cleanHost,
+		recordType: "A",
+		recordName,
+		recordValue: expectedIp,
+		serverIp: expectedIp,
+		isSubdomain,
+		verified: validation.isValid,
+		currentIps: validation.resolvedIp ? validation.resolvedIp.split(", ") : [],
+		message,
+		cdnProvider: validation.cdnProvider,
+	};
+};
+

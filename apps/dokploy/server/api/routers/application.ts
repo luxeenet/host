@@ -12,6 +12,7 @@ import {
 	getApplicationStats,
 	getContainerLogs,
 	getWebServerSettings,
+	inspectApplication,
 	IS_CLOUD,
 	mechanizeDockerContainer,
 	readConfig,
@@ -22,6 +23,7 @@ import {
 	removePreviewDeployment,
 	removeService,
 	removeTraefikConfig,
+	runPreflightCheck,
 	startService,
 	startServiceRemote,
 	stopService,
@@ -1310,5 +1312,19 @@ export const applicationRouter = createTRPCRouter({
 				input.search,
 				application.serverId,
 			);
+		}),
+
+	inspectApp: protectedProcedure
+		.input(apiFindOneApplication)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.applicationId, "read");
+			return await inspectApplication(input.applicationId);
+		}),
+
+	preflightCheck: protectedProcedure
+		.input(apiFindOneApplication)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.applicationId, "read");
+			return await runPreflightCheck(input.applicationId);
 		}),
 });

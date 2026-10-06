@@ -24,6 +24,10 @@ import {
 	addNewService,
 	checkServiceAccess,
 } from "@dokploy/server/services/permission";
+import {
+	assertEntitlement,
+	PlanEntitlementService,
+} from "@dokploy/server/services/plan-entitlement";
 import { findProjectById } from "@dokploy/server/services/project";
 import {
 	getProviderHeaders,
@@ -34,10 +38,6 @@ import {
 import { TRPCError } from "@trpc/server";
 import { generateText } from "ai";
 import { z } from "zod";
-import {
-	assertEntitlement,
-	PlanEntitlementService,
-} from "@dokploy/server/services/plan-entitlement";
 import { slugify } from "@/lib/slug";
 import {
 	adminProcedure,
@@ -425,6 +425,16 @@ ${input.logs}`,
 						ctx.session.activeOrganizationId,
 					),
 				);
+			}
+			const aiSetting = await getAiSettingById(input.aiId);
+			if (
+				aiSetting.organizationId !== ctx.session.activeOrganizationId &&
+				!ctx.user.isPlatformAdmin
+			) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Access denied",
+				});
 			}
 			try {
 				return await suggestVariants({

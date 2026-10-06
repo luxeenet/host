@@ -1,4 +1,5 @@
 "use client";
+import { brand } from "@paas/branding";
 import type { inferRouterOutputs } from "@trpc/server";
 import {
 	Activity,
@@ -98,7 +99,6 @@ import {
 	useSidebar,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
-import { brand } from "@paas/branding";
 import { cn } from "@/lib/utils";
 import type { AppRouter } from "@/server/api/root";
 import { api } from "@/utils/api";
@@ -358,8 +358,7 @@ const MENU: Menu = {
 			title: "Notifications",
 			url: "/dashboard/settings/notifications",
 			icon: Bell,
-			isEnabled: ({ permissions }) =>
-				permissions ? !!permissions?.notification?.read : true,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
@@ -921,24 +920,29 @@ export default function Page({ children }: Props) {
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 
 	// Fetch plan snapshot to gate plan-restricted nav items
-	const { data: currentSubscription } = api.subscription.getCurrent.useQuery(undefined, {
-		staleTime: 5 * 60 * 1000,
-		refetchOnWindowFocus: false,
-	});
+	const { data: currentSubscription } = api.subscription.getCurrent.useQuery(
+		undefined,
+		{
+			staleTime: 5 * 60 * 1000,
+			refetchOnWindowFocus: false,
+		},
+	);
 
 	// Build a feature flag map from the plan's features list
 	const planFeatures = currentSubscription?.plan?.features
 		? Object.fromEntries(
-				currentSubscription.plan.features.map((f: { featureKey: string; enabled: boolean }) => [
-					f.featureKey,
-					f.enabled,
-				]),
-		  )
+				currentSubscription.plan.features.map(
+					(f: { featureKey: string; enabled: boolean }) => [
+						f.featureKey,
+						f.enabled,
+					],
+				),
+			)
 		: null;
 
 	// isPlatformAdmin comes from the user context (set in user.get or trpc ctx)
-	const isPlatformAdmin = !!(auth as any)?.user?.isPlatformAdmin ||
-		!!(auth as any)?.isPlatformAdmin;
+	const isPlatformAdmin =
+		!!(auth as any)?.user?.isPlatformAdmin || !!(auth as any)?.isPlatformAdmin;
 
 	const {
 		home: filteredHome,

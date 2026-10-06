@@ -31,6 +31,10 @@ import {
 	hasPermission,
 	resolvePermissions,
 } from "@dokploy/server/services/permission";
+import {
+	assertEntitlement,
+	PlanEntitlementService,
+} from "@dokploy/server/services/plan-entitlement";
 import { hasValidLicense } from "@dokploy/server/services/proprietary/license-key";
 import { TRPCError } from "@trpc/server";
 import * as bcrypt from "bcrypt";
@@ -38,10 +42,6 @@ import { and, asc, desc, eq, gt, ne } from "drizzle-orm";
 import { z } from "zod";
 import { apiKeyNameSchema } from "@/lib/api-keys";
 import { audit } from "@/server/api/utils/audit";
-import {
-	PlanEntitlementService,
-	assertEntitlement,
-} from "@dokploy/server/services/plan-entitlement";
 import {
 	adminProcedure,
 	createTRPCRouter,
@@ -553,13 +553,15 @@ export const userRouter = createTRPCRouter({
 					if (input.appName === "dokploy") {
 						throw new TRPCError({
 							code: "FORBIDDEN",
-							message: "System monitoring is reserved for platform administrators.",
+							message:
+								"System monitoring is reserved for platform administrators.",
 						});
 					}
-					const isOwner = await PlanEntitlementService.verifyAppNameBelongsToOrg(
-						input.appName,
-						ctx.session?.activeOrganizationId || "",
-					);
+					const isOwner =
+						await PlanEntitlementService.verifyAppNameBelongsToOrg(
+							input.appName,
+							ctx.session?.activeOrganizationId || "",
+						);
 					if (!isOwner) {
 						throw new TRPCError({
 							code: "FORBIDDEN",
@@ -778,6 +780,12 @@ export const userRouter = createTRPCRouter({
 			}
 
 			const notification = await findNotificationById(input.notificationId);
+			if (notification.organizationId !== ctx.session.activeOrganizationId) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "You are not authorized to use this email provider",
+				});
+			}
 
 			const email = notification.email;
 			const resend = notification.resend;

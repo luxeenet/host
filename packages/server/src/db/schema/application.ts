@@ -432,18 +432,24 @@ export const apiReloadApplication = createSchema
 	})
 	.required();
 
-export const apiSaveBuildType = createSchema
-	.pick({
-		applicationId: true,
-		buildType: true,
-		dockerfile: true,
-		dockerContextPath: true,
-		dockerBuildStage: true,
-		herokuVersion: true,
-		railpackVersion: true,
-	})
-	.required()
-	.merge(createSchema.pick({ publishDirectory: true, isStaticSpa: true }));
+export const apiSaveBuildType = z.object({
+	applicationId: z.string().min(1),
+	buildType: z.enum([
+		"dockerfile",
+		"heroku_buildpacks",
+		"paketo_buildpacks",
+		"nixpacks",
+		"static",
+		"railpack",
+	]),
+	dockerfile: z.string().nullable().optional(),
+	dockerContextPath: z.string().nullable().optional(),
+	dockerBuildStage: z.string().nullable().optional(),
+	herokuVersion: z.string().nullable().optional(),
+	railpackVersion: z.string().nullable().optional(),
+	publishDirectory: z.string().nullable().optional(),
+	isStaticSpa: z.boolean().nullable().optional(),
+});
 
 const branchField = z
 	.string()

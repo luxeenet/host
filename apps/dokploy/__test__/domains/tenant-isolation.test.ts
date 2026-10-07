@@ -66,4 +66,15 @@ describe("Domain Tenant Isolation & Conflict Prevention", () => {
 		expect(apexInstructions.recordName).toBe("@");
 		expect(apexInstructions.isSubdomain).toBe(false);
 	});
+
+	it("should never use localhost or internal container IP when public IP is available", async () => {
+		const { generateRandomDomain } = await import("@dokploy/server/templates");
+		const domain = generateRandomDomain({
+			serverIp: "45.88.188.6",
+			projectName: "butax",
+		});
+		expect(domain).toContain("45-88-188-6.sslip.io");
+		expect(domain).not.toContain("127-0-0-1");
+		expect(domain).not.toContain("localhost");
+	});
 });

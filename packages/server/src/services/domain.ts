@@ -249,28 +249,58 @@ export const createDomain = async (
 	return domain;
 };
 
+export const getPublicServerIp = async (serverId?: string): Promise<string> => {
+	if (serverId) {
+		try {
+			const server = await findServerById(serverId);
+			if (server.ipAddress && isIP(server.ipAddress) && server.ipAddress !== "127.0.0.1" && server.ipAddress !== "localhost") {
+				return server.ipAddress;
+			}
+		} catch {}
+	}
+
+	const settings = await getWebServerSettings();
+	if (
+		settings?.serverIp &&
+		isIP(settings.serverIp) &&
+		settings.serverIp !== "127.0.0.1" &&
+		settings.serverIp !== "localhost"
+	) {
+		return settings.serverIp;
+	}
+
+	try {
+		const publicIp = await getPublicIpWithFallback();
+		if (publicIp && isIP(publicIp) && publicIp !== "127.0.0.1") {
+			return publicIp;
+		}
+	} catch {}
+
+	const candidates = await getServerIpCandidates(serverId);
+	const publicCandidate = candidates.find(
+		(ip) =>
+			isIP(ip) &&
+			ip !== "127.0.0.1" &&
+			!ip.startsWith("127.") &&
+			!ip.startsWith("172.") &&
+			!ip.startsWith("10.") &&
+			!ip.startsWith("192.168."),
+	);
+	if (publicCandidate) {
+		return publicCandidate;
+	}
+
+	return settings?.serverIp || "127.0.0.1";
+};
+
 export const generateTraefikMeDomain = async (
 	appName: string,
 	_userId: string,
 	serverId?: string,
 ) => {
-	if (serverId) {
-		const server = await findServerById(serverId);
-		return generateRandomDomain({
-			serverIp: server.ipAddress,
-			projectName: appName,
-		});
-	}
-
-	if (process.env.NODE_ENV === "development") {
-		return generateRandomDomain({
-			serverIp: "",
-			projectName: appName,
-		});
-	}
-	const settings = await getWebServerSettings();
+	const serverIp = await getPublicServerIp(serverId);
 	return generateRandomDomain({
-		serverIp: settings?.serverIp || "",
+		serverIp,
 		projectName: appName,
 	});
 };
@@ -653,11 +683,12 @@ export const verifyApplicationLiveUrl = async (
 		application.applicationStatus === "running";
 
 	// Check DNS resolution
+	let resolvedIps: string[] = [];
 	let dnsResolves = false;
 	try {
 		const cleanDnsHost = (host.split("/")[0] || host).trim();
-		const resolved = await resolveDns(cleanDnsHost);
-		dnsResolves = resolved.length > 0;
+		resolvedIps = await resolveDns(cleanDnsHost);
+		dnsResolves = resolvedIps.length > 0;
 	} catch {
 		dnsResolves = false;
 	}
@@ -668,6 +699,7 @@ export const verifyApplicationLiveUrl = async (
 	let responseTimeMs = 0;
 	let appResponding = false;
 	let httpsActive = false;
+	let sslError: string | undefined;
 
 	for (let attempt = 1; attempt <= maxRetries; attempt++) {
 		const startTime = Date.now();
@@ -688,9 +720,9 @@ export const verifyApplicationLiveUrl = async (
 
 			responseTimeMs = Date.now() - startTime;
 			lastStatusCode = response.status;
-			httpsActive =
-				testUrl.startsWith("https://") ||
-				response.url.startsWith("https://");
+			if (testUrl.startsWith("https://")) {
+				httpsActive = response.url.startsWith("https://");
+			}
 
 			// Accept any 2xx or 3xx redirect or 401/403 (auth protected app is live)
 			if (
@@ -705,6 +737,14 @@ export const verifyApplicationLiveUrl = async (
 			}
 		} catch (err) {
 			lastError = err instanceof Error ? err.message : String(err);
+			if (
+				lastError.includes("CERT_") ||
+				lastError.includes("certificate") ||
+				lastError.includes("SSL") ||
+				lastError.includes("TLS")
+			) {
+				sslError = lastError;
+			}
 			if (attempt < maxRetries) {
 				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
 			}
@@ -713,23 +753,34 @@ export const verifyApplicationLiveUrl = async (
 
 	const isLive =
 		isHealthyDeployment &&
-		(appResponding || (dnsResolves && lastStatusCode !== undefined));
+		(appResponding || (dnsResolves && lastStatusCode !== undefined && lastStatusCode < 500));
 
-	const message = isLive
-		? "Your application is live and responding."
-		: "Your application was deployed, but the test URL is not responding yet.";
+	let message = "";
+	if (isLive) {
+		if (isHttps && !httpsActive) {
+			message = "Application is live. HTTPS certificate provisioning is in progress.";
+		} else {
+			message = "Your application is live and responding.";
+		}
+	} else {
+		message = "Your application was deployed, but the test URL is not responding yet.";
+	}
 
 	let details = "";
 	if (!isLive) {
 		if (!isHealthyDeployment) {
-			details = `Application deployment status is currently ${application.applicationStatus}`;
+			details = `Application deployment status is currently ${application.applicationStatus}.`;
 		} else if (!dnsResolves) {
 			details = `DNS lookup for "${host}" could not be resolved. Ensure DNS records or sslip.io/wildcard routing is available.`;
+		} else if (sslError) {
+			details = `HTTPS certificate verification pending: ${sslError}. Let's Encrypt SSL issuance is in progress.`;
 		} else if (lastError) {
 			details = `Connection error: ${lastError}`;
 		} else if (lastStatusCode) {
 			details = `Application returned HTTP status ${lastStatusCode}.`;
 		}
+	} else if (isHttps && !httpsActive && sslError) {
+		details = `HTTPS certificate is pending: ${sslError}`;
 	}
 
 	return {

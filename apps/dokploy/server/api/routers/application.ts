@@ -32,6 +32,7 @@ import {
 	updateApplication,
 	updateApplicationStatus,
 	updateDeploymentStatus,
+	verifyApplicationLiveUrl,
 	writeConfig,
 	writeConfigRemote,
 } from "@dokploy/server";
@@ -1326,5 +1327,12 @@ export const applicationRouter = createTRPCRouter({
 		.query(async ({ input, ctx }) => {
 			await checkServiceAccess(ctx, input.applicationId, "read");
 			return await runPreflightCheck(input.applicationId);
+		}),
+
+	verifyLiveUrl: protectedProcedure
+		.input(apiFindOneApplication)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.applicationId, "read");
+			return await verifyApplicationLiveUrl(input.applicationId);
 		}),
 });

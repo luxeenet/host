@@ -6,24 +6,20 @@ import {
 
 describe("Domain Tenant Isolation & Conflict Prevention", () => {
 	it("should reject domain creation when domain is already registered to another organization", async () => {
-		const mockTx: any = {
-			query: {
-				domains: {
-					findMany: vi.fn(async () => [
-						{
-							domainId: "dom-1",
-							host: "app.customer-company.com",
-							application: {
-								environment: {
-									project: {
-										organizationId: "org-tenant-a",
-									},
-								},
-							},
-						},
-					]),
+		const mockConflictQuery = {
+			from: vi.fn().mockReturnThis(),
+			innerJoin: vi.fn().mockReturnThis(),
+			where: vi.fn().mockReturnThis(),
+			limit: vi.fn().mockResolvedValue([
+				{
+					domainId: "dom-1",
+					host: "app.customer-company.com",
+					organizationId: "org-tenant-a",
 				},
-			},
+			]),
+		};
+		const mockTx: any = {
+			select: vi.fn(() => mockConflictQuery),
 		};
 
 		// Attempting to attach app.customer-company.com in org-tenant-b should throw CONFLICT
@@ -38,24 +34,14 @@ describe("Domain Tenant Isolation & Conflict Prevention", () => {
 	});
 
 	it("should allow domain creation when domain belongs to the same organization", async () => {
+		const mockConflictQuery = {
+			from: vi.fn().mockReturnThis(),
+			innerJoin: vi.fn().mockReturnThis(),
+			where: vi.fn().mockReturnThis(),
+			limit: vi.fn().mockResolvedValue([]),
+		};
 		const mockTx: any = {
-			query: {
-				domains: {
-					findMany: vi.fn(async () => [
-						{
-							domainId: "dom-1",
-							host: "app.customer-company.com",
-							application: {
-								environment: {
-									project: {
-										organizationId: "org-tenant-a",
-									},
-								},
-							},
-						},
-					]),
-				},
-			},
+			select: vi.fn(() => mockConflictQuery),
 		};
 
 		// Same org adding another path or updating should succeed

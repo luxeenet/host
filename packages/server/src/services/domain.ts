@@ -9,11 +9,20 @@ import { execAsyncRemote } from "@dokploy/server/utils/process/execAsync";
 import { manageDomain } from "@dokploy/server/utils/traefik/domain";
 import { getPublicIpWithFallback } from "@dokploy/server/wss/utils";
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type { z } from "zod";
-import { type apiCreateDomain, domains, applications, compose } from "../db/schema";
+import {
+	type apiCreateDomain,
+	domains,
+	applications,
+	compose,
+	environments,
+	projects,
+	previewDeployments,
+} from "../db/schema";
 import { findApplicationById } from "./application";
 import { detectCDNProvider } from "./cdn";
+import { findComposeById } from "./compose";
 import { findServerById } from "./server";
 
 export type Domain = typeof domains.$inferSelect;
@@ -27,31 +36,54 @@ export const getServiceOrganizationId = async (
 	tx: any = db,
 ): Promise<string | null> => {
 	if (options.applicationId) {
-		const app = await tx.query.applications.findFirst({
-			where: eq(applications.applicationId, options.applicationId),
-			with: {
-				environment: {
-					with: {
-						project: true,
-					},
-				},
-			},
-		});
-		return app?.environment?.project?.organizationId || null;
+		const app = await tx
+			.select({ organizationId: projects.organizationId })
+			.from(applications)
+			.innerJoin(
+				environments,
+				eq(applications.environmentId, environments.environmentId),
+			)
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(eq(applications.applicationId, options.applicationId))
+			.limit(1);
+		return app[0]?.organizationId || null;
 	}
 
 	if (options.composeId) {
-		const comp = await tx.query.compose.findFirst({
-			where: eq(compose.composeId, options.composeId),
-			with: {
-				environment: {
-					with: {
-						project: true,
-					},
-				},
-			},
-		});
-		return comp?.environment?.project?.organizationId || null;
+		const comp = await tx
+			.select({ organizationId: projects.organizationId })
+			.from(compose)
+			.innerJoin(
+				environments,
+				eq(compose.environmentId, environments.environmentId),
+			)
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(eq(compose.composeId, options.composeId))
+			.limit(1);
+		return comp[0]?.organizationId || null;
+	}
+
+	if (options.previewDeploymentId) {
+		const prev = await tx
+			.select({ organizationId: projects.organizationId })
+			.from(previewDeployments)
+			.innerJoin(
+				applications,
+				eq(previewDeployments.applicationId, applications.applicationId),
+			)
+			.innerJoin(
+				environments,
+				eq(applications.environmentId, environments.environmentId),
+			)
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(
+				eq(
+					previewDeployments.previewDeploymentId,
+					options.previewDeploymentId,
+				),
+			)
+			.limit(1);
+		return prev[0]?.organizationId || null;
 	}
 
 	return null;
@@ -66,44 +98,113 @@ export const checkDomainTenantConflict = async (
 	if (!host || !targetOrgId) return;
 	const cleanHost = host.trim().toLowerCase();
 
-	const existingDomains = await tx.query.domains.findMany({
-		with: {
-			application: {
-				with: {
-					environment: {
-						with: {
-							project: true,
-						},
-					},
-				},
-			},
-			compose: {
-				with: {
-					environment: {
-						with: {
-							project: true,
-						},
-					},
-				},
-			},
-		},
-	});
+	// Check application domains
+	const appConflicts = await tx
+		.select({
+			domainId: domains.domainId,
+			host: domains.host,
+			organizationId: projects.organizationId,
+		})
+		.from(domains)
+		.innerJoin(
+			applications,
+			eq(domains.applicationId, applications.applicationId),
+		)
+		.innerJoin(
+			environments,
+			eq(applications.environmentId, environments.environmentId),
+		)
+		.innerJoin(projects, eq(environments.projectId, projects.projectId))
+		.where(
+			and(
+				sql`lower(trim(${domains.host})) = ${cleanHost}`,
+				currentDomainId ? ne(domains.domainId, currentDomainId) : undefined,
+			),
+		)
+		.limit(1);
 
-	for (const d of existingDomains) {
-		if (currentDomainId && d.domainId === currentDomainId) continue;
-		if (d.host?.trim().toLowerCase() === cleanHost) {
-			const ownerOrgId =
-				d.application?.environment?.project?.organizationId ||
-				d.compose?.environment?.project?.organizationId ||
-				null;
+	if (
+		appConflicts.length > 0 &&
+		appConflicts[0].organizationId &&
+		appConflicts[0].organizationId !== targetOrgId
+	) {
+		throw new TRPCError({
+			code: "CONFLICT",
+			message: `The domain "${host}" is already registered to another organization. To use it here, remove it from the other organization first or verify DNS ownership.`,
+		});
+	}
 
-			if (ownerOrgId && ownerOrgId !== targetOrgId) {
-				throw new TRPCError({
-					code: "CONFLICT",
-					message: `The domain "${host}" is already registered to another organization. To use it here, remove it from the other organization first or verify DNS ownership.`,
-				});
-			}
-		}
+	// Check compose domains
+	const composeConflicts = await tx
+		.select({
+			domainId: domains.domainId,
+			host: domains.host,
+			organizationId: projects.organizationId,
+		})
+		.from(domains)
+		.innerJoin(compose, eq(domains.composeId, compose.composeId))
+		.innerJoin(
+			environments,
+			eq(compose.environmentId, environments.environmentId),
+		)
+		.innerJoin(projects, eq(environments.projectId, projects.projectId))
+		.where(
+			and(
+				sql`lower(trim(${domains.host})) = ${cleanHost}`,
+				currentDomainId ? ne(domains.domainId, currentDomainId) : undefined,
+			),
+		)
+		.limit(1);
+
+	if (
+		composeConflicts.length > 0 &&
+		composeConflicts[0].organizationId &&
+		composeConflicts[0].organizationId !== targetOrgId
+	) {
+		throw new TRPCError({
+			code: "CONFLICT",
+			message: `The domain "${host}" is already registered to another organization. To use it here, remove it from the other organization first or verify DNS ownership.`,
+		});
+	}
+
+	// Check preview deployment domains
+	const previewConflicts = await tx
+		.select({
+			domainId: domains.domainId,
+			host: domains.host,
+			organizationId: projects.organizationId,
+		})
+		.from(domains)
+		.innerJoin(
+			previewDeployments,
+			eq(domains.previewDeploymentId, previewDeployments.previewDeploymentId),
+		)
+		.innerJoin(
+			applications,
+			eq(previewDeployments.applicationId, applications.applicationId),
+		)
+		.innerJoin(
+			environments,
+			eq(applications.environmentId, environments.environmentId),
+		)
+		.innerJoin(projects, eq(environments.projectId, projects.projectId))
+		.where(
+			and(
+				sql`lower(trim(${domains.host})) = ${cleanHost}`,
+				currentDomainId ? ne(domains.domainId, currentDomainId) : undefined,
+			),
+		)
+		.limit(1);
+
+	if (
+		previewConflicts.length > 0 &&
+		previewConflicts[0].organizationId &&
+		previewConflicts[0].organizationId !== targetOrgId
+	) {
+		throw new TRPCError({
+			code: "CONFLICT",
+			message: `The domain "${host}" is already registered to another organization. To use it here, remove it from the other organization first or verify DNS ownership.`,
+		});
 	}
 };
 
@@ -182,47 +283,93 @@ export const generateWildcardDomain = (
 };
 
 export const findDomainById = async (domainId: string) => {
-	const domain = await db.query.domains.findFirst({
-		where: eq(domains.domainId, domainId),
-		with: {
-			application: {
-				columns: { applicationId: true, appName: true, name: true },
-			},
-		},
-	});
+	const domainRows = await db
+		.select()
+		.from(domains)
+		.where(eq(domains.domainId, domainId))
+		.limit(1);
+
+	const domain = domainRows[0];
 	if (!domain) {
 		throw new TRPCError({
 			code: "NOT_FOUND",
 			message: "Domain not found",
 		});
 	}
-	return domain;
+
+	let app: { applicationId: string; appName: string; name: string } | null = null;
+	if (domain.applicationId) {
+		try {
+			const fullApp = await findApplicationById(domain.applicationId);
+			app = {
+				applicationId: fullApp.applicationId,
+				appName: fullApp.appName,
+				name: fullApp.name,
+			};
+		} catch {}
+	}
+
+	let comp: { composeId: string; appName: string; name: string } | null = null;
+	if (domain.composeId) {
+		try {
+			const fullComp = await findComposeById(domain.composeId);
+			comp = {
+				composeId: fullComp.composeId,
+				appName: fullComp.appName,
+				name: fullComp.name,
+			};
+		} catch {}
+	}
+
+	return {
+		...domain,
+		application: app,
+		compose: comp,
+	};
 };
 
 export const findDomainsByApplicationId = async (applicationId: string) => {
-	const domainsArray = await db.query.domains.findMany({
-		where: eq(domains.applicationId, applicationId),
-		with: {
-			application: {
-				columns: { applicationId: true, appName: true, name: true },
-			},
-		},
-	});
+	const rows = await db
+		.select()
+		.from(domains)
+		.where(eq(domains.applicationId, applicationId));
 
-	return domainsArray;
+	let app: { applicationId: string; appName: string; name: string } | null = null;
+	try {
+		const fullApp = await findApplicationById(applicationId);
+		app = {
+			applicationId: fullApp.applicationId,
+			appName: fullApp.appName,
+			name: fullApp.name,
+		};
+	} catch {}
+
+	return rows.map((domain) => ({
+		...domain,
+		application: app,
+	}));
 };
 
 export const findDomainsByComposeId = async (composeId: string) => {
-	const domainsArray = await db.query.domains.findMany({
-		where: eq(domains.composeId, composeId),
-		with: {
-			compose: {
-				columns: { composeId: true, appName: true, name: true },
-			},
-		},
-	});
+	const rows = await db
+		.select()
+		.from(domains)
+		.where(eq(domains.composeId, composeId));
 
-	return domainsArray;
+	let comp: { composeId: string; appName: string; name: string } | null = null;
+	try {
+		const fullComp = await findComposeById(composeId);
+		comp = {
+			composeId: fullComp.composeId,
+			appName: fullComp.appName,
+			name: fullComp.name,
+		};
+	} catch {}
+
+	return rows.map((domain) => ({
+		...domain,
+		compose: comp,
+	}));
 };
 
 export const updateDomainById = async (
@@ -453,6 +600,151 @@ export const getDnsInstructionsForDomain = async (
 		currentIps: validation.resolvedIp ? validation.resolvedIp.split(", ") : [],
 		message,
 		cdnProvider: validation.cdnProvider,
+	};
+};
+
+export interface LiveReachabilityResult {
+	isLive: boolean;
+	testUrl: string;
+	checks: {
+		deploymentHealthy: boolean;
+		dnsResolves: boolean;
+		httpsActive: boolean;
+		appResponding: boolean;
+	};
+	statusCode?: number;
+	responseTimeMs?: number;
+	message: string;
+	details?: string;
+}
+
+export const verifyApplicationLiveUrl = async (
+	applicationId: string,
+	options: { maxRetries?: number; retryDelayMs?: number } = {},
+): Promise<LiveReachabilityResult> => {
+	const maxRetries = options.maxRetries ?? 3;
+	const retryDelayMs = options.retryDelayMs ?? 1500;
+
+	const application = await findApplicationById(applicationId);
+	const appDomains = await findDomainsByApplicationId(applicationId);
+
+	const activeDomain = appDomains.find((d) => d.enabled) || appDomains[0];
+	let testUrl = "";
+	let host = "";
+	let isHttps = true;
+
+	if (activeDomain?.host) {
+		host = activeDomain.host.trim();
+		isHttps = activeDomain.https;
+		testUrl = `${isHttps ? "https" : "http"}://${host}${activeDomain.path || "/"}`;
+	} else {
+		const randomTraefikMe = await generateTraefikMeDomain(
+			application.appName,
+			application.environment.project.organizationId,
+			application.serverId || undefined,
+		);
+		host = randomTraefikMe;
+		isHttps = false;
+		testUrl = `http://${host}/`;
+	}
+
+	const isHealthyDeployment =
+		application.applicationStatus === "done" ||
+		application.applicationStatus === "running";
+
+	// Check DNS resolution
+	let dnsResolves = false;
+	try {
+		const cleanDnsHost = (host.split("/")[0] || host).trim();
+		const resolved = await resolveDns(cleanDnsHost);
+		dnsResolves = resolved.length > 0;
+	} catch {
+		dnsResolves = false;
+	}
+
+	// Attempt HTTP(s) reachability with bounded retry
+	let lastStatusCode: number | undefined;
+	let lastError: string | undefined;
+	let responseTimeMs = 0;
+	let appResponding = false;
+	let httpsActive = false;
+
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		const startTime = Date.now();
+		try {
+			const controller = new AbortController();
+			const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+			const response = await fetch(testUrl, {
+				method: "GET",
+				signal: controller.signal,
+				headers: {
+					"User-Agent": "HatDot-HealthCheck/1.0",
+					Accept: "*/*",
+				},
+				redirect: "follow",
+			});
+			clearTimeout(timeoutId);
+
+			responseTimeMs = Date.now() - startTime;
+			lastStatusCode = response.status;
+			httpsActive =
+				testUrl.startsWith("https://") ||
+				response.url.startsWith("https://");
+
+			// Accept any 2xx or 3xx redirect or 401/403 (auth protected app is live)
+			if (
+				(response.status >= 200 && response.status < 400) ||
+				response.status === 401 ||
+				response.status === 403
+			) {
+				appResponding = true;
+				break;
+			} else if (response.status >= 500 && attempt < maxRetries) {
+				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+			}
+		} catch (err) {
+			lastError = err instanceof Error ? err.message : String(err);
+			if (attempt < maxRetries) {
+				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+			}
+		}
+	}
+
+	const isLive =
+		isHealthyDeployment &&
+		(appResponding || (dnsResolves && lastStatusCode !== undefined));
+
+	const message = isLive
+		? "Your application is live and responding."
+		: "Your application was deployed, but the test URL is not responding yet.";
+
+	let details = "";
+	if (!isLive) {
+		if (!isHealthyDeployment) {
+			details = `Application deployment status is currently ${application.applicationStatus}`;
+		} else if (!dnsResolves) {
+			details = `DNS lookup for "${host}" could not be resolved. Ensure DNS records or sslip.io/wildcard routing is available.`;
+		} else if (lastError) {
+			details = `Connection error: ${lastError}`;
+		} else if (lastStatusCode) {
+			details = `Application returned HTTP status ${lastStatusCode}.`;
+		}
+	}
+
+	return {
+		isLive,
+		testUrl,
+		checks: {
+			deploymentHealthy: isHealthyDeployment,
+			dnsResolves,
+			httpsActive,
+			appResponding,
+		},
+		statusCode: lastStatusCode,
+		responseTimeMs: responseTimeMs > 0 ? responseTimeMs : undefined,
+		message,
+		details: details || undefined,
 	};
 };
 

@@ -38,7 +38,11 @@ import {
 	updateDeployment,
 	updateDeploymentStatus,
 } from "./deployment";
-import { type Domain, getDomainHost } from "./domain";
+import {
+	type Domain,
+	getDomainHost,
+	verifyApplicationLiveUrl,
+} from "./domain";
 import {
 	createPreviewDeploymentComment,
 	getIssueComment,
@@ -281,6 +285,37 @@ export const deployApplication = async ({
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updateApplicationStatus(applicationId, "done");
 
+		try {
+			const verifyResult = await verifyApplicationLiveUrl(applicationId);
+			let verifyLog = "\n========================================\n";
+			if (verifyResult.isLive) {
+				verifyLog += "Your application is live.\n\n";
+				verifyLog += `Test URL:\n${verifyResult.testUrl}\n\n`;
+				verifyLog += "✓ Deployment healthy\n";
+				verifyLog += "✓ DNS reachable\n";
+				verifyLog += "✓ Application responding\n";
+				if (verifyResult.checks.httpsActive) {
+					verifyLog += "✓ HTTPS active\n";
+				}
+			} else {
+				verifyLog += "Your application was deployed, but the test URL is not responding yet.\n\n";
+				verifyLog += "We detected:\nApplication is running, but the public URL is not reachable.\n";
+				if (verifyResult.details) {
+					verifyLog += `\nTechnical details:\n${verifyResult.details}\n`;
+				}
+			}
+			verifyLog += "========================================\n";
+			const encodedVerifyLog = encodeBase64(verifyLog);
+			const appendLogCmd = `echo "${encodedVerifyLog}" | base64 -d >> "${deployment.logPath}";`;
+			if (serverId) {
+				await execAsyncRemote(serverId, appendLogCmd);
+			} else {
+				await execAsync(appendLogCmd);
+			}
+		} catch {
+			// Live URL verification is non-blocking for deployment status
+		}
+
 		await sendBuildSuccessNotifications({
 			projectName: application.environment.project.name,
 			applicationName: application.name,
@@ -372,6 +407,37 @@ export const rebuildApplication = async ({
 		await mechanizeDockerContainer(application);
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updateApplicationStatus(applicationId, "done");
+
+		try {
+			const verifyResult = await verifyApplicationLiveUrl(applicationId);
+			let verifyLog = "\n========================================\n";
+			if (verifyResult.isLive) {
+				verifyLog += "Your application is live.\n\n";
+				verifyLog += `Test URL:\n${verifyResult.testUrl}\n\n`;
+				verifyLog += "✓ Deployment healthy\n";
+				verifyLog += "✓ DNS reachable\n";
+				verifyLog += "✓ Application responding\n";
+				if (verifyResult.checks.httpsActive) {
+					verifyLog += "✓ HTTPS active\n";
+				}
+			} else {
+				verifyLog += "Your application was deployed, but the test URL is not responding yet.\n\n";
+				verifyLog += "We detected:\nApplication is running, but the public URL is not reachable.\n";
+				if (verifyResult.details) {
+					verifyLog += `\nTechnical details:\n${verifyResult.details}\n`;
+				}
+			}
+			verifyLog += "========================================\n";
+			const encodedVerifyLog = encodeBase64(verifyLog);
+			const appendLogCmd = `echo "${encodedVerifyLog}" | base64 -d >> "${deployment.logPath}";`;
+			if (serverId) {
+				await execAsyncRemote(serverId, appendLogCmd);
+			} else {
+				await execAsync(appendLogCmd);
+			}
+		} catch {
+			// Live URL verification is non-blocking for deployment status
+		}
 
 		await sendBuildSuccessNotifications({
 			projectName: application.environment.project.name,

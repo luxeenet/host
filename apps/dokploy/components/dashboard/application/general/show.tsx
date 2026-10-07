@@ -11,6 +11,7 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { ShowBuildChooseForm } from "@/components/dashboard/application/build/show";
 import { DeploymentPreflightCard } from "@/components/dashboard/application/general/preflight-card";
+import { LiveStatusCard } from "@/components/dashboard/application/general/live-status-card";
 import { ShowProviderForm } from "@/components/dashboard/application/general/generic/show";
 import { DialogAction } from "@/components/shared/dialog-action";
 import { Button } from "@/components/ui/button";
@@ -332,6 +333,7 @@ export const ShowGeneralApplication = ({ applicationId }: Props) => {
 				</CardContent>
 			</Card>
 			<DeploymentPreflightCard applicationId={applicationId} />
+			<LiveStatusCard applicationId={applicationId} />
 			<ShowProviderForm applicationId={applicationId} />
 			<ShowBuildChooseForm applicationId={applicationId} />
 		</>

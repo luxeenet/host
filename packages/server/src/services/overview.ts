@@ -717,74 +717,164 @@ export const getAllDomainsForOrganization = async (
 		return [];
 	}
 
-	const scopeConditions = [
-		...(appIds.length > 0 ? [inArray(domains.applicationId, appIds)] : []),
-		...(composeIds.length > 0 ? [inArray(domains.composeId, composeIds)] : []),
-		...(previewIds.length > 0
-			? [inArray(domains.previewDeploymentId, previewIds)]
-			: []),
-	];
-
-	const rows = await db.query.domains.findMany({
-		where: or(...scopeConditions),
-		with: {
-			application: {
-				columns: { applicationId: true, ...domainOwnerColumns.columns },
-				with: domainOwnerColumns.with,
-			},
-			compose: {
-				columns: { composeId: true, ...domainOwnerColumns.columns },
-				with: domainOwnerColumns.with,
-			},
-			previewDeployment: {
-				columns: {},
-				with: {
-					application: {
-						columns: { applicationId: true, ...domainOwnerColumns.columns },
-						with: domainOwnerColumns.with,
-					},
-				},
-			},
-		},
-	});
-
 	const result: OverviewDomain[] = [];
-	for (const domain of rows) {
-		const foundOwner = pickFirst<DomainOwnerRow, OverviewDomainOwnerType>([
-			[domain.application, domain.application?.applicationId, "application"],
-			[domain.compose, domain.compose?.composeId, "compose"],
-			[
-				domain.previewDeployment?.application,
-				domain.previewDeployment?.application?.applicationId,
-				"application",
-			],
-		]);
-		const owner = foundOwner ? domainOwnerFrom(...foundOwner) : null;
 
-		if (!owner || owner.organizationId !== orgId) continue;
-		if (accessedServices !== null && !accessedServices.includes(owner.id)) {
-			continue;
+	if (appIds.length > 0) {
+		const appDomainRows = await db
+			.select({
+				domain: domains,
+				serviceId: applications.applicationId,
+				serviceName: applications.name,
+				projectId: projects.projectId,
+				projectName: projects.name,
+				environmentId: environments.environmentId,
+				environmentName: environments.name,
+				organizationId: projects.organizationId,
+			})
+			.from(domains)
+			.innerJoin(
+				applications,
+				eq(domains.applicationId, applications.applicationId),
+			)
+			.innerJoin(
+				environments,
+				eq(applications.environmentId, environments.environmentId),
+			)
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(inArray(domains.applicationId, appIds));
+
+		for (const row of appDomainRows) {
+			if (row.organizationId !== orgId) continue;
+			if (accessedServices !== null && !accessedServices.includes(row.serviceId)) {
+				continue;
+			}
+			result.push({
+				domainId: row.domain.domainId,
+				host: row.domain.host,
+				path: row.domain.path,
+				port: row.domain.port,
+				customEntrypoint: row.domain.customEntrypoint,
+				https: row.domain.https,
+				certificateType: row.domain.certificateType,
+				createdAt: row.domain.createdAt,
+				enabled: row.domain.enabled,
+				domainType: row.domain.domainType,
+				serviceOwnerId: row.serviceId,
+				serviceOwnerType: "application",
+				serviceName: row.serviceName,
+				projectId: row.projectId ?? "",
+				projectName: row.projectName ?? "",
+				environmentId: row.environmentId ?? "",
+				environmentName: row.environmentName ?? "",
+			});
 		}
-
-		result.push({
-			domainId: domain.domainId,
-			host: domain.host,
-			path: domain.path,
-			port: domain.port,
-			customEntrypoint: domain.customEntrypoint,
-			https: domain.https,
-			certificateType: domain.certificateType,
-			createdAt: domain.createdAt,
-			enabled: domain.enabled,
-			domainType: domain.domainType,
-			serviceOwnerId: owner.id,
-			serviceOwnerType: owner.type,
-			serviceName: owner.name,
-			projectId: owner.projectId ?? "",
-			projectName: owner.projectName ?? "",
-			environmentId: owner.environmentId ?? "",
-			environmentName: owner.environmentName ?? "",
-		});
 	}
+
+	if (composeIds.length > 0) {
+		const composeDomainRows = await db
+			.select({
+				domain: domains,
+				serviceId: compose.composeId,
+				serviceName: compose.name,
+				projectId: projects.projectId,
+				projectName: projects.name,
+				environmentId: environments.environmentId,
+				environmentName: environments.name,
+				organizationId: projects.organizationId,
+			})
+			.from(domains)
+			.innerJoin(compose, eq(domains.composeId, compose.composeId))
+			.innerJoin(
+				environments,
+				eq(compose.environmentId, environments.environmentId),
+			)
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(inArray(domains.composeId, composeIds));
+
+		for (const row of composeDomainRows) {
+			if (row.organizationId !== orgId) continue;
+			if (accessedServices !== null && !accessedServices.includes(row.serviceId)) {
+				continue;
+			}
+			result.push({
+				domainId: row.domain.domainId,
+				host: row.domain.host,
+				path: row.domain.path,
+				port: row.domain.port,
+				customEntrypoint: row.domain.customEntrypoint,
+				https: row.domain.https,
+				certificateType: row.domain.certificateType,
+				createdAt: row.domain.createdAt,
+				enabled: row.domain.enabled,
+				domainType: row.domain.domainType,
+				serviceOwnerId: row.serviceId,
+				serviceOwnerType: "compose",
+				serviceName: row.serviceName,
+				projectId: row.projectId ?? "",
+				projectName: row.projectName ?? "",
+				environmentId: row.environmentId ?? "",
+				environmentName: row.environmentName ?? "",
+			});
+		}
+	}
+
+	if (previewIds.length > 0) {
+		const previewDomainRows = await db
+			.select({
+				domain: domains,
+				serviceId: applications.applicationId,
+				serviceName: applications.name,
+				projectId: projects.projectId,
+				projectName: projects.name,
+				environmentId: environments.environmentId,
+				environmentName: environments.name,
+				organizationId: projects.organizationId,
+			})
+			.from(domains)
+			.innerJoin(
+				previewDeployments,
+				eq(
+					domains.previewDeploymentId,
+					previewDeployments.previewDeploymentId,
+				),
+			)
+			.innerJoin(
+				applications,
+				eq(previewDeployments.applicationId, applications.applicationId),
+			)
+			.innerJoin(
+				environments,
+				eq(applications.environmentId, environments.environmentId),
+			)
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(inArray(domains.previewDeploymentId, previewIds));
+
+		for (const row of previewDomainRows) {
+			if (row.organizationId !== orgId) continue;
+			if (accessedServices !== null && !accessedServices.includes(row.serviceId)) {
+				continue;
+			}
+			result.push({
+				domainId: row.domain.domainId,
+				host: row.domain.host,
+				path: row.domain.path,
+				port: row.domain.port,
+				customEntrypoint: row.domain.customEntrypoint,
+				https: row.domain.https,
+				certificateType: row.domain.certificateType,
+				createdAt: row.domain.createdAt,
+				enabled: row.domain.enabled,
+				domainType: row.domain.domainType,
+				serviceOwnerId: row.serviceId,
+				serviceOwnerType: "application",
+				serviceName: row.serviceName,
+				projectId: row.projectId ?? "",
+				projectName: row.projectName ?? "",
+				environmentId: row.environmentId ?? "",
+				environmentName: row.environmentName ?? "",
+			});
+		}
+	}
+
 	return result;
 };

@@ -59,7 +59,7 @@ export const manageDomain = async (app: ApplicationNested, domain: Domain) => {
 		delete config.http.routers[routerNameSecure];
 	}
 
-	config.http.services[serviceName] = createServiceConfig(appName, domain);
+	config.http.services[serviceName] = createServiceConfig(appName, domain, app);
 
 	await createPathMiddlewares(app, domain);
 	// SSO forward-auth: writes the per-app forwardAuth + errors middlewares (the

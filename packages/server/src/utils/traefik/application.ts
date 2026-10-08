@@ -12,8 +12,8 @@ import {
 } from "../process/execAsync";
 import type { FileConfig, HttpLoadBalancerService } from "./file-types";
 
-export const createTraefikConfig = (appName: string) => {
-	const defaultPort = 3000;
+export const createTraefikConfig = (appName: string, port?: number) => {
+	const defaultPort = port && port > 0 ? port : 80;
 	const serviceURLDefault = `http://${appName}:${defaultPort}`;
 	const domainDefault = `Host(\`${appName}.docker.localhost\`)`;
 	const config: FileConfig = {
@@ -305,14 +305,55 @@ export const writeAppTraefikConfig = async (
 	}
 };
 
+export const resolveDomainUpstreamPort = (
+	domain: Domain,
+	app?: {
+		buildType?: string | null;
+		ports?: Array<{ targetPort?: number | null }> | null;
+	} | null,
+): number => {
+	// If application is static (e.g. Nginx container), container listens on port 80
+	if (app?.buildType === "static") {
+		if (domain.port && domain.port !== 3000) {
+			return domain.port;
+		}
+		return 80;
+	}
+
+	// If the application has explicit container target ports configured
+	if (
+		app &&
+		"ports" in app &&
+		Array.isArray(app.ports) &&
+		app.ports.length > 0 &&
+		app.ports[0]?.targetPort
+	) {
+		return app.ports[0].targetPort;
+	}
+
+	// If domain has an explicit valid port
+	if (domain.port && domain.port > 0) {
+		return domain.port;
+	}
+
+	return 80;
+};
+
 export const createServiceConfig = (
 	appName: string,
 	domain: Domain,
+	app?: {
+		buildType?: string | null;
+		ports?: Array<{ targetPort?: number | null }> | null;
+	} | null,
 ): {
 	loadBalancer: HttpLoadBalancerService;
-} => ({
-	loadBalancer: {
-		servers: [{ url: `http://${appName}:${domain.port || 80}` }],
-		passHostHeader: true,
-	},
-});
+} => {
+	const upstreamPort = resolveDomainUpstreamPort(domain, app);
+	return {
+		loadBalancer: {
+			servers: [{ url: `http://${appName}:${upstreamPort}` }],
+			passHostHeader: true,
+		},
+	};
+};

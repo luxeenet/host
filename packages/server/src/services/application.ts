@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { docker } from "@dokploy/server/constants";
 import { db } from "@dokploy/server/db";
 import {
@@ -27,11 +29,13 @@ import { cloneGiteaRepository } from "@dokploy/server/utils/providers/gitea";
 import { cloneGithubRepository } from "@dokploy/server/utils/providers/github";
 import { cloneGitlabRepository } from "@dokploy/server/utils/providers/gitlab";
 import { createTraefikConfig } from "@dokploy/server/utils/traefik/application";
+import { manageDomain } from "@dokploy/server/utils/traefik/domain";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import type { z } from "zod";
 import { encodeBase64 } from "../utils/docker/utils";
 import { getDokployUrl } from "./admin";
+import { detectFrameworkFromDirectory } from "./app-detector";
 import {
 	createDeployment,
 	createDeploymentPreview,
@@ -40,7 +44,9 @@ import {
 } from "./deployment";
 import {
 	type Domain,
+	findDomainsByApplicationId,
 	getDomainHost,
+	updateDomainById,
 	verifyApplicationLiveUrl,
 } from "./domain";
 import {
@@ -57,6 +63,64 @@ import {
 } from "./preview-deployment";
 import { validUniqueServerAppName } from "./project";
 export type Application = typeof applications.$inferSelect;
+
+export const syncApplicationDomainsTraefik = async (applicationId: string) => {
+	const application = await findApplicationById(applicationId);
+	if (!application) return;
+
+	let detectedPort = 80;
+	if (application.buildType === "static") {
+		detectedPort = 80;
+	} else if (
+		application.ports &&
+		application.ports.length > 0 &&
+		application.ports[0]?.targetPort
+	) {
+		detectedPort = application.ports[0].targetPort;
+	} else {
+		const appPath =
+			process.env.APPLICATIONS_PATH ||
+			(process.platform === "win32"
+				? "C:\\dokploy\\apps"
+				: "/etc/dokploy/applications");
+		const codeDir = path.join(appPath, application.appName, "code");
+		if (fs.existsSync(codeDir)) {
+			try {
+				const detection = await detectFrameworkFromDirectory(codeDir);
+				if (detection?.suggestedPort) {
+					detectedPort = detection.suggestedPort;
+				}
+			} catch {}
+		} else if (application.buildType === "dockerfile") {
+			detectedPort = 80;
+		} else {
+			detectedPort = 3000;
+		}
+	}
+
+	const appDomains = await findDomainsByApplicationId(applicationId);
+	for (const domain of appDomains) {
+		if (domain.enabled) {
+			let domainPort = domain.port;
+			if (
+				application.buildType === "static" &&
+				(!domainPort || domainPort === 3000)
+			) {
+				domainPort = 80;
+				await updateDomainById(domain.domainId, { port: 80 });
+			} else if (!domainPort) {
+				domainPort = detectedPort;
+				await updateDomainById(domain.domainId, { port: detectedPort });
+			}
+
+			const updatedDomain = {
+				...domain,
+				port: domainPort,
+			};
+			await manageDomain(application as any, updatedDomain);
+		}
+	}
+};
 
 export const createApplication = async (
 	input: z.infer<typeof apiCreateApplication>,
@@ -282,6 +346,11 @@ export const deployApplication = async ({
 		}
 
 		await mechanizeDockerContainer(application);
+		try {
+			await syncApplicationDomainsTraefik(applicationId);
+		} catch (syncErr) {
+			console.error(`Error syncing domains for ${application.appName}:`, syncErr);
+		}
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updateApplicationStatus(applicationId, "done");
 
@@ -405,6 +474,11 @@ export const rebuildApplication = async ({
 			await execAsync(commandWithLog);
 		}
 		await mechanizeDockerContainer(application);
+		try {
+			await syncApplicationDomainsTraefik(applicationId);
+		} catch (syncErr) {
+			console.error(`Error syncing domains for ${application.appName}:`, syncErr);
+		}
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updateApplicationStatus(applicationId, "done");
 

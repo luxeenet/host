@@ -208,6 +208,78 @@ export const checkDomainTenantConflict = async (
 	}
 };
 
+export const isPrivateOrLocalAddress = (ipOrHost: string): boolean => {
+	const cleaned = ipOrHost
+		.replace(/^https?:\/\//, "")
+		.split(/[/:]/)[0]
+		?.trim()
+		.toLowerCase() || "";
+	if (!cleaned) return true;
+
+	if (
+		cleaned === "localhost" ||
+		cleaned === "0.0.0.0" ||
+		cleaned === "::1" ||
+		cleaned === "host.docker.internal" ||
+		cleaned.endsWith(".localhost") ||
+		cleaned.endsWith(".local") ||
+		cleaned.endsWith(".internal")
+	) {
+		return true;
+	}
+
+	const ipType = isIP(cleaned);
+	if (ipType === 4) {
+		const rawParts = cleaned.split(".").map((p) => Number.parseInt(p, 10));
+		if (rawParts.length !== 4 || rawParts.some(Number.isNaN)) return true;
+		const p0 = rawParts[0] ?? -1;
+		const p1 = rawParts[1] ?? -1;
+
+		// 127.0.0.0/8 (Loopback)
+		if (p0 === 127) return true;
+		// 0.0.0.0/8
+		if (p0 === 0) return true;
+		// 10.0.0.0/8 (Private RFC1918)
+		if (p0 === 10) return true;
+		// 172.16.0.0/12 (Private RFC1918: 172.16.0.0 - 172.31.255.255)
+		if (p0 === 172 && p1 >= 16 && p1 <= 31) return true;
+		// 192.168.0.0/16 (Private RFC1918)
+		if (p0 === 192 && p1 === 168) return true;
+		// 169.254.0.0/16 (Link-local)
+		if (p0 === 169 && p1 === 254) return true;
+	} else if (ipType === 6) {
+		if (cleaned === "::1" || cleaned === "::") return true;
+		if (
+			cleaned.startsWith("fe80:") ||
+			cleaned.startsWith("fc") ||
+			cleaned.startsWith("fd")
+		) {
+			return true;
+		}
+	}
+
+	// Sslip / nip pattern matching private IP
+	const sslipMatch = cleaned.match(
+		/(\d{1,3})[-.](\d{1,3})[-.](\d{1,3})[-.](\d{1,3})\.(?:sslip|nip)\.io$/i,
+	);
+	if (sslipMatch && sslipMatch[1] && sslipMatch[2]) {
+		const p1 = Number.parseInt(sslipMatch[1], 10);
+		const p2 = Number.parseInt(sslipMatch[2], 10);
+		if (
+			p1 === 127 ||
+			p1 === 0 ||
+			p1 === 10 ||
+			(p1 === 172 && p2 >= 16 && p2 <= 31) ||
+			(p1 === 192 && p2 === 168) ||
+			(p1 === 169 && p2 === 254)
+		) {
+			return true;
+		}
+	}
+
+	return false;
+};
+
 export const createDomain = async (
 	input: z.infer<typeof apiCreateDomain>,
 	tx: any = db,
@@ -225,10 +297,31 @@ export const createDomain = async (
 		await checkDomainTenantConflict(host, targetOrgId, undefined, tx);
 	}
 
+	let portToUse = input.port;
+	if (input.applicationId) {
+		try {
+			const app = await findApplicationById(input.applicationId);
+			if (app) {
+				if (!portToUse || portToUse === 3000) {
+					if (app.buildType === "static") {
+						portToUse = 80;
+					} else if (
+						app.ports &&
+						app.ports.length > 0 &&
+						app.ports[0]?.targetPort
+					) {
+						portToUse = app.ports[0].targetPort;
+					}
+				}
+			}
+		} catch {}
+	}
+
 	const domain = await tx
 		.insert(domains)
 		.values({
 			...input,
+			port: portToUse !== undefined ? portToUse : (input.port ?? null),
 			host: host,
 		} as typeof domains.$inferInsert)
 		.returning()
@@ -253,7 +346,11 @@ export const getPublicServerIp = async (serverId?: string): Promise<string> => {
 	if (serverId) {
 		try {
 			const server = await findServerById(serverId);
-			if (server.ipAddress && isIP(server.ipAddress) && server.ipAddress !== "127.0.0.1" && server.ipAddress !== "localhost") {
+			if (
+				server.ipAddress &&
+				isIP(server.ipAddress) &&
+				!isPrivateOrLocalAddress(server.ipAddress)
+			) {
 				return server.ipAddress;
 			}
 		} catch {}
@@ -263,28 +360,21 @@ export const getPublicServerIp = async (serverId?: string): Promise<string> => {
 	if (
 		settings?.serverIp &&
 		isIP(settings.serverIp) &&
-		settings.serverIp !== "127.0.0.1" &&
-		settings.serverIp !== "localhost"
+		!isPrivateOrLocalAddress(settings.serverIp)
 	) {
 		return settings.serverIp;
 	}
 
 	try {
 		const publicIp = await getPublicIpWithFallback();
-		if (publicIp && isIP(publicIp) && publicIp !== "127.0.0.1") {
+		if (publicIp && isIP(publicIp) && !isPrivateOrLocalAddress(publicIp)) {
 			return publicIp;
 		}
 	} catch {}
 
 	const candidates = await getServerIpCandidates(serverId);
 	const publicCandidate = candidates.find(
-		(ip) =>
-			isIP(ip) &&
-			ip !== "127.0.0.1" &&
-			!ip.startsWith("127.") &&
-			!ip.startsWith("172.") &&
-			!ip.startsWith("10.") &&
-			!ip.startsWith("192.168."),
+		(ip) => isIP(ip) && !isPrivateOrLocalAddress(ip),
 	);
 	if (publicCandidate) {
 		return publicCandidate;
@@ -682,13 +772,46 @@ export const verifyApplicationLiveUrl = async (
 		application.applicationStatus === "done" ||
 		application.applicationStatus === "running";
 
+	const isPrivateHost = isPrivateOrLocalAddress(host);
+	if (isPrivateHost) {
+		return {
+			isLive: false,
+			testUrl,
+			checks: {
+				deploymentHealthy: isHealthyDeployment,
+				dnsResolves: false,
+				httpsActive: false,
+				appResponding: false,
+			},
+			message: "Live URL cannot be a private, local, or loopback address.",
+			details: `The host "${host}" resolves to a local or private network address which is not externally routable in production.`,
+		};
+	}
+
 	// Check DNS resolution
 	let resolvedIps: string[] = [];
 	let dnsResolves = false;
 	try {
 		const cleanDnsHost = (host.split("/")[0] || host).trim();
 		resolvedIps = await resolveDns(cleanDnsHost);
-		dnsResolves = resolvedIps.length > 0;
+		const hasPublicIp = resolvedIps.some(
+			(ip) => !isPrivateOrLocalAddress(ip),
+		);
+		dnsResolves = resolvedIps.length > 0 && hasPublicIp;
+		if (resolvedIps.length > 0 && !hasPublicIp) {
+			return {
+				isLive: false,
+				testUrl,
+				checks: {
+					deploymentHealthy: isHealthyDeployment,
+					dnsResolves: false,
+					httpsActive: false,
+					appResponding: false,
+				},
+				message: "Domain resolves to private IP addresses.",
+				details: `DNS lookup for "${host}" returned private/local IP (${resolvedIps.join(", ")}). Production live URLs must point to a public server IP.`,
+			};
+		}
 	} catch {
 		dnsResolves = false;
 	}
@@ -757,17 +880,23 @@ export const verifyApplicationLiveUrl = async (
 
 	const isLive =
 		isHealthyDeployment &&
-		(appResponding || (dnsResolves && lastStatusCode !== undefined && lastStatusCode < 500));
+		dnsResolves &&
+		(appResponding ||
+			(lastStatusCode !== undefined &&
+				lastStatusCode < 500 &&
+				lastStatusCode !== 404));
 
 	let message = "";
 	if (isLive) {
 		if (isHttps && !httpsActive) {
-			message = "Application is live. HTTPS certificate provisioning is in progress.";
+			message =
+				"Application is live. HTTPS certificate provisioning is in progress.";
 		} else {
 			message = "Your application is live and responding.";
 		}
 	} else {
-		message = "Your application was deployed, but the test URL is not responding yet.";
+		message =
+			"Your application was deployed, but the test URL is not responding yet.";
 	}
 
 	let details = "";
@@ -775,7 +904,9 @@ export const verifyApplicationLiveUrl = async (
 		if (!isHealthyDeployment) {
 			details = `Application deployment status is currently ${application.applicationStatus}.`;
 		} else if (!dnsResolves) {
-			details = `DNS lookup for "${host}" could not be resolved. Ensure DNS records or sslip.io/wildcard routing is available.`;
+			details = `DNS lookup for "${host}" could not be resolved or resolved to private IPs. Ensure public DNS records or sslip.io/wildcard routing is available.`;
+		} else if (lastStatusCode === 502 || lastStatusCode === 504) {
+			details = `Traefik returned HTTP ${lastStatusCode} (Bad Gateway / Upstream Unreachable). The container is running, but Traefik cannot reach the internal port. Verify application upstream port.`;
 		} else if (sslError) {
 			details = `HTTPS certificate verification pending: ${sslError}. Let's Encrypt SSL issuance is in progress.`;
 		} else if (lastError) {

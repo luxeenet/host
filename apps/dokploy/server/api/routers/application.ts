@@ -37,6 +37,7 @@ import {
 	writeConfigRemote,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
+import { ArchiveValidationError } from "@dokploy/server/utils/builders/archive-validation";
 import { canEditDeployGitSource } from "@dokploy/server/services/git-provider";
 import {
 	addNewService,
@@ -987,12 +988,28 @@ export const applicationRouter = createTRPCRouter({
 				app,
 			);
 
+			try {
+				await unzipDrop(zipFile, app);
+			} catch (error) {
+				if (error instanceof ArchiveValidationError) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: error.message,
+					});
+				}
+				if (error instanceof TRPCError) throw error;
+				console.error("Source archive processing failed:", error);
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message:
+						"We couldn't process your ZIP file. Please check it and try again.",
+				});
+			}
+
 			await updateApplication(applicationId, {
 				sourceType: "drop",
 				dropBuildPath: dropBuildPath || "",
 			});
-
-			await unzipDrop(zipFile, app);
 			const jobData: DeploymentJob = {
 				applicationId: app.applicationId,
 				titleLog: "Manual deployment",

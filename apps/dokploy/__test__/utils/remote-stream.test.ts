@@ -9,7 +9,9 @@ vi.mock("@dokploy/server/services/server", () => ({
 
 import { pipeBetweenServers } from "@dokploy/server/utils/process/remoteStream";
 
-describe("pipeBetweenServers", () => {
+const isUnix = process.platform !== "win32";
+
+describe.skipIf(!isUnix)("pipeBetweenServers", () => {
 	it("delivers a short source stream that ends before the target is ready", async () => {
 		const bytes = await pipeBetweenServers({
 			source: { serverId: null, command: "printf 'hello world'" },

@@ -4,6 +4,8 @@ import { paths } from "@dokploy/server/constants";
 import type { Application } from "@dokploy/server/services/application";
 import { findServerById } from "@dokploy/server/services/server";
 import { readValidDirectory } from "@dokploy/server/wss/utils";
+import { PlanEntitlementService } from "@dokploy/server/services/plan-entitlement";
+import { getServiceOrganizationId } from "@dokploy/server/services/domain";
 import AdmZip from "adm-zip";
 import { Client, type SFTPWrapper } from "ssh2";
 import {
@@ -11,6 +13,12 @@ import {
 	recreateDirectoryRemote,
 } from "../filesystem/directory";
 import { execAsyncRemote } from "../process/execAsync";
+import {
+	ArchiveValidationError,
+	isInsideDirectory,
+	normalizeArchivePath,
+	validateArchiveEntries,
+} from "./archive-validation";
 
 export const unzipDrop = async (zipFile: File, application: Application) => {
 	let sftp: SFTPWrapper | null = null;
@@ -22,18 +30,55 @@ export const unzipDrop = async (zipFile: File, application: Application) => {
 		const targetServerId = application.buildServerId || application.serverId;
 		const { APPLICATIONS_PATH } = paths(!!targetServerId);
 		const outputPath = join(APPLICATIONS_PATH, appName, "code");
+
+		// Validate BEFORE touching the workspace so a rejected upload never
+		// destroys the previously deployed source.
+		const arrayBuffer = await zipFile.arrayBuffer();
+		const buffer = Buffer.from(arrayBuffer);
+
+		let zip: AdmZip;
+		try {
+			zip = new AdmZip(buffer);
+		} catch {
+			throw new ArchiveValidationError(
+				"The uploaded file is not a valid ZIP archive.",
+				"INVALID_ARCHIVE",
+			);
+		}
+
+		const validation = validateArchiveEntries(
+			zip.getEntries().map((entry) => ({
+				entryName: entry.entryName,
+				isDirectory: entry.isDirectory,
+				size: entry.header.size,
+				compressedSize: entry.header.compressedSize,
+				externalAttributes: entry.header.attr,
+			})),
+		);
+
+		// Plan-based storage limit (max_storage_gb), tenant-scoped.
+		if (application?.applicationId) {
+			const organizationId = await getServiceOrganizationId({
+				applicationId: application.applicationId,
+			});
+			if (organizationId) {
+				await PlanEntitlementService.assertObjectStorageCapacity(
+					organizationId,
+					validation.totalUncompressedBytes,
+				);
+			}
+		}
+
+		const allowedNames = new Set(validation.entries.map((e) => e.entryName));
+		const zipEntries = zip
+			.getEntries()
+			.filter((entry) => allowedNames.has(entry.entryName));
+
 		if (targetServerId) {
 			await recreateDirectoryRemote(outputPath, targetServerId);
 		} else {
 			await recreateDirectory(outputPath);
 		}
-		const arrayBuffer = await zipFile.arrayBuffer();
-		const buffer = Buffer.from(arrayBuffer);
-
-		const zip = new AdmZip(buffer);
-		const zipEntries = zip
-			.getEntries()
-			.filter((entry) => !entry.entryName.startsWith("__MACOSX"));
 
 		const rootEntries = zipEntries.filter(
 			(entry) =>
@@ -53,7 +98,7 @@ export const unzipDrop = async (zipFile: File, application: Application) => {
 			sftp = await getSFTPConnection(targetServerId);
 		}
 		for (const entry of zipEntries) {
-			let filePath = entry.entryName;
+			let filePath = normalizeArchivePath(entry.entryName);
 
 			if (
 				hasSingleRootFolder &&
@@ -66,15 +111,20 @@ export const unzipDrop = async (zipFile: File, application: Application) => {
 			if (!filePath) continue;
 
 			const fullPath = path.join(outputPath, filePath).replace(/\\/g, "/");
-			if (!readValidDirectory(fullPath, application.serverId)) {
-				throw new Error(
-					`Path traversal detected: resolved path escapes output directory: ${filePath}`,
+			if (
+				!isInsideDirectory(outputPath, fullPath) ||
+				!readValidDirectory(fullPath, application.serverId)
+			) {
+				throw new ArchiveValidationError(
+					"The archive contains paths that try to escape the project folder.",
+					"PATH_TRAVERSAL",
 				);
 			}
 
 			if (isDangerousNode(entry)) {
-				throw new Error(
-					`Dangerous node entries are not allowed: ${entry.entryName}`,
+				throw new ArchiveValidationError(
+					"The archive contains links or special files, which are not allowed.",
+					"UNSAFE_ENTRY",
 				);
 			}
 

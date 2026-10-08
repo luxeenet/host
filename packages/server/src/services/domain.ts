@@ -703,9 +703,10 @@ export const verifyApplicationLiveUrl = async (
 
 	for (let attempt = 1; attempt <= maxRetries; attempt++) {
 		const startTime = Date.now();
+		let timeoutId: NodeJS.Timeout | undefined;
 		try {
 			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), 6000);
+			timeoutId = setTimeout(() => controller.abort(), 6000);
 
 			const response = await fetch(testUrl, {
 				method: "GET",
@@ -716,7 +717,6 @@ export const verifyApplicationLiveUrl = async (
 				},
 				redirect: "follow",
 			});
-			clearTimeout(timeoutId);
 
 			responseTimeMs = Date.now() - startTime;
 			lastStatusCode = response.status;
@@ -747,6 +747,10 @@ export const verifyApplicationLiveUrl = async (
 			}
 			if (attempt < maxRetries) {
 				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+			}
+		} finally {
+			if (timeoutId) {
+				clearTimeout(timeoutId);
 			}
 		}
 	}

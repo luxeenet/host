@@ -131,6 +131,11 @@ export const SaveGithubProvider = ({ applicationId }: Props) => {
 
 	useEffect(() => {
 		if (data) {
+			const defaultGithubId =
+				data.githubId ||
+				(githubProviders && githubProviders.length > 0
+					? githubProviders[0]?.githubId || ""
+					: "");
 			form.reset({
 				branch: data.branch || "",
 				repository: {
@@ -138,13 +143,13 @@ export const SaveGithubProvider = ({ applicationId }: Props) => {
 					owner: data.owner || "",
 				},
 				buildPath: data.buildPath || "/",
-				githubId: data.githubId || "",
+				githubId: defaultGithubId,
 				watchPaths: data.watchPaths || [],
 				triggerType: data.triggerType || "push",
 				enableSubmodules: data.enableSubmodules ?? false,
 			});
 		}
-	}, [form.reset, data?.applicationId, form]);
+	}, [form.reset, data?.applicationId, data, githubProviders]);
 
 	const onSubmit = async (data: GithubProvider) => {
 		await mutateAsync({

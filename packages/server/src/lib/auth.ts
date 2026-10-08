@@ -104,6 +104,10 @@ const createBetterAuth = () =>
 				}
 			: {}),
 
+		baseURL:
+			process.env.BETTER_AUTH_URL ||
+			process.env.NEXT_PUBLIC_APP_URL ||
+			(process.env.NODE_ENV === "test" ? "http://localhost:3000" : undefined),
 		account: {
 			accountLinking: {
 				enabled: true,
@@ -116,14 +120,22 @@ const createBetterAuth = () =>
 		},
 		appName: brand.APP_NAME,
 		socialProviders: {
-			github: {
-				clientId: process.env.GITHUB_CLIENT_ID as string,
-				clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
-			},
-			google: {
-				clientId: process.env.GOOGLE_CLIENT_ID as string,
-				clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-			},
+			...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+				? {
+						github: {
+							clientId: process.env.GITHUB_CLIENT_ID,
+							clientSecret: process.env.GITHUB_CLIENT_SECRET,
+						},
+					}
+				: {}),
+			...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+				? {
+						google: {
+							clientId: process.env.GOOGLE_CLIENT_ID,
+							clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+						},
+					}
+				: {}),
 		},
 		logger: {
 			disabled: process.env.NODE_ENV === "production",

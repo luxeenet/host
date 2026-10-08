@@ -6,7 +6,7 @@ import { execAsync, execAsyncRemote } from "../process/execAsync";
 
 export const recreateDirectory = async (pathFolder: string): Promise<void> => {
 	try {
-		await removeDirectoryIfExistsContent(pathFolder);
+		await fsPromises.rm(pathFolder, { recursive: true, force: true });
 		await fsPromises.mkdir(pathFolder, { recursive: true });
 	} catch (error) {
 		console.error(`Error recreating directory '${pathFolder}':`, error);
@@ -30,17 +30,27 @@ export const recreateDirectoryRemote = async (
 export const removeDirectoryIfExistsContent = async (
 	path: string,
 ): Promise<void> => {
-	if (fs.existsSync(path) && fs.readdirSync(path).length !== 0) {
-		await execAsync(`rm -rf ${path}`);
+	try {
+		await fsPromises.rm(path, { recursive: true, force: true });
+	} catch {
+		try {
+			await execAsync(`rm -rf ${path}`);
+		} catch {}
 	}
 };
 
 export const removeFileOrDirectory = async (path: string) => {
 	try {
-		await execAsync(`rm -rf ${path}`);
+		if (fs.existsSync(path)) {
+			await fsPromises.rm(path, { recursive: true, force: true });
+		}
 	} catch (error) {
-		console.error(`Error removing ${path}: ${error}`);
-		throw error;
+		try {
+			await execAsync(`rm -rf ${path}`);
+		} catch {
+			console.error(`Error removing ${path}: ${error}`);
+			throw error;
+		}
 	}
 };
 

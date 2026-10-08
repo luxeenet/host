@@ -22,8 +22,20 @@ const cases: Record<string, string> = {
 	UNICODE: "héllo wörld 日本語 🚀",
 };
 
+const hasBash = () => {
+	if (process.platform === "win32") return false;
+	try {
+		execFileSync("bash", ["-c", "exit 0"], { stdio: "ignore" });
+		return true;
+	} catch {
+		return false;
+	}
+};
+
 describe("createEnvFileCommand", () => {
-	it("writes special environment values that a generic dotenv parser reads back literally", () => {
+	it.skipIf(!hasBash())(
+		"writes special environment values that a generic dotenv parser reads back literally",
+		() => {
 		mkdirSync(codePath, { recursive: true });
 
 		const serviceEnv = Object.entries(cases)

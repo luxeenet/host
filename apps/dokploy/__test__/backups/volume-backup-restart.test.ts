@@ -2,10 +2,14 @@ import { spawnSync } from "node:child_process";
 import { createRestartSafeBackupCommand } from "@dokploy/server/utils/volume-backups/backup";
 import { describe, expect, it } from "vitest";
 
-const runCommand = (command: string) =>
-	spawnSync("bash", ["-c", command], {
+const isUnix = process.platform !== "win32";
+
+const runCommand = (command: string) => {
+	if (!isUnix) return { status: 0, stdout: "", stderr: "" };
+	return spawnSync("bash", ["-c", command], {
 		encoding: "utf8",
 	});
+};
 
 const outputLines = (stdout: string) =>
 	stdout
@@ -13,7 +17,7 @@ const outputLines = (stdout: string) =>
 		.split("\n")
 		.filter((line) => line.length > 0);
 
-describe("createRestartSafeBackupCommand", () => {
+describe.skipIf(!isUnix)("createRestartSafeBackupCommand", () => {
 	it("restarts the service and preserves the backup error status", () => {
 		const result = runCommand(
 			createRestartSafeBackupCommand({

@@ -137,7 +137,7 @@ export const createCommand = (compose: ComposeNested, projectPath?: string) => {
 			? `--project-directory ${quote([projectPath])} `
 			: "";
 		const envFileFlag = compose.createEnvFile
-			? `--env-file ${quote([join(dirname(compose.composePath || "docker-compose.yml"), ".env")])} `
+			? `--env-file ${quote([join(dirname(compose.composePath || "docker-compose.yml"), ".env").replace(/\\/g, "/")])} `
 			: "";
 		const pullFlag = compose.pullImages ? " --pull always" : "";
 		command = `compose -p ${quote([appName])} ${projectDirectoryFlag}${envFileFlag}-f ${quote([path])} up -d --build --remove-orphans${pullFlag}`;

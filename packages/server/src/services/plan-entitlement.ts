@@ -384,7 +384,7 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_domains"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		const res = await executor
+		const appDomainRes = await executor
 			.select({ value: count() })
 			.from(schema.domains)
 			.innerJoin(
@@ -400,7 +400,26 @@ export class PlanEntitlementService {
 				eq(schema.environments.projectId, schema.projects.projectId),
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
-		const value = res[0]?.value ?? 0;
+
+		const composeDomainRes = await executor
+			.select({ value: count() })
+			.from(schema.domains)
+			.innerJoin(
+				schema.compose,
+				eq(schema.domains.composeId, schema.compose.composeId),
+			)
+			.innerJoin(
+				schema.environments,
+				eq(schema.compose.environmentId, schema.environments.environmentId),
+			)
+			.innerJoin(
+				schema.projects,
+				eq(schema.environments.projectId, schema.projects.projectId),
+			)
+			.where(eq(schema.projects.organizationId, organizationId));
+
+		const value =
+			(appDomainRes[0]?.value ?? 0) + (composeDomainRes[0]?.value ?? 0);
 
 		if (value >= limit) {
 			return {

@@ -5,11 +5,23 @@ import {
 } from "@dokploy/server/utils/restore/utils";
 import { describe, expect, it } from "vitest";
 
-const filter = (input: string) =>
-	execSync(stripDatabaseSwitchCommand, {
+const hasBash = () => {
+	if (process.platform === "win32") return false;
+	try {
+		execSync("bash -c 'exit 0'", { stdio: "ignore" });
+		return true;
+	} catch {
+		return false;
+	}
+};
+
+const filter = (input: string) => {
+	if (!hasBash()) return "";
+	return execSync(stripDatabaseSwitchCommand, {
 		input,
-		shell: "/bin/bash",
+		shell: process.platform === "win32" ? "bash" : "/bin/bash",
 	}).toString();
+};
 
 describe("restore drops database-switch statements (mysql/mariadb)", () => {
 	const dump = [
@@ -23,7 +35,9 @@ describe("restore drops database-switch statements (mysql/mariadb)", () => {
 		"INSERT INTO `logs` VALUES ('USER: because'),('CREATE DATABASE is a string');",
 	].join("\n");
 
-	it("removes USE and CREATE DATABASE lines but keeps everything else", () => {
+	it.skipIf(!hasBash())(
+		"removes USE and CREATE DATABASE lines but keeps everything else",
+		() => {
 		const result = filter(dump);
 		expect(result).not.toContain("USE `production_db`");
 		expect(result).not.toContain("use production_db");

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import type { ApplicationNested } from "@dokploy/server";
 import { paths } from "@dokploy/server/constants";
@@ -55,6 +56,14 @@ vi.mock("@dokploy/server/services/application", async () => {
 		updateApplicationStatus: vi.fn(),
 	};
 });
+
+vi.mock("@dokploy/server/services/domain", () => ({
+	verifyApplicationLiveUrl: vi.fn().mockResolvedValue({
+		isLive: true,
+		testUrl: "http://localhost:3000",
+		checks: { httpsActive: false },
+	}),
+}));
 
 vi.mock("@dokploy/server/services/admin", () => ({
 	getDokployUrl: vi.fn().mockResolvedValue("http://localhost:3000"),
@@ -129,13 +138,13 @@ const createMockApplication = (
 
 const createMockDeployment = async (appName: string) => {
 	const { LOGS_PATH } = paths(false); // false = local, no remote server
-	const formattedDateTime = format(new Date(), "yyyy-MM-dd:HH:mm:ss");
+	const formattedDateTime = format(new Date(), "yyyy-MM-dd-HH-mm-ss");
 	const fileName = `${appName}-${formattedDateTime}.log`;
 	const logFilePath = path.join(LOGS_PATH, appName, fileName);
 
 	// Actually create the log directory
-	await execAsync(`mkdir -p ${path.dirname(logFilePath)}`);
-	await execAsync(`echo "Initializing deployment" > ${logFilePath}`);
+	await fs.mkdir(path.dirname(logFilePath), { recursive: true });
+	await fs.writeFile(logFilePath, "Initializing deployment\n", "utf8");
 
 	return {
 		deploymentId: "deployment-id",
@@ -148,7 +157,7 @@ async function cleanupDocker(appName: string) {
 		await execAsync(`docker stop ${appName} 2>/dev/null || true`);
 		await execAsync(`docker rm ${appName} 2>/dev/null || true`);
 		await execAsync(`docker rmi ${appName} 2>/dev/null || true`);
-	} catch (error) {
+	} catch {
 		console.log("Docker cleanup completed");
 	}
 }
@@ -159,11 +168,11 @@ async function cleanupFiles(appName: string) {
 
 		// Clean cloned code directories
 		const appPath = path.join(APPLICATIONS_PATH, appName);
-		await execAsync(`rm -rf ${appPath} 2>/dev/null || true`);
+		await fs.rm(appPath, { recursive: true, force: true }).catch(() => {});
 
 		// Clean logs for appName - removes entire folder
 		const logPath = path.join(LOGS_PATH, appName);
-		await execAsync(`rm -rf ${logPath} 2>/dev/null || true`);
+		await fs.rm(logPath, { recursive: true, force: true }).catch(() => {});
 
 		console.log(`✅ Cleaned up files and logs for ${appName}`);
 	} catch (error) {
@@ -171,7 +180,9 @@ async function cleanupFiles(appName: string) {
 	}
 }
 
-describe(
+const isUnix = process.platform !== "win32";
+
+describe.skipIf(!isUnix)(
 	"deployApplication - REAL Execution Tests",
 	() => {
 		let currentAppName: string;

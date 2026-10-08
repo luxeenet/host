@@ -59,6 +59,14 @@ vi.mock("@dokploy/server/services/admin", () => ({
 	getDokployUrl: vi.fn(),
 }));
 
+vi.mock("@dokploy/server/services/domain", () => ({
+	verifyApplicationLiveUrl: vi.fn().mockResolvedValue({
+		isLive: true,
+		testUrl: "http://localhost:3000",
+		checks: { httpsActive: false },
+	}),
+}));
+
 vi.mock("@dokploy/server/services/deployment", () => ({
 	createDeployment: vi.fn(),
 	updateDeploymentStatus: vi.fn(),

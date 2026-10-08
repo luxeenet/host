@@ -5,8 +5,12 @@ import path from "node:path";
 import { defaultCommand, reportDockerVersion } from "@dokploy/server";
 import { describe, expect, it } from "vitest";
 
-const resolveBin = (name: string) =>
-	execSync(`command -v ${name}`, { encoding: "utf8" }).trim();
+const isUnix = process.platform !== "win32";
+
+const resolveBin = (name: string) => {
+	if (!isUnix) return "";
+	return execSync(`command -v ${name}`, { encoding: "utf8" }).trim();
+};
 
 /**
  * Build a sandbox PATH so `command -v docker` only sees our fake docker
@@ -42,7 +46,7 @@ const runReport = (sandboxPath: string) => {
 		.pop();
 };
 
-describe("reportDockerVersion", () => {
+describe.skipIf(!isUnix)("reportDockerVersion", () => {
 	it("reports the engine version when docker and its daemon are available", () => {
 		const sandbox = makeSandbox(
 			[

@@ -17,6 +17,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/utils/api";
+import { AddBitbucketProvider } from "@/components/dashboard/settings/git/bitbucket/add-bitbucket-provider";
+import { AddGiteaProvider } from "@/components/dashboard/settings/git/gitea/add-gitea-provider";
+import { AddGithubProvider } from "@/components/dashboard/settings/git/github/add-github-provider";
+import { AddGitlabProvider } from "@/components/dashboard/settings/git/gitlab/add-gitlab-provider";
+import { Button } from "@/components/ui/button";
 import { SaveBitbucketProvider } from "./save-bitbucket-provider";
 import { SaveDragNDrop } from "./save-drag-n-drop";
 import { SaveGitlabProvider } from "./save-gitlab-provider";
@@ -63,8 +68,7 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 			await refetch();
 		} catch (error) {
 			toast.error(
-				`Failed to disconnect repository: ${
-					error instanceof Error ? error.message : "Unknown error"
+				`Failed to disconnect repository: ${error instanceof Error ? error.message : "Unknown error"
 				}`,
 			);
 		}
@@ -214,19 +218,22 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 						{githubProviders && githubProviders?.length > 0 ? (
 							<SaveGithubProvider applicationId={applicationId} />
 						) : (
-							<div className="flex flex-col items-center gap-3 min-h-[25vh] justify-center">
-								<GithubIcon className="size-8 text-muted-foreground" />
-								<span className="text-base text-muted-foreground">
-									To deploy using GitHub, you need to configure your account
-									first. Please, go to{" "}
-									<Link
-										href="/dashboard/settings/git-providers"
-										className="text-foreground"
-									>
-										Settings
-									</Link>{" "}
-									to do so.
-								</span>
+							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
+								<GithubIcon className="size-10 text-muted-foreground" />
+								<div className="space-y-1 max-w-md">
+									<h4 className="text-sm font-semibold">GitHub Not Connected</h4>
+									<p className="text-xs text-muted-foreground">
+										Connect your GitHub account or organization to select repositories and configure automated branch deployments.
+									</p>
+								</div>
+								<div className="flex items-center gap-3">
+									<AddGithubProvider />
+									<Button variant="outline" asChild size="sm">
+										<Link href="/dashboard/settings/git-providers">
+											Manage Providers
+										</Link>
+									</Button>
+								</div>
 							</div>
 						)}
 					</TabsContent>
@@ -234,19 +241,22 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 						{gitlabProviders && gitlabProviders?.length > 0 ? (
 							<SaveGitlabProvider applicationId={applicationId} />
 						) : (
-							<div className="flex flex-col items-center gap-3 min-h-[25vh] justify-center">
-								<GitlabIcon className="size-8 text-muted-foreground" />
-								<span className="text-base text-muted-foreground">
-									To deploy using GitLab, you need to configure your account
-									first. Please, go to{" "}
-									<Link
-										href="/dashboard/settings/git-providers"
-										className="text-foreground"
-									>
-										Settings
-									</Link>{" "}
-									to do so.
-								</span>
+							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
+								<GitlabIcon className="size-10 text-muted-foreground" />
+								<div className="space-y-1 max-w-md">
+									<h4 className="text-sm font-semibold">GitLab Not Connected</h4>
+									<p className="text-xs text-muted-foreground">
+										Connect your GitLab account or self-hosted instance to deploy from GitLab repositories.
+									</p>
+								</div>
+								<div className="flex items-center gap-3">
+									<AddGitlabProvider />
+									<Button variant="outline" asChild size="sm">
+										<Link href="/dashboard/settings/git-providers">
+											Manage Providers
+										</Link>
+									</Button>
+								</div>
 							</div>
 						)}
 					</TabsContent>
@@ -254,19 +264,22 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 						{bitbucketProviders && bitbucketProviders?.length > 0 ? (
 							<SaveBitbucketProvider applicationId={applicationId} />
 						) : (
-							<div className="flex flex-col items-center gap-3 min-h-[25vh] justify-center">
-								<BitbucketIcon className="size-8 text-muted-foreground" />
-								<span className="text-base text-muted-foreground">
-									To deploy using Bitbucket, you need to configure your account
-									first. Please, go to{" "}
-									<Link
-										href="/dashboard/settings/git-providers"
-										className="text-foreground"
-									>
-										Settings
-									</Link>{" "}
-									to do so.
-								</span>
+							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
+								<BitbucketIcon className="size-10 text-muted-foreground" />
+								<div className="space-y-1 max-w-md">
+									<h4 className="text-sm font-semibold">Bitbucket Not Connected</h4>
+									<p className="text-xs text-muted-foreground">
+										Connect your Bitbucket account to deploy from Bitbucket repositories.
+									</p>
+								</div>
+								<div className="flex items-center gap-3">
+									<AddBitbucketProvider />
+									<Button variant="outline" asChild size="sm">
+										<Link href="/dashboard/settings/git-providers">
+											Manage Providers
+										</Link>
+									</Button>
+								</div>
 							</div>
 						)}
 					</TabsContent>
@@ -274,19 +287,22 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 						{giteaProviders && giteaProviders?.length > 0 ? (
 							<SaveGiteaProvider applicationId={applicationId} />
 						) : (
-							<div className="flex flex-col items-center gap-3 min-h-[25vh] justify-center">
-								<GiteaIcon className="size-8 text-muted-foreground" />
-								<span className="text-base text-muted-foreground">
-									To deploy using Gitea, you need to configure your account
-									first. Please, go to{" "}
-									<Link
-										href="/dashboard/settings/git-providers"
-										className="text-foreground"
-									>
-										Settings
-									</Link>{" "}
-									to do so.
-								</span>
+							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
+								<GiteaIcon className="size-10 text-muted-foreground" />
+								<div className="space-y-1 max-w-md">
+									<h4 className="text-sm font-semibold">Gitea Not Connected</h4>
+									<p className="text-xs text-muted-foreground">
+										Connect your Gitea or Forgejo instance to deploy from Gitea repositories.
+									</p>
+								</div>
+								<div className="flex items-center gap-3">
+									<AddGiteaProvider />
+									<Button variant="outline" asChild size="sm">
+										<Link href="/dashboard/settings/git-providers">
+											Manage Providers
+										</Link>
+									</Button>
+								</div>
 							</div>
 						)}
 					</TabsContent>

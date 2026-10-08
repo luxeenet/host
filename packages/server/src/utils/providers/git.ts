@@ -173,7 +173,17 @@ export const getGitCommitInfo = async ({
 		hash: "",
 	};
 	try {
-		const gitCommand = `git -C ${outputPath} log -1 --pretty=format:"%H---DELIMITER---%B"`;
+		// The workspace may be a ZIP extraction, uploaded source or generated
+		// build context. Only run git-only commands on a real git checkout.
+		const hasGitMetadata = `test -e "${outputPath}/.git" && echo yes || echo no`;
+		const probe = serverId
+			? await execAsyncRemote(serverId, hasGitMetadata)
+			: await execAsync(hasGitMetadata);
+		if (probe.stdout.trim() !== "yes") {
+			return null;
+		}
+
+		const gitCommand = `git -C "${outputPath}" log -1 --pretty=format:"%H---DELIMITER---%B"`;
 		if (serverId) {
 			const { stdout } = await execAsyncRemote(serverId, gitCommand);
 			stdoutResult = stdout.trim();

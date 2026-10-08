@@ -15,6 +15,11 @@ export const updateServerTraefik = (
 	settings: typeof webServerSettings.$inferSelect | null,
 	newHost: string | null,
 ) => {
+	const host = newHost ?? settings?.host;
+	if (!host) {
+		return;
+	}
+
 	const { https, certificateType } = settings || {};
 	const appName = "dokploy";
 	const config: FileConfig = loadOrCreateConfig(appName);

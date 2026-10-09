@@ -338,12 +338,26 @@ export class PlanEntitlementService {
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
 
+		const libsqlCount = await executor
+			.select({ value: count() })
+			.from(schema.libsql)
+			.innerJoin(
+				schema.environments,
+				eq(schema.libsql.environmentId, schema.environments.environmentId),
+			)
+			.innerJoin(
+				schema.projects,
+				eq(schema.environments.projectId, schema.projects.projectId),
+			)
+			.where(eq(schema.projects.organizationId, organizationId));
+
 		const totalDbs =
 			(pgCount[0]?.value ?? 0) +
 			(mysqlCount[0]?.value ?? 0) +
 			(mongoCount[0]?.value ?? 0) +
 			(redisCount[0]?.value ?? 0) +
-			(mariadbCount[0]?.value ?? 0);
+			(mariadbCount[0]?.value ?? 0) +
+			(libsqlCount[0]?.value ?? 0);
 
 		if (totalDbs >= limit) {
 			return {

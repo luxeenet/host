@@ -20,10 +20,13 @@ import { validUniqueServerAppName } from "./project";
 
 export type Libsql = typeof libsql.$inferSelect;
 
-export const createLibsql = async (input: z.infer<typeof apiCreateLibsql>) => {
+export const createLibsql = async (
+	input: z.infer<typeof apiCreateLibsql>,
+	tx: any = db,
+) => {
 	const appName = buildAppName("libsql", input.appName);
 
-	const valid = await validUniqueServerAppName(input.appName);
+	const valid = await validUniqueServerAppName(appName);
 	if (!valid) {
 		throw new TRPCError({
 			code: "CONFLICT",
@@ -31,7 +34,7 @@ export const createLibsql = async (input: z.infer<typeof apiCreateLibsql>) => {
 		});
 	}
 
-	const newLibsql = await db
+	const newLibsql = await tx
 		.insert(libsql)
 		.values({
 			...input,
@@ -41,7 +44,7 @@ export const createLibsql = async (input: z.infer<typeof apiCreateLibsql>) => {
 			appName,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newLibsql) {
 		throw new TRPCError({

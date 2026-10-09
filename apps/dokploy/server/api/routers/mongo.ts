@@ -119,15 +119,18 @@ export const mongoRouter = createTRPCRouter({
 							},
 							tx,
 						);
-						await addNewService(ctx, newMongo.mongoId);
+						await addNewService(ctx, newMongo.mongoId, tx);
 
-						await createMount({
-							serviceId: newMongo.mongoId,
-							serviceType: "mongo",
-							volumeName: `${newMongo.appName}-data`,
-							mountPath: "/data/db",
-							type: "volume",
-						});
+						await createMount(
+							{
+								serviceId: newMongo.mongoId,
+								serviceType: "mongo",
+								volumeName: `${newMongo.appName}-data`,
+								mountPath: "/data/db",
+								type: "volume",
+							},
+							tx,
+						);
 
 						await audit(ctx, {
 							action: "create",

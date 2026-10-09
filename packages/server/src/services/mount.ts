@@ -23,10 +23,13 @@ import type { z } from "zod";
 
 export type Mount = typeof mounts.$inferSelect;
 
-export const createMount = async (input: z.infer<typeof apiCreateMount>) => {
+export const createMount = async (
+	input: z.infer<typeof apiCreateMount>,
+	tx: any = db,
+) => {
 	try {
 		const { serviceId, ...rest } = input;
-		const value = await db
+		const value = await tx
 			.insert(mounts)
 			.values({
 				...rest,
@@ -56,7 +59,7 @@ export const createMount = async (input: z.infer<typeof apiCreateMount>) => {
 				}),
 			})
 			.returning()
-			.then((value) => value[0]);
+			.then((value: any) => value[0]);
 
 		if (!value) {
 			throw new TRPCError({
@@ -106,7 +109,7 @@ export const createFileMount = async (mountId: string) => {
 	}
 };
 
-export const findMountById = async (mountId: string) => {
+export const findMountById = async (mountId: string, tx: any = db) => {
 	const serviceWith = {
 		columns: { serverId: true, appName: true },
 		with: {
@@ -119,7 +122,7 @@ export const findMountById = async (mountId: string) => {
 		},
 	} as const;
 
-	const mount = await db.query.mounts.findFirst({
+	const mount = await tx.query.mounts.findFirst({
 		where: eq(mounts.mountId, mountId),
 		with: {
 			application: serviceWith,

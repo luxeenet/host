@@ -120,15 +120,18 @@ export const mariadbRouter = createTRPCRouter({
 							},
 							tx,
 						);
-						await addNewService(ctx, newMariadb.mariadbId);
+						await addNewService(ctx, newMariadb.mariadbId, tx);
 
-						await createMount({
-							serviceId: newMariadb.mariadbId,
-							serviceType: "mariadb",
-							volumeName: `${newMariadb.appName}-data`,
-							mountPath: "/var/lib/mysql",
-							type: "volume",
-						});
+						await createMount(
+							{
+								serviceId: newMariadb.mariadbId,
+								serviceType: "mariadb",
+								volumeName: `${newMariadb.appName}-data`,
+								mountPath: "/var/lib/mysql",
+								type: "volume",
+							},
+							tx,
+						);
 
 						await audit(ctx, {
 							action: "create",

@@ -1079,6 +1079,13 @@ export const projectRouter = createTRPCRouter({
 									appName.lastIndexOf("-"),
 								);
 
+								// Plan entitlement — enforce database quota on duplicate
+								await assertEntitlement(
+									PlanEntitlementService.checkCanCreateDatabase(
+										ctx.session.activeOrganizationId,
+									),
+								);
+
 								const newLibsql = await createLibsql({
 									...libsql,
 									appName: newAppName,

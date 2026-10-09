@@ -56,63 +56,82 @@ export const libsqlRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				// Plan entitlement — enforce database quota
-				await assertEntitlement(
-					PlanEntitlementService.checkCanCreateDatabase(
-						ctx.session.activeOrganizationId,
-					),
-				);
+				return await PlanEntitlementService.withAtomicQuotaLock(
+					ctx.session.activeOrganizationId,
+					async (tx) => {
+						// Plan entitlement — enforce database quota
+						await assertEntitlement(
+							PlanEntitlementService.checkCanCreateDatabase(
+								ctx.session.activeOrganizationId,
+								tx,
+							),
+						);
 
-				const webServerSettings = await getWebServerSettings();
-				if (
-					(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
-					!input.serverId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You need to use a server to create a Libsql",
-					});
-				}
+						const webServerSettings = await getWebServerSettings();
+						if (
+							(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
+							!input.serverId
+						) {
+							throw new TRPCError({
+								code: "UNAUTHORIZED",
+								message: "You need to use a server to create a Libsql",
+							});
+						}
 
-				if (project.organizationId !== ctx.session.activeOrganizationId) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to access this project",
-					});
-				}
+						if (project.organizationId !== ctx.session.activeOrganizationId) {
+							throw new TRPCError({
+								code: "UNAUTHORIZED",
+								message: "You are not authorized to access this project",
+							});
+						}
 
-				if (input.serverId) {
-					const accessibleIds = await getAccessibleServerIds(ctx.session);
-					if (!accessibleIds.has(input.serverId)) {
-						throw new TRPCError({
-							code: "UNAUTHORIZED",
-							message: "You are not authorized to access this server",
+						if (input.serverId) {
+							const accessibleIds = await getAccessibleServerIds(ctx.session);
+							if (!accessibleIds.has(input.serverId)) {
+								throw new TRPCError({
+									code: "UNAUTHORIZED",
+									message: "You are not authorized to access this server",
+								});
+							}
+						}
+
+						const newLibsql = await createLibsql(
+							{
+								...input,
+							},
+							tx,
+						);
+						await addNewService(ctx, newLibsql.libsqlId, tx);
+
+						await createMount(
+							{
+								serviceId: newLibsql.libsqlId,
+								serviceType: "libsql",
+								volumeName: `${newLibsql.appName}-data`,
+								mountPath: "/var/lib/sqld",
+								type: "volume",
+							},
+							tx,
+						);
+
+						await audit(ctx, {
+							action: "create",
+							resourceType: "service",
+							resourceId: newLibsql.libsqlId,
+							resourceName: newLibsql.appName,
 						});
-					}
-				}
-
-				const newLibsql = await createLibsql({
-					...input,
-				});
-				await addNewService(ctx, newLibsql.libsqlId);
-
-				await createMount({
-					serviceId: newLibsql.libsqlId,
-					serviceType: "libsql",
-					volumeName: `${newLibsql.appName}-data`,
-					mountPath: "/var/lib/sqld",
-					type: "volume",
-				});
-
-				await audit(ctx, {
-					action: "create",
-					resourceType: "service",
-					resourceId: newLibsql.libsqlId,
-					resourceName: newLibsql.appName,
-				});
-				return true;
+						return newLibsql;
+					},
+				);
 			} catch (error) {
-				throw error;
+				if (error instanceof TRPCError) {
+					throw error;
+				}
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Error input: Inserting Libsql database",
+					cause: error,
+				});
 			}
 		}),
 	one: protectedProcedure

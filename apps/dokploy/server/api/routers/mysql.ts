@@ -120,15 +120,18 @@ export const mysqlRouter = createTRPCRouter({
 							},
 							tx,
 						);
-						await addNewService(ctx, newMysql.mysqlId);
+						await addNewService(ctx, newMysql.mysqlId, tx);
 
-						await createMount({
-							serviceId: newMysql.mysqlId,
-							serviceType: "mysql",
-							volumeName: `${newMysql.appName}-data`,
-							mountPath: "/var/lib/mysql",
-							type: "volume",
-						});
+						await createMount(
+							{
+								serviceId: newMysql.mysqlId,
+								serviceType: "mysql",
+								volumeName: `${newMysql.appName}-data`,
+								mountPath: "/var/lib/mysql",
+								type: "volume",
+							},
+							tx,
+						);
 
 						await audit(ctx, {
 							action: "create",

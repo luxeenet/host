@@ -121,17 +121,20 @@ export const postgresRouter = createTRPCRouter({
 							},
 							tx,
 						);
-						await addNewService(ctx, newPostgres.postgresId);
+						await addNewService(ctx, newPostgres.postgresId, tx);
 
 						const mountPath = getMountPath(input.dockerImage);
 
-						await createMount({
-							serviceId: newPostgres.postgresId,
-							serviceType: "postgres",
-							volumeName: `${newPostgres.appName}-data`,
-							mountPath: mountPath,
-							type: "volume",
-						});
+						await createMount(
+							{
+								serviceId: newPostgres.postgresId,
+								serviceType: "postgres",
+								volumeName: `${newPostgres.appName}-data`,
+								mountPath: mountPath,
+								type: "volume",
+							},
+							tx,
+						);
 
 						await audit(ctx, {
 							action: "create",

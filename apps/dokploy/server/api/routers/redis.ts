@@ -117,15 +117,18 @@ export const redisRouter = createTRPCRouter({
 							},
 							tx,
 						);
-						await addNewService(ctx, newRedis.redisId);
+						await addNewService(ctx, newRedis.redisId, tx);
 
-						await createMount({
-							serviceId: newRedis.redisId,
-							serviceType: "redis",
-							volumeName: `${newRedis.appName}-data`,
-							mountPath: "/data",
-							type: "volume",
-						});
+						await createMount(
+							{
+								serviceId: newRedis.redisId,
+								serviceType: "redis",
+								volumeName: `${newRedis.appName}-data`,
+								mountPath: "/data",
+								type: "volume",
+							},
+							tx,
+						);
 
 						await audit(ctx, {
 							action: "create",

@@ -395,11 +395,15 @@ export const addNewEnvironment = async (
 		);
 };
 
-export const addNewService = async (ctx: PermissionCtx, serviceId: string) => {
+export const addNewService = async (
+	ctx: PermissionCtx,
+	serviceId: string,
+	tx: typeof db = db as any,
+) => {
 	const userId = ctx.user.id;
 	const organizationId = ctx.session.activeOrganizationId;
-	const memberRecord = await findMemberByUserId(userId, organizationId);
-	await db
+	const memberRecord = await findMemberByUserId(userId, organizationId, tx);
+	await tx
 		.update(member)
 		.set({
 			accessedServices: [...memberRecord.accessedServices, serviceId],
@@ -415,8 +419,9 @@ export const addNewService = async (ctx: PermissionCtx, serviceId: string) => {
 export const findMemberByUserId = async (
 	userId: string,
 	organizationId: string,
+	tx: typeof db = db as any,
 ) => {
-	const result = await db.query.member.findFirst({
+	const result = await tx.query.member.findFirst({
 		where: and(
 			eq(member.userId, userId),
 			eq(member.organizationId, organizationId),

@@ -14,6 +14,7 @@ import {
 	findProjectById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicDatabaseHost,
 	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
@@ -171,10 +172,14 @@ export const mysqlRouter = createTRPCRouter({
 					message: "You are not authorized to access this MySQL",
 				});
 			}
-			const publicHost = await getPublicServerIp(mysql.serverId || undefined);
+			const publicHostInfo = await getPublicDatabaseHost(
+				mysql.serverId || undefined,
+				mysql.appName || undefined,
+			);
 			return {
 				...mysql,
-				publicHost,
+				publicHost: publicHostInfo.host,
+				publicHostInfo,
 			};
 		}),
 	getConnectionDetails: protectedProcedure
@@ -191,8 +196,16 @@ export const mysqlRouter = createTRPCRouter({
 					message: "You are not authorized to access this MySQL",
 				});
 			}
-			const publicHost = await getPublicServerIp(mysql.serverId || undefined);
-			return buildDatabaseConnectionStrings("mysql", mysql, publicHost);
+			const publicHostInfo = await getPublicDatabaseHost(
+				mysql.serverId || undefined,
+				mysql.appName || undefined,
+			);
+			return buildDatabaseConnectionStrings(
+				"mysql",
+				mysql,
+				publicHostInfo.host,
+				publicHostInfo,
+			);
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(

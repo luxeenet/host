@@ -245,4 +245,38 @@ APP_NAME=my-web-app
 			expect(merged).toContain('REDIS_PORT="6379"');
 		});
 	});
+
+	describe("Platform Database Hostname Resolution (getPublicDatabaseHost)", () => {
+		it("provides platform-managed domain and protocol formatting for database connection info", () => {
+			const record = {
+				appName: "butax-butax-ykwbts",
+				databaseUser: "postgres",
+				databasePassword: "prod_password_456",
+				databaseName: "butax_db",
+				externalPort: 5432,
+			};
+
+			const conn = buildDatabaseConnectionStrings(
+				"postgres",
+				record,
+				"db.hatdot.cloud",
+				{
+					isDomain: true,
+					platformDomain: "db.hatdot.cloud",
+					serverIp: "45.88.188.6",
+				},
+			);
+
+			expect(conn.external.host).toBe("db.hatdot.cloud");
+			expect(conn.external.isDomain).toBe(true);
+			expect(conn.external.platformDomain).toBe("db.hatdot.cloud");
+			expect(conn.external.serverIp).toBe("45.88.188.6");
+			expect(conn.external.url).toBe(
+				"postgresql://postgres:prod_password_456@db.hatdot.cloud:5432/butax_db",
+			);
+			expect(conn.internal.url).toBe(
+				"postgresql://postgres:prod_password_456@butax-butax-ykwbts:5432/butax_db",
+			);
+		});
+	});
 });

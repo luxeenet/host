@@ -135,9 +135,11 @@ export const ContainerFreeMonitoring = ({
 		disk: [],
 	});
 	const [currentData, setCurrentData] = useState<DockerStats>(defaultData);
+	const [hasReceivedStats, setHasReceivedStats] = useState(false);
 
 	useEffect(() => {
 		setCurrentData(defaultData);
+		setHasReceivedStats(false);
 
 		setAccumulativeData({
 			cpu: [],
@@ -150,6 +152,12 @@ export const ContainerFreeMonitoring = ({
 
 	useEffect(() => {
 		if (!data) return;
+
+		const hasCpu = (data.cpu?.length ?? 0) > 0;
+		const hasMemory = (data.memory?.length ?? 0) > 0;
+		if (hasCpu || hasMemory) {
+			setHasReceivedStats(true);
+		}
 
 		setCurrentData({
 			cpu: data.cpu[data.cpu.length - 1] ?? currentData.cpu,
@@ -177,6 +185,8 @@ export const ContainerFreeMonitoring = ({
 		ws.onmessage = (e) => {
 			const value = JSON.parse(e.data);
 			if (!value) return;
+
+			setHasReceivedStats(true);
 
 			const data = {
 				cpu: value.data.cpu ?? currentData.cpu,
@@ -207,13 +217,18 @@ export const ContainerFreeMonitoring = ({
 		return () => ws.close();
 	}, [appName]);
 
+	const totalMemoryBytes = convertMemoryToBytes(String(currentData.memory.value.total ?? "0"));
+	const usedMemoryBytes = convertMemoryToBytes(String(currentData.memory.value.used ?? "0"));
+	const hasMemoryLimit = totalMemoryBytes > 0 && String(currentData.memory.value.total) !== "0" && String(currentData.memory.value.total) !== "0B";
+	const memoryPercentage = hasMemoryLimit ? Math.min((usedMemoryBytes / totalMemoryBytes) * 100, 100) : 0;
+
 	return (
 		<div className="rounded-xl bg-background flex flex-col gap-4">
 			<header className="flex items-center justify-between">
 				<div className="space-y-1">
-					<h1 className="text-2xl font-semibold tracking-tight">Monitoring</h1>
+					<h1 className="text-2xl font-semibold tracking-tight">Resource Utilization</h1>
 					<p className="text-sm text-muted-foreground">
-						Watch the usage of your server in the current app
+						Live container performance and resource metrics for this service
 					</p>
 				</div>
 			</header>
@@ -226,13 +241,19 @@ export const ContainerFreeMonitoring = ({
 					<CardContent>
 						<div className="flex flex-col gap-2 w-full">
 							<span className="text-sm text-muted-foreground">
-								Used: {String(currentData.cpu.value ?? "0%")}
+								{hasReceivedStats
+									? `Used: ${String(currentData.cpu.value ?? "0%")}`
+									: "Status: Collecting metrics..."}
 							</span>
 							<Progress
-								value={Number.parseInt(
-									String(currentData.cpu.value ?? "0%").replace("%", ""),
-									10,
-								)}
+								value={
+									hasReceivedStats
+										? Number.parseInt(
+												String(currentData.cpu.value ?? "0%").replace("%", ""),
+												10,
+											) || 0
+										: 0
+								}
 								className="w-full"
 							/>
 							<DockerCpuChart accumulativeData={accumulativeData.cpu} />
@@ -246,24 +267,20 @@ export const ContainerFreeMonitoring = ({
 					<CardContent>
 						<div className="flex flex-col gap-2 w-full">
 							<span className="text-sm text-muted-foreground">
-								{`Used:  ${currentData.memory.value.used} / Limit: ${currentData.memory.value.total} `}
+								{!hasReceivedStats
+									? "Status: Collecting metrics..."
+									: hasMemoryLimit
+										? `Used: ${currentData.memory.value.used} / Limit: ${currentData.memory.value.total}`
+										: `Used: ${currentData.memory.value.used || "0 MB"} (No limit configured)`}
 							</span>
 							<Progress
-								value={
-									// @ts-ignore
-									(convertMemoryToBytes(currentData.memory.value.used) /
-										// @ts-ignore
-										convertMemoryToBytes(currentData.memory.value.total)) *
-									100
-								}
+								value={hasReceivedStats && hasMemoryLimit ? memoryPercentage : 0}
 								className="w-full"
 							/>
 							<DockerMemoryChart
 								accumulativeData={accumulativeData.memory}
 								memoryLimitGB={
-									// @ts-ignore
-									convertMemoryToBytes(currentData.memory.value.total) /
-									1024 ** 3
+									hasMemoryLimit ? totalMemoryBytes / 1024 ** 3 : 0
 								}
 							/>
 						</div>
@@ -311,7 +328,9 @@ export const ContainerFreeMonitoring = ({
 					<CardContent>
 						<div className="flex flex-col gap-2 w-full">
 							<span className="text-sm text-muted-foreground">
-								{`Read: ${formatMb(currentData.block.value.readMb)} / Write: ${formatMb(currentData.block.value.writeMb)}`}
+								{!hasReceivedStats
+									? "Status: Waiting for activity..."
+									: `Read: ${formatMb(currentData.block.value.readMb)} / Write: ${formatMb(currentData.block.value.writeMb)}`}
 							</span>
 							<DockerBlockChart accumulativeData={accumulativeData.block} />
 						</div>
@@ -324,7 +343,9 @@ export const ContainerFreeMonitoring = ({
 					<CardContent>
 						<div className="flex flex-col gap-2 w-full">
 							<span className="text-sm text-muted-foreground">
-								{`In: ${formatMb(currentData.network.value.inputMb)} / Out: ${formatMb(currentData.network.value.outputMb)}`}
+								{!hasReceivedStats
+									? "Status: Waiting for activity..."
+									: `In: ${formatMb(currentData.network.value.inputMb)} / Out: ${formatMb(currentData.network.value.outputMb)}`}
 							</span>
 							<DockerNetworkChart accumulativeData={accumulativeData.network} />
 						</div>

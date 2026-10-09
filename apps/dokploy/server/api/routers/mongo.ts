@@ -14,6 +14,7 @@ import {
 	findProjectById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicDatabaseHost,
 	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
@@ -171,10 +172,14 @@ export const mongoRouter = createTRPCRouter({
 					message: "You are not authorized to access this mongo",
 				});
 			}
-			const publicHost = await getPublicServerIp(mongo.serverId || undefined);
+			const publicHostInfo = await getPublicDatabaseHost(
+				mongo.serverId || undefined,
+				mongo.appName || undefined,
+			);
 			return {
 				...mongo,
-				publicHost,
+				publicHost: publicHostInfo.host,
+				publicHostInfo,
 			};
 		}),
 	getConnectionDetails: protectedProcedure
@@ -191,8 +196,16 @@ export const mongoRouter = createTRPCRouter({
 					message: "You are not authorized to access this mongo",
 				});
 			}
-			const publicHost = await getPublicServerIp(mongo.serverId || undefined);
-			return buildDatabaseConnectionStrings("mongo", mongo, publicHost);
+			const publicHostInfo = await getPublicDatabaseHost(
+				mongo.serverId || undefined,
+				mongo.appName || undefined,
+			);
+			return buildDatabaseConnectionStrings(
+				"mongo",
+				mongo,
+				publicHostInfo.host,
+				publicHostInfo,
+			);
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(

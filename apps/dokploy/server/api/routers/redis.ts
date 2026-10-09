@@ -13,6 +13,7 @@ import {
 	findRedisById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicDatabaseHost,
 	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
@@ -162,10 +163,14 @@ export const redisRouter = createTRPCRouter({
 					message: "You are not authorized to access this Redis",
 				});
 			}
-			const publicHost = await getPublicServerIp(redis.serverId || undefined);
+			const publicHostInfo = await getPublicDatabaseHost(
+				redis.serverId || undefined,
+				redis.appName || undefined,
+			);
 			return {
 				...redis,
-				publicHost,
+				publicHost: publicHostInfo.host,
+				publicHostInfo,
 			};
 		}),
 	getConnectionDetails: protectedProcedure
@@ -182,8 +187,16 @@ export const redisRouter = createTRPCRouter({
 					message: "You are not authorized to access this Redis",
 				});
 			}
-			const publicHost = await getPublicServerIp(redis.serverId || undefined);
-			return buildDatabaseConnectionStrings("redis", redis, publicHost);
+			const publicHostInfo = await getPublicDatabaseHost(
+				redis.serverId || undefined,
+				redis.appName || undefined,
+			);
+			return buildDatabaseConnectionStrings(
+				"redis",
+				redis,
+				publicHostInfo.host,
+				publicHostInfo,
+			);
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(

@@ -15,6 +15,7 @@ import {
 	getAccessibleServerIds,
 	getContainerLogs,
 	getMountPath,
+	getPublicDatabaseHost,
 	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
@@ -175,12 +176,14 @@ export const postgresRouter = createTRPCRouter({
 					message: "You are not authorized to access this Postgres",
 				});
 			}
-			const publicHost = await getPublicServerIp(
+			const publicHostInfo = await getPublicDatabaseHost(
 				postgres.serverId || undefined,
+				postgres.appName || undefined,
 			);
 			return {
 				...postgres,
-				publicHost,
+				publicHost: publicHostInfo.host,
+				publicHostInfo,
 			};
 		}),
 	getConnectionDetails: protectedProcedure
@@ -197,10 +200,16 @@ export const postgresRouter = createTRPCRouter({
 					message: "You are not authorized to access this Postgres",
 				});
 			}
-			const publicHost = await getPublicServerIp(
+			const publicHostInfo = await getPublicDatabaseHost(
 				postgres.serverId || undefined,
+				postgres.appName || undefined,
 			);
-			return buildDatabaseConnectionStrings("postgres", postgres, publicHost);
+			return buildDatabaseConnectionStrings(
+				"postgres",
+				postgres,
+				publicHostInfo.host,
+				publicHostInfo,
+			);
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(

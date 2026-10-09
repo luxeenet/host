@@ -14,6 +14,7 @@ import {
 	findProjectById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicDatabaseHost,
 	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
@@ -167,10 +168,14 @@ export const mariadbRouter = createTRPCRouter({
 					message: "You are not authorized to access this Mariadb",
 				});
 			}
-			const publicHost = await getPublicServerIp(mariadb.serverId || undefined);
+			const publicHostInfo = await getPublicDatabaseHost(
+				mariadb.serverId || undefined,
+				mariadb.appName || undefined,
+			);
 			return {
 				...mariadb,
-				publicHost,
+				publicHost: publicHostInfo.host,
+				publicHostInfo,
 			};
 		}),
 	getConnectionDetails: protectedProcedure
@@ -187,8 +192,16 @@ export const mariadbRouter = createTRPCRouter({
 					message: "You are not authorized to access this Mariadb",
 				});
 			}
-			const publicHost = await getPublicServerIp(mariadb.serverId || undefined);
-			return buildDatabaseConnectionStrings("mariadb", mariadb, publicHost);
+			const publicHostInfo = await getPublicDatabaseHost(
+				mariadb.serverId || undefined,
+				mariadb.appName || undefined,
+			);
+			return buildDatabaseConnectionStrings(
+				"mariadb",
+				mariadb,
+				publicHostInfo.host,
+				publicHostInfo,
+			);
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(

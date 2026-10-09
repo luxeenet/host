@@ -428,11 +428,19 @@ export const DatabaseConnectionCard = ({
 											<span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
 										</span>
 										<div className="flex flex-col">
-											<span className="text-sm font-semibold text-foreground">
-												Public Endpoint Active
-											</span>
+											<div className="flex items-center gap-2">
+												<span className="text-sm font-semibold text-foreground">
+													Public Database Endpoint Active
+												</span>
+												<Badge
+													variant="outline"
+													className="text-[10px] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+												>
+													Platform Domain
+												</Badge>
+											</div>
 											<span className="text-xs text-muted-foreground">
-												Reachable via {publicHost || "Server IP"}:
+												Reachable via {publicHost || "Platform Gateway"}:
 												{externalPort}
 											</span>
 										</div>
@@ -465,12 +473,12 @@ export const DatabaseConnectionCard = ({
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 									<div className="flex flex-col gap-1.5">
 										<Label className="text-xs text-muted-foreground uppercase font-semibold">
-											External Host (IP / Domain)
+											External Host (Platform Domain)
 										</Label>
 										<Input
 											enableCopyButton
 											disabled
-											value={publicHost || "Resolving IP..."}
+											value={publicHost || "Resolving Host..."}
 										/>
 									</div>
 
@@ -509,8 +517,34 @@ export const DatabaseConnectionCard = ({
 									</div>
 								</div>
 
+								{/* Quick Connect CLI / Tool snippet */}
+								<div className="flex flex-col gap-2 bg-muted/30 border rounded-lg p-3">
+									<Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+										<Link2 className="size-3.5 text-primary" />
+										CLI Connection Command
+									</Label>
+									<div className="flex items-center gap-2">
+										<Input
+											disabled
+											enableCopyButton
+											className="font-mono text-xs bg-background"
+											value={
+												databaseType === "postgres"
+													? `psql "${externalUrl || ""}"`
+													: databaseType === "mysql" || databaseType === "mariadb"
+														? `mysql -h ${publicHost} -P ${externalPort} -u ${user} -p ${dbName}`
+														: databaseType === "mongo"
+															? `mongosh "${externalUrl || ""}"`
+															: databaseType === "redis"
+																? `redis-cli -h ${publicHost} -p ${externalPort} -a "${password}"`
+																: `turso db shell "http://${publicHost}:${externalPort}" --auth-token "${password}"`
+											}
+										/>
+									</div>
+								</div>
+
 								{/* Power user custom port option */}
-								<div className="pt-2">
+								<div className="pt-1">
 									{!isCustomPortOpen ? (
 										<button
 											type="button"

@@ -11,6 +11,7 @@ import {
 	findProjectById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicDatabaseHost,
 	getPublicServerIp,
 	getWebServerSettings,
 	IS_CLOUD,
@@ -153,10 +154,14 @@ export const libsqlRouter = createTRPCRouter({
 					message: "You are not authorized to access this Libsql",
 				});
 			}
-			const publicHost = await getPublicServerIp(libsql.serverId || undefined);
+			const publicHostInfo = await getPublicDatabaseHost(
+				libsql.serverId || undefined,
+				libsql.appName || undefined,
+			);
 			return {
 				...libsql,
-				publicHost,
+				publicHost: publicHostInfo.host,
+				publicHostInfo,
 			};
 		}),
 	getConnectionDetails: protectedProcedure
@@ -173,8 +178,16 @@ export const libsqlRouter = createTRPCRouter({
 					message: "You are not authorized to access this Libsql",
 				});
 			}
-			const publicHost = await getPublicServerIp(libsql.serverId || undefined);
-			return buildDatabaseConnectionStrings("libsql", libsql, publicHost);
+			const publicHostInfo = await getPublicDatabaseHost(
+				libsql.serverId || undefined,
+				libsql.appName || undefined,
+			);
+			return buildDatabaseConnectionStrings(
+				"libsql",
+				libsql,
+				publicHostInfo.host,
+				publicHostInfo,
+			);
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(

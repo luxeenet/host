@@ -1,5 +1,7 @@
+import { BRAND } from "@paas/branding";
 import { TRPCError } from "@trpc/server";
 import { isNull, not } from "drizzle-orm";
+import { isIP } from "net";
 import { db } from "../db";
 import {
 	libsql,
@@ -19,6 +21,7 @@ import { findMySqlById } from "./mysql";
 import { findPostgresById } from "./postgres";
 import { findRedisById } from "./redis";
 import { checkPortInUse } from "./settings";
+import { getWebServerSettings } from "./web-server-settings";
 
 export type SupportedDatabaseType =
 	| "postgres"
@@ -47,9 +50,94 @@ export interface DatabaseConnectionInfo {
 		url: string | null;
 		isEnabled: boolean;
 		hasPublicHost: boolean;
+		isDomain: boolean;
+		platformDomain: string | null;
+		serverIp: string;
 	};
 	envVariables: Record<string, string>;
 }
+
+export interface DatabasePublicHostInfo {
+	host: string;
+	isDomain: boolean;
+	platformDomain: string | null;
+	serverIp: string;
+}
+
+/**
+ * Resolves the platform database hostname (e.g. db.hatdot.cloud or db-<app>.hatdot.cloud)
+ * ensuring customers see a branded managed domain rather than raw server IP addresses.
+ */
+export const getPublicDatabaseHost = async (
+	serverId?: string,
+	appName?: string,
+): Promise<DatabasePublicHostInfo> => {
+	const serverIp = await getPublicServerIp(serverId);
+	const settings = await getWebServerSettings();
+
+	// 1. Explicit environment variable for custom database gateway
+	if (process.env.PLATFORM_DB_DOMAIN) {
+		return {
+			host: process.env.PLATFORM_DB_DOMAIN,
+			isDomain: true,
+			platformDomain: process.env.PLATFORM_DB_DOMAIN,
+			serverIp,
+		};
+	}
+
+	// 2. Web server settings host domain (e.g. app.hatdot.cloud -> db.hatdot.cloud)
+	if (
+		settings?.host &&
+		!isIP(settings.host) &&
+		settings.host !== "localhost" &&
+		settings.host !== "127.0.0.1"
+	) {
+		const cleanHost = settings.host.replace(/^https?:\/\//, "").split(":")[0]!;
+		const baseDomain = cleanHost.startsWith("app.")
+			? cleanHost.slice(4)
+			: cleanHost;
+		const dbDomain = baseDomain.startsWith("db.")
+			? baseDomain
+			: `db.${baseDomain}`;
+
+		return {
+			host: dbDomain,
+			isDomain: true,
+			platformDomain: dbDomain,
+			serverIp,
+		};
+	}
+
+	// 3. Platform subdomain base from Branding config (defaults to hatdot.cloud)
+	if (
+		BRAND.PLATFORM_SUBDOMAIN_BASE &&
+		BRAND.PLATFORM_SUBDOMAIN_BASE !== "localhost" &&
+		!isIP(BRAND.PLATFORM_SUBDOMAIN_BASE)
+	) {
+		const cleanBase = BRAND.PLATFORM_SUBDOMAIN_BASE.replace(/^https?:\/\//, "").split(":")[0]!;
+		const brandDbDomain = cleanBase.startsWith("db.")
+			? cleanBase
+			: `db.${cleanBase}`;
+
+		return {
+			host: brandDbDomain,
+			isDomain: true,
+			platformDomain: brandDbDomain,
+			serverIp,
+		};
+	}
+
+	// 4. Fallback to public IP
+	const isResolvedDomain =
+		!isIP(serverIp) && serverIp !== "localhost" && serverIp !== "127.0.0.1";
+
+	return {
+		host: serverIp,
+		isDomain: isResolvedDomain,
+		platformDomain: isResolvedDomain ? serverIp : null,
+		serverIp,
+	};
+};
 
 /**
  * Automatically allocates a safe, non-conflicting external TCP port
@@ -143,6 +231,11 @@ export const buildDatabaseConnectionStrings = (
 	type: SupportedDatabaseType,
 	dbRecord: any,
 	publicHost: string,
+	publicHostInfo?: {
+		isDomain?: boolean;
+		platformDomain?: string | null;
+		serverIp?: string;
+	},
 ): DatabaseConnectionInfo => {
 	const appName = dbRecord.appName || "";
 	const user = dbRecord.databaseUser || (type === "redis" ? "default" : "postgres");
@@ -151,6 +244,9 @@ export const buildDatabaseConnectionStrings = (
 	const externalPort = dbRecord.externalPort ?? null;
 	const isEnabled = externalPort !== null && externalPort > 0;
 	const hasPublicHost = Boolean(publicHost && publicHost !== "127.0.0.1");
+	const isDomain = publicHostInfo?.isDomain ?? (!isIP(publicHost) && publicHost !== "127.0.0.1");
+	const platformDomain = publicHostInfo?.platformDomain ?? (isDomain ? publicHost : null);
+	const serverIp = publicHostInfo?.serverIp ?? (isIP(publicHost) ? publicHost : "");
 
 	let internalPort = 5432;
 	let internalUrl = "";
@@ -249,6 +345,9 @@ export const buildDatabaseConnectionStrings = (
 			url: externalUrl,
 			isEnabled,
 			hasPublicHost,
+			isDomain,
+			platformDomain,
+			serverIp,
 		},
 		envVariables,
 	};
@@ -342,11 +441,15 @@ export const connectDatabaseToApplication = async (params: {
 		});
 	}
 
-	const publicHost = await getPublicServerIp(dbRecord.serverId || undefined);
+	const publicHostInfo = await getPublicDatabaseHost(
+		dbRecord.serverId || undefined,
+		dbRecord.appName || undefined,
+	);
 	const connInfo = buildDatabaseConnectionStrings(
 		params.databaseType,
 		dbRecord,
-		publicHost,
+		publicHostInfo.host,
+		publicHostInfo,
 	);
 	const mergedEnv = mergeEnvironmentVariables(app.env, connInfo.envVariables);
 

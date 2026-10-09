@@ -17,9 +17,7 @@ import { ShowEnvironment } from "@/components/dashboard/application/environment/
 import { ShowDockerLogs } from "@/components/dashboard/application/logs/show";
 import { DeleteService } from "@/components/dashboard/compose/delete-service";
 import { ShowBackups } from "@/components/dashboard/database/backups/show-backups";
-import { ShowExternalLibsqlCredentials } from "@/components/dashboard/libsql/general/show-external-libsql-credentials";
 import { ShowGeneralLibsql } from "@/components/dashboard/libsql/general/show-general-libsql";
-import { ShowInternalLibsqlCredentials } from "@/components/dashboard/libsql/general/show-internal-libsql-credentials";
 import { UpdateLibsql } from "@/components/dashboard/libsql/update-libsql";
 import { ContainerFreeMonitoring } from "@/components/dashboard/monitoring/free/container/show-free-container-monitoring";
 import { ContainerPaidMonitoring } from "@/components/dashboard/monitoring/paid/container/show-paid-container-monitoring";
@@ -219,8 +217,6 @@ const Libsql = (
 									<TabsContent value="general">
 										<div className="flex flex-col gap-4 pt-2.5">
 											<ShowGeneralLibsql libsqlId={libsqlId} />
-											<ShowInternalLibsqlCredentials libsqlId={libsqlId} />
-											<ShowExternalLibsqlCredentials libsqlId={libsqlId} />
 										</div>
 									</TabsContent>
 									<TabsContent value="environment">

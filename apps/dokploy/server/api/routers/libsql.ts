@@ -1,5 +1,8 @@
 import {
+	allocateAvailableExternalPort,
+	buildDatabaseConnectionStrings,
 	checkPortInUse,
+	connectDatabaseToApplication,
 	createLibsql,
 	createMount,
 	deployLibsql,
@@ -8,6 +11,7 @@ import {
 	findProjectById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicServerIp,
 	getWebServerSettings,
 	IS_CLOUD,
 	rebuildDatabase,
@@ -149,7 +153,114 @@ export const libsqlRouter = createTRPCRouter({
 					message: "You are not authorized to access this Libsql",
 				});
 			}
-			return libsql;
+			const publicHost = await getPublicServerIp(libsql.serverId || undefined);
+			return {
+				...libsql,
+				publicHost,
+			};
+		}),
+	getConnectionDetails: protectedProcedure
+		.input(apiFindOneLibsql)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.libsqlId, "read");
+			const libsql = await findLibsqlById(input.libsqlId);
+			if (
+				libsql.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Libsql",
+				});
+			}
+			const publicHost = await getPublicServerIp(libsql.serverId || undefined);
+			return buildDatabaseConnectionStrings("libsql", libsql, publicHost);
+		}),
+	enableExternalAccess: protectedProcedure
+		.input(
+			z.object({
+				libsqlId: z.string().min(1),
+				customPort: z.number().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.libsqlId, {
+				service: ["create"],
+			});
+			const libsql = await findLibsqlById(input.libsqlId);
+			const portToUse =
+				input.customPort ??
+				(await allocateAvailableExternalPort(
+					8080,
+					libsql.serverId || undefined,
+				));
+
+			const portCheck = await checkPortInUse(
+				portToUse,
+				libsql.serverId || undefined,
+			);
+			if (portCheck.isInUse) {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: `Port ${portToUse} is already in use by ${portCheck.conflictingContainer}`,
+				});
+			}
+
+			await updateLibsqlById(input.libsqlId, {
+				externalPort: portToUse,
+			});
+			await deployLibsql(input.libsqlId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: libsql.libsqlId,
+				resourceName: libsql.appName,
+			});
+			return await findLibsqlById(input.libsqlId);
+		}),
+	disableExternalAccess: protectedProcedure
+		.input(apiFindOneLibsql)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.libsqlId, {
+				service: ["create"],
+			});
+			const libsql = await findLibsqlById(input.libsqlId);
+			await updateLibsqlById(input.libsqlId, {
+				externalPort: null,
+			});
+			await deployLibsql(input.libsqlId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: libsql.libsqlId,
+				resourceName: libsql.appName,
+			});
+			return await findLibsqlById(input.libsqlId);
+		}),
+	connectToApplication: protectedProcedure
+		.input(
+			z.object({
+				libsqlId: z.string().min(1),
+				applicationId: z.string().min(1),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.libsqlId, "read");
+			await checkServicePermissionAndAccess(ctx, input.applicationId, {
+				envVars: ["write"],
+			});
+			const result = await connectDatabaseToApplication({
+				databaseType: "libsql",
+				databaseId: input.libsqlId,
+				applicationId: input.applicationId,
+			});
+			await audit(ctx, {
+				action: "update",
+				resourceType: "application",
+				resourceId: input.applicationId,
+				resourceName: result.applicationName,
+			});
+			return result;
 		}),
 
 	start: protectedProcedure
@@ -577,5 +688,33 @@ export const libsqlRouter = createTRPCRouter({
 				input.search,
 				libsql.serverId,
 			);
+		}),
+	changePassword: protectedProcedure
+		.input(
+			z.object({
+				libsqlId: z.string().min(1),
+				password: z.string().min(1),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			const { libsqlId, password } = input;
+			await checkServicePermissionAndAccess(ctx, libsqlId, {
+				service: ["create"],
+			});
+
+			const ls = await findLibsqlById(libsqlId);
+			await updateLibsqlById(libsqlId, {
+				databasePassword: password,
+			});
+			await deployLibsql(libsqlId);
+
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: ls.libsqlId,
+				resourceName: ls.appName,
+			});
+
+			return true;
 		}),
 });

@@ -1,5 +1,8 @@
 import {
+	allocateAvailableExternalPort,
+	buildDatabaseConnectionStrings,
 	checkPortInUse,
+	connectDatabaseToApplication,
 	createMariadb,
 	createMount,
 	deployMariadb,
@@ -11,6 +14,7 @@ import {
 	findProjectById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
 	IS_CLOUD,
@@ -163,7 +167,114 @@ export const mariadbRouter = createTRPCRouter({
 					message: "You are not authorized to access this Mariadb",
 				});
 			}
-			return mariadb;
+			const publicHost = await getPublicServerIp(mariadb.serverId || undefined);
+			return {
+				...mariadb,
+				publicHost,
+			};
+		}),
+	getConnectionDetails: protectedProcedure
+		.input(apiFindOneMariaDB)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mariadbId, "read");
+			const mariadb = await findMariadbById(input.mariadbId);
+			if (
+				mariadb.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Mariadb",
+				});
+			}
+			const publicHost = await getPublicServerIp(mariadb.serverId || undefined);
+			return buildDatabaseConnectionStrings("mariadb", mariadb, publicHost);
+		}),
+	enableExternalAccess: protectedProcedure
+		.input(
+			z.object({
+				mariadbId: z.string().min(1),
+				customPort: z.number().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.mariadbId, {
+				service: ["create"],
+			});
+			const mariadb = await findMariadbById(input.mariadbId);
+			const portToUse =
+				input.customPort ??
+				(await allocateAvailableExternalPort(
+					3306,
+					mariadb.serverId || undefined,
+				));
+
+			const portCheck = await checkPortInUse(
+				portToUse,
+				mariadb.serverId || undefined,
+			);
+			if (portCheck.isInUse) {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: `Port ${portToUse} is already in use by ${portCheck.conflictingContainer}`,
+				});
+			}
+
+			await updateMariadbById(input.mariadbId, {
+				externalPort: portToUse,
+			});
+			await deployMariadb(input.mariadbId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: mariadb.mariadbId,
+				resourceName: mariadb.appName,
+			});
+			return await findMariadbById(input.mariadbId);
+		}),
+	disableExternalAccess: protectedProcedure
+		.input(apiFindOneMariaDB)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.mariadbId, {
+				service: ["create"],
+			});
+			const mariadb = await findMariadbById(input.mariadbId);
+			await updateMariadbById(input.mariadbId, {
+				externalPort: null,
+			});
+			await deployMariadb(input.mariadbId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: mariadb.mariadbId,
+				resourceName: mariadb.appName,
+			});
+			return await findMariadbById(input.mariadbId);
+		}),
+	connectToApplication: protectedProcedure
+		.input(
+			z.object({
+				mariadbId: z.string().min(1),
+				applicationId: z.string().min(1),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mariadbId, "read");
+			await checkServicePermissionAndAccess(ctx, input.applicationId, {
+				envVars: ["write"],
+			});
+			const result = await connectDatabaseToApplication({
+				databaseType: "mariadb",
+				databaseId: input.mariadbId,
+				applicationId: input.applicationId,
+			});
+			await audit(ctx, {
+				action: "update",
+				resourceType: "application",
+				resourceId: input.applicationId,
+				resourceName: result.applicationName,
+			});
+			return result;
 		}),
 
 	start: protectedProcedure

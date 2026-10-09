@@ -1,5 +1,8 @@
 import {
+	allocateAvailableExternalPort,
+	buildDatabaseConnectionStrings,
 	checkPortInUse,
+	connectDatabaseToApplication,
 	createMount,
 	createPostgres,
 	deployPostgres,
@@ -12,6 +15,7 @@ import {
 	getAccessibleServerIds,
 	getContainerLogs,
 	getMountPath,
+	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
 	IS_CLOUD,
@@ -171,7 +175,118 @@ export const postgresRouter = createTRPCRouter({
 					message: "You are not authorized to access this Postgres",
 				});
 			}
-			return postgres;
+			const publicHost = await getPublicServerIp(
+				postgres.serverId || undefined,
+			);
+			return {
+				...postgres,
+				publicHost,
+			};
+		}),
+	getConnectionDetails: protectedProcedure
+		.input(apiFindOnePostgres)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.postgresId, "read");
+			const postgres = await findPostgresById(input.postgresId);
+			if (
+				postgres.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Postgres",
+				});
+			}
+			const publicHost = await getPublicServerIp(
+				postgres.serverId || undefined,
+			);
+			return buildDatabaseConnectionStrings("postgres", postgres, publicHost);
+		}),
+	enableExternalAccess: protectedProcedure
+		.input(
+			z.object({
+				postgresId: z.string().min(1),
+				customPort: z.number().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.postgresId, {
+				service: ["create"],
+			});
+			const postgres = await findPostgresById(input.postgresId);
+			const portToUse =
+				input.customPort ??
+				(await allocateAvailableExternalPort(
+					5432,
+					postgres.serverId || undefined,
+				));
+
+			const portCheck = await checkPortInUse(
+				portToUse,
+				postgres.serverId || undefined,
+			);
+			if (portCheck.isInUse) {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: `Port ${portToUse} is already in use by ${portCheck.conflictingContainer}`,
+				});
+			}
+
+			await updatePostgresById(input.postgresId, {
+				externalPort: portToUse,
+			});
+			await deployPostgres(input.postgresId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: postgres.postgresId,
+				resourceName: postgres.appName,
+			});
+			return await findPostgresById(input.postgresId);
+		}),
+	disableExternalAccess: protectedProcedure
+		.input(apiFindOnePostgres)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.postgresId, {
+				service: ["create"],
+			});
+			const postgres = await findPostgresById(input.postgresId);
+			await updatePostgresById(input.postgresId, {
+				externalPort: null,
+			});
+			await deployPostgres(input.postgresId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: postgres.postgresId,
+				resourceName: postgres.appName,
+			});
+			return await findPostgresById(input.postgresId);
+		}),
+	connectToApplication: protectedProcedure
+		.input(
+			z.object({
+				postgresId: z.string().min(1),
+				applicationId: z.string().min(1),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.postgresId, "read");
+			await checkServicePermissionAndAccess(ctx, input.applicationId, {
+				envVars: ["write"],
+			});
+			const result = await connectDatabaseToApplication({
+				databaseType: "postgres",
+				databaseId: input.postgresId,
+				applicationId: input.applicationId,
+			});
+			await audit(ctx, {
+				action: "update",
+				resourceType: "application",
+				resourceId: input.applicationId,
+				resourceName: result.applicationName,
+			});
+			return result;
 		}),
 
 	start: protectedProcedure

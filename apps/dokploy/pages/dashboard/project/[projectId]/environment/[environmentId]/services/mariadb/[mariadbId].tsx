@@ -17,9 +17,7 @@ import { ShowEnvironment } from "@/components/dashboard/application/environment/
 import { ShowDockerLogs } from "@/components/dashboard/application/logs/show";
 import { DeleteService } from "@/components/dashboard/compose/delete-service";
 import { ShowBackups } from "@/components/dashboard/database/backups/show-backups";
-import { ShowExternalMariadbCredentials } from "@/components/dashboard/mariadb/general/show-external-mariadb-credentials";
 import { ShowGeneralMariadb } from "@/components/dashboard/mariadb/general/show-general-mariadb";
-import { ShowInternalMariadbCredentials } from "@/components/dashboard/mariadb/general/show-internal-mariadb-credentials";
 import { UpdateMariadb } from "@/components/dashboard/mariadb/update-mariadb";
 import { ContainerFreeMonitoring } from "@/components/dashboard/monitoring/free/container/show-free-container-monitoring";
 import { ContainerPaidMonitoring } from "@/components/dashboard/monitoring/paid/container/show-paid-container-monitoring";
@@ -244,8 +242,6 @@ const Mariadb = (
 									<TabsContent value="general">
 										<div className="flex flex-col gap-4 pt-2.5">
 											<ShowGeneralMariadb mariadbId={mariadbId} />
-											<ShowInternalMariadbCredentials mariadbId={mariadbId} />
-											<ShowExternalMariadbCredentials mariadbId={mariadbId} />
 										</div>
 									</TabsContent>
 									{permissions?.envVars.read && (

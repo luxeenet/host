@@ -1,5 +1,8 @@
 import {
+	allocateAvailableExternalPort,
+	buildDatabaseConnectionStrings,
 	checkPortInUse,
+	connectDatabaseToApplication,
 	createMount,
 	createRedis,
 	deployRedis,
@@ -10,6 +13,7 @@ import {
 	findRedisById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
 	IS_CLOUD,
@@ -158,7 +162,114 @@ export const redisRouter = createTRPCRouter({
 					message: "You are not authorized to access this Redis",
 				});
 			}
-			return redis;
+			const publicHost = await getPublicServerIp(redis.serverId || undefined);
+			return {
+				...redis,
+				publicHost,
+			};
+		}),
+	getConnectionDetails: protectedProcedure
+		.input(apiFindOneRedis)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.redisId, "read");
+			const redis = await findRedisById(input.redisId);
+			if (
+				redis.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Redis",
+				});
+			}
+			const publicHost = await getPublicServerIp(redis.serverId || undefined);
+			return buildDatabaseConnectionStrings("redis", redis, publicHost);
+		}),
+	enableExternalAccess: protectedProcedure
+		.input(
+			z.object({
+				redisId: z.string().min(1),
+				customPort: z.number().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.redisId, {
+				service: ["create"],
+			});
+			const redis = await findRedisById(input.redisId);
+			const portToUse =
+				input.customPort ??
+				(await allocateAvailableExternalPort(
+					6379,
+					redis.serverId || undefined,
+				));
+
+			const portCheck = await checkPortInUse(
+				portToUse,
+				redis.serverId || undefined,
+			);
+			if (portCheck.isInUse) {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: `Port ${portToUse} is already in use by ${portCheck.conflictingContainer}`,
+				});
+			}
+
+			await updateRedisById(input.redisId, {
+				externalPort: portToUse,
+			});
+			await deployRedis(input.redisId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: redis.redisId,
+				resourceName: redis.appName,
+			});
+			return await findRedisById(input.redisId);
+		}),
+	disableExternalAccess: protectedProcedure
+		.input(apiFindOneRedis)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.redisId, {
+				service: ["create"],
+			});
+			const redis = await findRedisById(input.redisId);
+			await updateRedisById(input.redisId, {
+				externalPort: null,
+			});
+			await deployRedis(input.redisId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: redis.redisId,
+				resourceName: redis.appName,
+			});
+			return await findRedisById(input.redisId);
+		}),
+	connectToApplication: protectedProcedure
+		.input(
+			z.object({
+				redisId: z.string().min(1),
+				applicationId: z.string().min(1),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.redisId, "read");
+			await checkServicePermissionAndAccess(ctx, input.applicationId, {
+				envVars: ["write"],
+			});
+			const result = await connectDatabaseToApplication({
+				databaseType: "redis",
+				databaseId: input.redisId,
+				applicationId: input.applicationId,
+			});
+			await audit(ctx, {
+				action: "update",
+				resourceType: "application",
+				resourceId: input.applicationId,
+				resourceName: result.applicationName,
+			});
+			return result;
 		}),
 
 	start: protectedProcedure

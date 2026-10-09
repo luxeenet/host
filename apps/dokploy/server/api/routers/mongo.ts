@@ -1,5 +1,8 @@
 import {
+	allocateAvailableExternalPort,
+	buildDatabaseConnectionStrings,
 	checkPortInUse,
+	connectDatabaseToApplication,
 	createMongo,
 	createMount,
 	deployMongo,
@@ -11,6 +14,7 @@ import {
 	findProjectById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
 	IS_CLOUD,
@@ -167,7 +171,114 @@ export const mongoRouter = createTRPCRouter({
 					message: "You are not authorized to access this mongo",
 				});
 			}
-			return mongo;
+			const publicHost = await getPublicServerIp(mongo.serverId || undefined);
+			return {
+				...mongo,
+				publicHost,
+			};
+		}),
+	getConnectionDetails: protectedProcedure
+		.input(apiFindOneMongo)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mongoId, "read");
+			const mongo = await findMongoById(input.mongoId);
+			if (
+				mongo.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this mongo",
+				});
+			}
+			const publicHost = await getPublicServerIp(mongo.serverId || undefined);
+			return buildDatabaseConnectionStrings("mongo", mongo, publicHost);
+		}),
+	enableExternalAccess: protectedProcedure
+		.input(
+			z.object({
+				mongoId: z.string().min(1),
+				customPort: z.number().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.mongoId, {
+				service: ["create"],
+			});
+			const mongo = await findMongoById(input.mongoId);
+			const portToUse =
+				input.customPort ??
+				(await allocateAvailableExternalPort(
+					27017,
+					mongo.serverId || undefined,
+				));
+
+			const portCheck = await checkPortInUse(
+				portToUse,
+				mongo.serverId || undefined,
+			);
+			if (portCheck.isInUse) {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: `Port ${portToUse} is already in use by ${portCheck.conflictingContainer}`,
+				});
+			}
+
+			await updateMongoById(input.mongoId, {
+				externalPort: portToUse,
+			});
+			await deployMongo(input.mongoId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: mongo.mongoId,
+				resourceName: mongo.appName,
+			});
+			return await findMongoById(input.mongoId);
+		}),
+	disableExternalAccess: protectedProcedure
+		.input(apiFindOneMongo)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.mongoId, {
+				service: ["create"],
+			});
+			const mongo = await findMongoById(input.mongoId);
+			await updateMongoById(input.mongoId, {
+				externalPort: null,
+			});
+			await deployMongo(input.mongoId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: mongo.mongoId,
+				resourceName: mongo.appName,
+			});
+			return await findMongoById(input.mongoId);
+		}),
+	connectToApplication: protectedProcedure
+		.input(
+			z.object({
+				mongoId: z.string().min(1),
+				applicationId: z.string().min(1),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mongoId, "read");
+			await checkServicePermissionAndAccess(ctx, input.applicationId, {
+				envVars: ["write"],
+			});
+			const result = await connectDatabaseToApplication({
+				databaseType: "mongo",
+				databaseId: input.mongoId,
+				applicationId: input.applicationId,
+			});
+			await audit(ctx, {
+				action: "update",
+				resourceType: "application",
+				resourceId: input.applicationId,
+				resourceName: result.applicationName,
+			});
+			return result;
 		}),
 
 	start: protectedProcedure

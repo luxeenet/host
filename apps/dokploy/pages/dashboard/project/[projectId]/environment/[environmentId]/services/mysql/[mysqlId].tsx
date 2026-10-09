@@ -19,9 +19,7 @@ import { DeleteService } from "@/components/dashboard/compose/delete-service";
 import { ShowBackups } from "@/components/dashboard/database/backups/show-backups";
 import { ContainerFreeMonitoring } from "@/components/dashboard/monitoring/free/container/show-free-container-monitoring";
 import { ContainerPaidMonitoring } from "@/components/dashboard/monitoring/paid/container/show-paid-container-monitoring";
-import { ShowExternalMysqlCredentials } from "@/components/dashboard/mysql/general/show-external-mysql-credentials";
 import { ShowGeneralMysql } from "@/components/dashboard/mysql/general/show-general-mysql";
-import { ShowInternalMysqlCredentials } from "@/components/dashboard/mysql/general/show-internal-mysql-credentials";
 import { UpdateMysql } from "@/components/dashboard/mysql/update-mysql";
 import { ShowDatabaseAdvancedSettings } from "@/components/dashboard/shared/show-database-advanced-settings";
 import { TransferService } from "@/components/dashboard/shared/transfer-service";
@@ -244,8 +242,6 @@ const MySql = (
 										<TabsContent value="general">
 											<div className="flex flex-col gap-4 pt-2.5">
 												<ShowGeneralMysql mysqlId={mysqlId} />
-												<ShowInternalMysqlCredentials mysqlId={mysqlId} />
-												<ShowExternalMysqlCredentials mysqlId={mysqlId} />
 											</div>
 										</TabsContent>
 										{permissions?.envVars.read && (

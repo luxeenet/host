@@ -17,9 +17,7 @@ import { ShowEnvironment } from "@/components/dashboard/application/environment/
 import { ShowDockerLogs } from "@/components/dashboard/application/logs/show";
 import { DeleteService } from "@/components/dashboard/compose/delete-service";
 import { ShowBackups } from "@/components/dashboard/database/backups/show-backups";
-import { ShowExternalMongoCredentials } from "@/components/dashboard/mongo/general/show-external-mongo-credentials";
 import { ShowGeneralMongo } from "@/components/dashboard/mongo/general/show-general-mongo";
-import { ShowInternalMongoCredentials } from "@/components/dashboard/mongo/general/show-internal-mongo-credentials";
 import { UpdateMongo } from "@/components/dashboard/mongo/update-mongo";
 import { ContainerFreeMonitoring } from "@/components/dashboard/monitoring/free/container/show-free-container-monitoring";
 import { ContainerPaidMonitoring } from "@/components/dashboard/monitoring/paid/container/show-paid-container-monitoring";
@@ -244,8 +242,6 @@ const Mongo = (
 									<TabsContent value="general">
 										<div className="flex flex-col gap-4 pt-2.5">
 											<ShowGeneralMongo mongoId={mongoId} />
-											<ShowInternalMongoCredentials mongoId={mongoId} />
-											<ShowExternalMongoCredentials mongoId={mongoId} />
 										</div>
 									</TabsContent>
 									{permissions?.envVars.read && (

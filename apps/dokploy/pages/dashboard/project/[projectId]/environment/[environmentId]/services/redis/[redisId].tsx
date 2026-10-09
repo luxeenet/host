@@ -18,9 +18,7 @@ import { ShowDockerLogs } from "@/components/dashboard/application/logs/show";
 import { DeleteService } from "@/components/dashboard/compose/delete-service";
 import { ContainerFreeMonitoring } from "@/components/dashboard/monitoring/free/container/show-free-container-monitoring";
 import { ContainerPaidMonitoring } from "@/components/dashboard/monitoring/paid/container/show-paid-container-monitoring";
-import { ShowExternalRedisCredentials } from "@/components/dashboard/redis/general/show-external-redis-credentials";
 import { ShowGeneralRedis } from "@/components/dashboard/redis/general/show-general-redis";
-import { ShowInternalRedisCredentials } from "@/components/dashboard/redis/general/show-internal-redis-credentials";
 import { UpdateRedis } from "@/components/dashboard/redis/update-redis";
 import { ShowDatabaseAdvancedSettings } from "@/components/dashboard/shared/show-database-advanced-settings";
 import { TransferService } from "@/components/dashboard/shared/transfer-service";
@@ -242,8 +240,6 @@ const Redis = (
 									<TabsContent value="general">
 										<div className="flex flex-col gap-4 pt-2.5">
 											<ShowGeneralRedis redisId={redisId} />
-											<ShowInternalRedisCredentials redisId={redisId} />
-											<ShowExternalRedisCredentials redisId={redisId} />
 										</div>
 									</TabsContent>
 									{permissions?.envVars.read && (

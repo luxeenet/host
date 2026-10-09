@@ -13,6 +13,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { api } from "@/utils/api";
+import { DatabaseConnectionCard } from "../../database/connection/database-connection-card";
 import { type LogLine, parseLogs } from "../../docker/logs/utils";
 import { DockerTerminalModal } from "../../settings/web-server/docker-terminal-modal";
 
@@ -32,10 +33,8 @@ export const ShowGeneralMariadb = ({ mariadbId }: Props) => {
 
 	const { mutateAsync: reload, isPending: isReloading } =
 		api.mariadb.reload.useMutation();
-
 	const { mutateAsync: start, isPending: isStarting } =
 		api.mariadb.start.useMutation();
-
 	const { mutateAsync: stop, isPending: isStopping } =
 		api.mariadb.stop.useMutation();
 
@@ -67,210 +66,211 @@ export const ShowGeneralMariadb = ({ mariadbId }: Props) => {
 	);
 
 	return (
-		<>
-			<div className="flex w-full flex-col gap-5 ">
-				<Card className="bg-background">
-					<CardHeader>
-						<CardTitle className="text-xl">Deploy Settings</CardTitle>
-					</CardHeader>
-					<CardContent className="flex flex-row gap-4 flex-wrap">
+		<div className="flex w-full flex-col gap-6">
+			<Card className="bg-background">
+				<CardHeader className="flex flex-row items-center justify-between pb-3">
+					<CardTitle className="text-xl">Database Controls</CardTitle>
+				</CardHeader>
+				<CardContent className="flex flex-row gap-4 flex-wrap items-center">
+					<TooltipProvider disableHoverableContent={false}>
 						{canDeploy && (
-							<TooltipProvider delayDuration={0}>
-								<DialogAction
-									title="Deploy Mariadb"
-									description="Are you sure you want to deploy this mariadb?"
-									type="default"
-									onClick={async () => {
-										setIsDeploying(true);
-										await new Promise((resolve) => setTimeout(resolve, 1000));
-										refetch();
-									}}
+							<DialogAction
+								title="Deploy MariaDB"
+								description="Are you sure you want to deploy this MariaDB database?"
+								type="default"
+								onClick={async () => {
+									setIsDeploying(true);
+									await new Promise((resolve) => setTimeout(resolve, 1000));
+									refetch();
+								}}
+							>
+								<Button
+									variant="default"
+									isLoading={data?.applicationStatus === "running"}
+									className="flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-2"
 								>
-									<Button
-										variant="default"
-										isLoading={data?.applicationStatus === "running"}
-										className="flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-2"
-									>
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<div className="flex items-center">
-													<Rocket className="size-4 mr-1" />
-													Deploy
-												</div>
-											</TooltipTrigger>
-											<TooltipPrimitive.Portal>
-												<TooltipContent sideOffset={5} className="z-60">
-													<p>Downloads and sets up the MariaDB database</p>
-												</TooltipContent>
-											</TooltipPrimitive.Portal>
-										</Tooltip>
-									</Button>
-								</DialogAction>
-							</TooltipProvider>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<div className="flex items-center">
+												<Rocket className="size-4 mr-1.5" />
+												Deploy
+											</div>
+										</TooltipTrigger>
+										<TooltipPrimitive.Portal>
+											<TooltipContent sideOffset={5} className="z-60">
+												<p>Downloads and sets up the MariaDB database</p>
+											</TooltipContent>
+										</TooltipPrimitive.Portal>
+									</Tooltip>
+								</Button>
+							</DialogAction>
 						)}
 						{canDeploy && (
-							<TooltipProvider delayDuration={0}>
+							<DialogAction
+								title="Reload MariaDB"
+								description="Are you sure you want to reload this MariaDB database?"
+								type="default"
+								onClick={async () => {
+									await reload({
+										mariadbId: mariadbId,
+										appName: data?.appName || "",
+									})
+										.then(() => {
+											toast.success("MariaDB reloaded successfully");
+											refetch();
+										})
+										.catch(() => {
+											toast.error("Error reloading MariaDB");
+										});
+								}}
+							>
+								<Button
+									variant="secondary"
+									isLoading={isReloading}
+									className="flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-2"
+								>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<div className="flex items-center">
+												<RefreshCcw className="size-4 mr-1.5" />
+												Reload
+											</div>
+										</TooltipTrigger>
+										<TooltipPrimitive.Portal>
+											<TooltipContent sideOffset={5} className="z-60">
+												<p>Restart the MariaDB service without rebuilding</p>
+											</TooltipContent>
+										</TooltipPrimitive.Portal>
+									</Tooltip>
+								</Button>
+							</DialogAction>
+						)}
+						{canDeploy &&
+							(data?.applicationStatus === "idle" ? (
 								<DialogAction
-									title="Reload Mariadb"
-									description="Are you sure you want to reload this mariadb?"
+									title="Start MariaDB"
+									description="Are you sure you want to start this MariaDB database?"
 									type="default"
 									onClick={async () => {
-										await reload({
+										await start({
 											mariadbId: mariadbId,
-											appName: data?.appName || "",
 										})
 											.then(() => {
-												toast.success("Mariadb reloaded successfully");
+												toast.success("MariaDB started successfully");
 												refetch();
 											})
 											.catch(() => {
-												toast.error("Error reloading Mariadb");
+												toast.error("Error starting MariaDB");
 											});
 									}}
 								>
 									<Button
 										variant="secondary"
-										isLoading={isReloading}
+										isLoading={isStarting}
 										className="flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-2"
 									>
 										<Tooltip>
 											<TooltipTrigger asChild>
 												<div className="flex items-center">
-													<RefreshCcw className="size-4 mr-1" />
-													Reload
+													<CheckCircle2 className="size-4 mr-1.5" />
+													Start
 												</div>
 											</TooltipTrigger>
 											<TooltipPrimitive.Portal>
 												<TooltipContent sideOffset={5} className="z-60">
-													<p>Restart the MariaDB service without rebuilding</p>
+													<p>
+														Start the MariaDB database (requires a previous
+														successful setup)
+													</p>
 												</TooltipContent>
 											</TooltipPrimitive.Portal>
 										</Tooltip>
 									</Button>
 								</DialogAction>
-							</TooltipProvider>
-						)}
-						{canDeploy &&
-							(data?.applicationStatus === "idle" ? (
-								<TooltipProvider delayDuration={0}>
-									<DialogAction
-										title="Start Mariadb"
-										description="Are you sure you want to start this mariadb?"
-										type="default"
-										onClick={async () => {
-											await start({
-												mariadbId: mariadbId,
-											})
-												.then(() => {
-													toast.success("Mariadb started successfully");
-													refetch();
-												})
-												.catch(() => {
-													toast.error("Error starting Mariadb");
-												});
-										}}
-									>
-										<Button
-											variant="secondary"
-											isLoading={isStarting}
-											className="flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-2"
-										>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<div className="flex items-center">
-														<CheckCircle2 className="size-4 mr-1" />
-														Start
-													</div>
-												</TooltipTrigger>
-												<TooltipPrimitive.Portal>
-													<TooltipContent sideOffset={5} className="z-60">
-														<p>
-															Start the MariaDB database (requires a previous
-															successful setup)
-														</p>
-													</TooltipContent>
-												</TooltipPrimitive.Portal>
-											</Tooltip>
-										</Button>
-									</DialogAction>
-								</TooltipProvider>
 							) : (
-								<TooltipProvider delayDuration={0}>
-									<DialogAction
-										title="Stop Mariadb"
-										description="Are you sure you want to stop this mariadb?"
-										onClick={async () => {
-											await stop({
-												mariadbId: mariadbId,
+								<DialogAction
+									title="Stop MariaDB"
+									description="Are you sure you want to stop this MariaDB database?"
+									onClick={async () => {
+										await stop({
+											mariadbId: mariadbId,
+										})
+											.then(() => {
+												toast.success("MariaDB stopped successfully");
+												refetch();
 											})
-												.then(() => {
-													toast.success("Mariadb stopped successfully");
-													refetch();
-												})
-												.catch(() => {
-													toast.error("Error stopping Mariadb");
-												});
-										}}
+											.catch(() => {
+												toast.error("Error stopping MariaDB");
+											});
+									}}
+								>
+									<Button
+										variant="destructive"
+										isLoading={isStopping}
+										className="flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-2"
 									>
-										<Button
-											variant="destructive"
-											isLoading={isStopping}
-											className="flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-2"
-										>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<div className="flex items-center">
-														<Ban className="size-4 mr-1" />
-														Stop
-													</div>
-												</TooltipTrigger>
-												<TooltipPrimitive.Portal>
-													<TooltipContent sideOffset={5} className="z-60">
-														<p>Stop the currently running MariaDB database</p>
-													</TooltipContent>
-												</TooltipPrimitive.Portal>
-											</Tooltip>
-										</Button>
-									</DialogAction>
-								</TooltipProvider>
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<div className="flex items-center">
+													<Ban className="size-4 mr-1.5" />
+													Stop
+												</div>
+											</TooltipTrigger>
+											<TooltipPrimitive.Portal>
+												<TooltipContent sideOffset={5} className="z-60">
+													<p>Stop the currently running MariaDB database</p>
+												</TooltipContent>
+											</TooltipPrimitive.Portal>
+										</Tooltip>
+									</Button>
+								</DialogAction>
 							))}
-						<DockerTerminalModal
-							appName={data?.appName || ""}
-							serviceId={data?.mariadbId}
-							serverId={data?.serverId || ""}
+					</TooltipProvider>
+					<DockerTerminalModal
+						appName={data?.appName || ""}
+						serviceId={data?.mariadbId}
+						serverId={data?.serverId || ""}
+					>
+						<Button
+							variant="outline"
+							className="flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-2 ml-auto"
 						>
-							<Button
-								variant="outline"
-								className="flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-offset-2"
-							>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<div className="flex items-center">
-											<Terminal className="size-4 mr-1" />
-											Open Terminal
-										</div>
-									</TooltipTrigger>
-									<TooltipPrimitive.Portal>
-										<TooltipContent sideOffset={5} className="z-60">
-											<p>Open a terminal to the MariaDB container</p>
-										</TooltipContent>
-									</TooltipPrimitive.Portal>
-								</Tooltip>
-							</Button>
-						</DockerTerminalModal>
-					</CardContent>
-				</Card>
-				<DrawerLogs
-					isOpen={isDrawerOpen}
-					onClose={() => {
-						setIsDrawerOpen(false);
-						setFilteredLogs([]);
-						setIsDeploying(false);
-						refetch();
-					}}
-					filteredLogs={filteredLogs}
-				/>
-			</div>
-		</>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<div className="flex items-center">
+										<Terminal className="size-4 mr-1.5" />
+										Terminal
+									</div>
+								</TooltipTrigger>
+								<TooltipPrimitive.Portal>
+									<TooltipContent sideOffset={5} className="z-60">
+										<p>Open a terminal to the MariaDB container</p>
+									</TooltipContent>
+								</TooltipPrimitive.Portal>
+							</Tooltip>
+						</Button>
+					</DockerTerminalModal>
+				</CardContent>
+			</Card>
+
+			<DatabaseConnectionCard
+				databaseId={mariadbId}
+				databaseType="mariadb"
+				data={data}
+				refetch={refetch}
+				environmentId={data?.environmentId}
+			/>
+
+			<DrawerLogs
+				isOpen={isDrawerOpen}
+				onClose={() => {
+					setIsDrawerOpen(false);
+					setFilteredLogs([]);
+					setIsDeploying(false);
+					refetch();
+				}}
+				filteredLogs={filteredLogs}
+			/>
+		</div>
 	);
 };

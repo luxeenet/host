@@ -1,5 +1,8 @@
 import {
+	allocateAvailableExternalPort,
+	buildDatabaseConnectionStrings,
 	checkPortInUse,
+	connectDatabaseToApplication,
 	createMount,
 	createMysql,
 	deployMySql,
@@ -11,6 +14,7 @@ import {
 	findProjectById,
 	getAccessibleServerIds,
 	getContainerLogs,
+	getPublicServerIp,
 	getServiceContainer,
 	getWebServerSettings,
 	IS_CLOUD,
@@ -167,7 +171,114 @@ export const mysqlRouter = createTRPCRouter({
 					message: "You are not authorized to access this MySQL",
 				});
 			}
-			return mysql;
+			const publicHost = await getPublicServerIp(mysql.serverId || undefined);
+			return {
+				...mysql,
+				publicHost,
+			};
+		}),
+	getConnectionDetails: protectedProcedure
+		.input(apiFindOneMySql)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mysqlId, "read");
+			const mysql = await findMySqlById(input.mysqlId);
+			if (
+				mysql.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this MySQL",
+				});
+			}
+			const publicHost = await getPublicServerIp(mysql.serverId || undefined);
+			return buildDatabaseConnectionStrings("mysql", mysql, publicHost);
+		}),
+	enableExternalAccess: protectedProcedure
+		.input(
+			z.object({
+				mysqlId: z.string().min(1),
+				customPort: z.number().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.mysqlId, {
+				service: ["create"],
+			});
+			const mysql = await findMySqlById(input.mysqlId);
+			const portToUse =
+				input.customPort ??
+				(await allocateAvailableExternalPort(
+					3306,
+					mysql.serverId || undefined,
+				));
+
+			const portCheck = await checkPortInUse(
+				portToUse,
+				mysql.serverId || undefined,
+			);
+			if (portCheck.isInUse) {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: `Port ${portToUse} is already in use by ${portCheck.conflictingContainer}`,
+				});
+			}
+
+			await updateMySqlById(input.mysqlId, {
+				externalPort: portToUse,
+			});
+			await deployMySql(input.mysqlId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: mysql.mysqlId,
+				resourceName: mysql.appName,
+			});
+			return await findMySqlById(input.mysqlId);
+		}),
+	disableExternalAccess: protectedProcedure
+		.input(apiFindOneMySql)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.mysqlId, {
+				service: ["create"],
+			});
+			const mysql = await findMySqlById(input.mysqlId);
+			await updateMySqlById(input.mysqlId, {
+				externalPort: null,
+			});
+			await deployMySql(input.mysqlId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: mysql.mysqlId,
+				resourceName: mysql.appName,
+			});
+			return await findMySqlById(input.mysqlId);
+		}),
+	connectToApplication: protectedProcedure
+		.input(
+			z.object({
+				mysqlId: z.string().min(1),
+				applicationId: z.string().min(1),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mysqlId, "read");
+			await checkServicePermissionAndAccess(ctx, input.applicationId, {
+				envVars: ["write"],
+			});
+			const result = await connectDatabaseToApplication({
+				databaseType: "mysql",
+				databaseId: input.mysqlId,
+				applicationId: input.applicationId,
+			});
+			await audit(ctx, {
+				action: "update",
+				resourceType: "application",
+				resourceId: input.applicationId,
+				resourceName: result.applicationName,
+			});
+			return result;
 		}),
 
 	start: protectedProcedure

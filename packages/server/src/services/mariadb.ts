@@ -16,6 +16,10 @@ import { TRPCError } from "@trpc/server";
 import { eq, getTableColumns } from "drizzle-orm";
 import { quote } from "shell-quote";
 import type { z } from "zod";
+import {
+	resolveDatabaseImage,
+	validateDatabaseImage,
+} from "../utils/databases/image-resolution";
 import { validUniqueServerAppName } from "./project";
 
 export type Mariadb = typeof mariadb.$inferSelect;
@@ -34,10 +38,13 @@ export const createMariadb = async (
 		});
 	}
 
+	const resolvedImage = resolveDatabaseImage("mariadb", input.dockerImage);
+
 	const newMariadb = await tx
 		.insert(mariadb)
 		.values({
 			...input,
+			dockerImage: resolvedImage,
 			databasePassword: input.databasePassword
 				? input.databasePassword
 				: generatePassword(),
@@ -98,6 +105,11 @@ export const updateMariadbById = async (
 	mariadbData: Partial<Mariadb>,
 ) => {
 	const { appName, ...rest } = mariadbData;
+	if (rest.dockerImage !== undefined) {
+		const resolvedImage = resolveDatabaseImage("mariadb", rest.dockerImage);
+		validateDatabaseImage(resolvedImage);
+		rest.dockerImage = resolvedImage;
+	}
 	const result = await db
 		.update(mariadb)
 		.set({
@@ -147,17 +159,24 @@ export const deployMariadb = async (
 			applicationStatus: "running",
 		});
 		onData?.("Starting mariadb deployment...");
+
+		const resolvedImage = resolveDatabaseImage("mariadb", mariadb.dockerImage);
+		validateDatabaseImage(resolvedImage);
+
 		if (mariadb.serverId) {
 			await execAsyncRemote(
 				mariadb.serverId,
-				`docker pull ${quote([mariadb.dockerImage])}`,
+				`docker pull ${quote([resolvedImage])}`,
 				onData,
 			);
 		} else {
-			await pullImage(mariadb.dockerImage, onData);
+			await pullImage(resolvedImage, onData);
 		}
 
-		await buildMariadb(mariadb);
+		await buildMariadb({
+			...mariadb,
+			dockerImage: resolvedImage,
+		});
 		await waitForSwarmServiceConvergence(mariadb.appName, mariadb.serverId);
 		await updateMariadbById(mariadbId, {
 			applicationStatus: "done",

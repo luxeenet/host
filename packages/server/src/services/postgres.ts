@@ -16,19 +16,15 @@ import { TRPCError } from "@trpc/server";
 import { eq, getTableColumns } from "drizzle-orm";
 import { quote } from "shell-quote";
 import type { z } from "zod";
+import {
+	getDatabaseMountPath,
+	resolveDatabaseImage,
+	validateDatabaseImage,
+} from "../utils/databases/image-resolution";
 import { validUniqueServerAppName } from "./project";
 
-export function getMountPath(dockerImage: string): string {
-	const versionMatch = dockerImage.match(/postgres:(\d+)/);
-
-	if (versionMatch?.[1]) {
-		const version = Number.parseInt(versionMatch[1], 10);
-		if (version >= 18) {
-			// PostgreSQL 18+ uses /var/lib/postgresql/{version}/docker as the default PGDATA
-			return `/var/lib/postgresql/${version}/docker`;
-		}
-	}
-	return "/var/lib/postgresql/data";
+export function getMountPath(dockerImage?: string | null): string {
+	return getDatabaseMountPath("postgres", dockerImage);
 }
 
 export type Postgres = typeof postgres.$inferSelect;
@@ -47,10 +43,13 @@ export const createPostgres = async (
 		});
 	}
 
+	const resolvedImage = resolveDatabaseImage("postgres", input.dockerImage);
+
 	const newPostgres = await tx
 		.insert(postgres)
 		.values({
 			...input,
+			dockerImage: resolvedImage,
 			databasePassword: input.databasePassword
 				? input.databasePassword
 				: generatePassword(),
@@ -125,6 +124,11 @@ export const updatePostgresById = async (
 	postgresData: Partial<Postgres>,
 ) => {
 	const { appName, ...rest } = postgresData;
+	if (rest.dockerImage !== undefined) {
+		const resolvedImage = resolveDatabaseImage("postgres", rest.dockerImage);
+		validateDatabaseImage(resolvedImage);
+		rest.dockerImage = resolvedImage;
+	}
 	const result = await db
 		.update(postgres)
 		.set({
@@ -157,17 +161,26 @@ export const deployPostgres = async (
 
 		onData?.("Starting postgres deployment...");
 
+		const resolvedImage = resolveDatabaseImage(
+			"postgres",
+			postgres.dockerImage,
+		);
+		validateDatabaseImage(resolvedImage);
+
 		if (postgres.serverId) {
 			await execAsyncRemote(
 				postgres.serverId,
-				`docker pull ${quote([postgres.dockerImage])}`,
+				`docker pull ${quote([resolvedImage])}`,
 				onData,
 			);
 		} else {
-			await pullImage(postgres.dockerImage, onData);
+			await pullImage(resolvedImage, onData);
 		}
 
-		await buildPostgres(postgres);
+		await buildPostgres({
+			...postgres,
+			dockerImage: resolvedImage,
+		});
 
 		await waitForSwarmServiceConvergence(postgres.appName, postgres.serverId);
 

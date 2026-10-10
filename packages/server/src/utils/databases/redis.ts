@@ -12,6 +12,8 @@ import {
 import { getRemoteDocker } from "../servers/remote-docker";
 import { withResolvedVaultRefs } from "../vault";
 
+import { resolveDatabaseImage } from "./image-resolution";
+
 export type RedisNested = InferResultType<
 	"redis",
 	{ mounts: true; environment: { with: { project: true } } }
@@ -32,6 +34,8 @@ export const buildRedis = async (rawRedis: RedisNested) => {
 		args,
 		mounts,
 	} = redis;
+
+	const resolvedImage = resolveDatabaseImage("redis", dockerImage);
 
 	const defaultRedisEnv = `REDIS_PASSWORD="${databasePassword}"${
 		env ? `\n${env}` : ""
@@ -73,7 +77,7 @@ export const buildRedis = async (rawRedis: RedisNested) => {
 		TaskTemplate: {
 			ContainerSpec: {
 				HealthCheck,
-				Image: dockerImage,
+				Image: resolvedImage,
 				Env: envVariables,
 				Mounts: [...volumesMount, ...bindsMount, ...filesMount],
 				...(StopGracePeriod !== null &&

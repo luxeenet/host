@@ -39,8 +39,8 @@ export * from "./services/notification";
 export * from "./services/overview";
 export * from "./services/patch";
 export * from "./services/patch-repo";
-export * from "./services/port";
 export * from "./services/plan-entitlement";
+export * from "./services/port";
 export * from "./services/postgres";
 export * from "./services/preflight";
 export * from "./services/preview-deployment";
@@ -103,6 +103,15 @@ export * from "./utils/builders/static";
 export * from "./utils/builders/utils";
 export * from "./utils/cluster/upload";
 export * from "./utils/crons/enterprise";
+export {
+	DEFAULT_DATABASE_IMAGES,
+	DEFAULT_DATABASE_PORTS,
+	getDatabaseMountPath,
+	isValidDockerImage,
+	LEGACY_INVALID_IMAGE_REPLACEMENTS,
+	resolveDatabaseImage,
+	validateDatabaseImage,
+} from "./utils/databases/image-resolution";
 export * from "./utils/databases/rebuild";
 export * from "./utils/docker/collision";
 export * from "./utils/docker/compose";

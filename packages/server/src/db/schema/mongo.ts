@@ -125,7 +125,7 @@ const createSchema = createInsertSchema(mongo, {
 		message: DATABASE_PASSWORD_MESSAGE,
 	}),
 	databaseUser: z.string().min(1),
-	dockerImage: z.string().default("mongo:15"),
+	dockerImage: z.string().default("mongo:8"),
 	command: z.string().optional(),
 	args: z.array(z.string()).optional(),
 	env: z.string().optional(),

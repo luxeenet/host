@@ -15,6 +15,10 @@ import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { quote } from "shell-quote";
 import type { z } from "zod";
+import {
+	resolveDatabaseImage,
+	validateDatabaseImage,
+} from "../utils/databases/image-resolution";
 import { validUniqueServerAppName } from "./project";
 
 export type Redis = typeof redis.$inferSelect;
@@ -34,10 +38,13 @@ export const createRedis = async (
 		});
 	}
 
+	const resolvedImage = resolveDatabaseImage("redis", input.dockerImage);
+
 	const newRedis = await tx
 		.insert(redis)
 		.values({
 			...input,
+			dockerImage: resolvedImage,
 			databasePassword: input.databasePassword
 				? input.databasePassword
 				: generatePassword(),
@@ -83,6 +90,11 @@ export const updateRedisById = async (
 	redisData: Partial<Redis>,
 ) => {
 	const { appName, ...rest } = redisData;
+	if (rest.dockerImage !== undefined) {
+		const resolvedImage = resolveDatabaseImage("redis", rest.dockerImage);
+		validateDatabaseImage(resolvedImage);
+		rest.dockerImage = resolvedImage;
+	}
 	const result = await db
 		.update(redis)
 		.set({
@@ -114,17 +126,24 @@ export const deployRedis = async (
 		});
 
 		onData?.("Starting redis deployment...");
+
+		const resolvedImage = resolveDatabaseImage("redis", redis.dockerImage);
+		validateDatabaseImage(resolvedImage);
+
 		if (redis.serverId) {
 			await execAsyncRemote(
 				redis.serverId,
-				`docker pull ${quote([redis.dockerImage])}`,
+				`docker pull ${quote([resolvedImage])}`,
 				onData,
 			);
 		} else {
-			await pullImage(redis.dockerImage, onData);
+			await pullImage(resolvedImage, onData);
 		}
 
-		await buildRedis(redis);
+		await buildRedis({
+			...redis,
+			dockerImage: resolvedImage,
+		});
 		await waitForSwarmServiceConvergence(redis.appName, redis.serverId);
 		await updateRedisById(redisId, {
 			applicationStatus: "done",

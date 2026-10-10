@@ -62,7 +62,7 @@ const dockerImageDefaultPlaceholder: Record<DbType, string> = {
 	mariadb: "mariadb:11",
 	mysql: "mysql:8",
 	postgres: "postgres:18",
-	redis: "redis:8",
+	redis: "redis:7",
 };
 
 const databasesUserDefaultPlaceholder: Record<
@@ -114,7 +114,7 @@ const mySchema = z
 		z
 			.object({
 				type: z.literal("mariadb"),
-				dockerImage: z.string().default("mariadb:4"),
+				dockerImage: z.string().default("mariadb:11"),
 				databaseRootPassword: z
 					.string()
 					.regex(/^[a-zA-Z0-9@#%^&*()_+\-=[\]{}|;:,.<>?~`]*$/, {
@@ -480,7 +480,9 @@ export const AddDatabase = ({ environmentId, projectName }: Props) => {
 													<SelectTrigger>
 														<SelectValue
 															placeholder={
-																showLocalOption ? "Primary Server" : "Select a Server"
+																showLocalOption
+																	? "Primary Server"
+																	: "Select a Server"
 															}
 														/>
 													</SelectTrigger>

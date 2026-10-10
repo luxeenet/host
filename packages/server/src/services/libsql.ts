@@ -16,6 +16,10 @@ import { TRPCError } from "@trpc/server";
 import { eq, getTableColumns } from "drizzle-orm";
 import { quote } from "shell-quote";
 import type { z } from "zod";
+import {
+	resolveDatabaseImage,
+	validateDatabaseImage,
+} from "../utils/databases/image-resolution";
 import { validUniqueServerAppName } from "./project";
 
 export type Libsql = typeof libsql.$inferSelect;
@@ -34,10 +38,13 @@ export const createLibsql = async (
 		});
 	}
 
+	const resolvedImage = resolveDatabaseImage("libsql", input.dockerImage);
+
 	const newLibsql = await tx
 		.insert(libsql)
 		.values({
 			...input,
+			dockerImage: resolvedImage,
 			databasePassword: input.databasePassword
 				? input.databasePassword
 				: generatePassword(),
@@ -95,6 +102,11 @@ export const updateLibsqlById = async (
 	libsqlData: Partial<Libsql>,
 ) => {
 	const { appName, ...rest } = libsqlData;
+	if (rest.dockerImage !== undefined) {
+		const resolvedImage = resolveDatabaseImage("libsql", rest.dockerImage);
+		validateDatabaseImage(resolvedImage);
+		rest.dockerImage = resolvedImage;
+	}
 	const result = await db
 		.update(libsql)
 		.set({
@@ -144,17 +156,24 @@ export const deployLibsql = async (
 			applicationStatus: "running",
 		});
 		onData?.("Starting libsql deployment...");
+
+		const resolvedImage = resolveDatabaseImage("libsql", libsql.dockerImage);
+		validateDatabaseImage(resolvedImage);
+
 		if (libsql.serverId) {
 			await execAsyncRemote(
 				libsql.serverId,
-				`docker pull ${quote([libsql.dockerImage])}`,
+				`docker pull ${quote([resolvedImage])}`,
 				onData,
 			);
 		} else {
-			await pullImage(libsql.dockerImage, onData);
+			await pullImage(resolvedImage, onData);
 		}
 
-		await buildLibsql(libsql);
+		await buildLibsql({
+			...libsql,
+			dockerImage: resolvedImage,
+		});
 		await waitForSwarmServiceConvergence(libsql.appName, libsql.serverId);
 		await updateLibsqlById(libsqlId, {
 			applicationStatus: "done",

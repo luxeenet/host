@@ -16,6 +16,10 @@ import { TRPCError } from "@trpc/server";
 import { eq, getTableColumns } from "drizzle-orm";
 import { quote } from "shell-quote";
 import type { z } from "zod";
+import {
+	resolveDatabaseImage,
+	validateDatabaseImage,
+} from "../utils/databases/image-resolution";
 import { validUniqueServerAppName } from "./project";
 
 export type MySql = typeof mysql.$inferSelect;
@@ -34,10 +38,13 @@ export const createMysql = async (
 		});
 	}
 
+	const resolvedImage = resolveDatabaseImage("mysql", input.dockerImage);
+
 	const newMysql = await tx
 		.insert(mysql)
 		.values({
 			...input,
+			dockerImage: resolvedImage,
 			databasePassword: input.databasePassword
 				? input.databasePassword
 				: generatePassword(),
@@ -98,6 +105,11 @@ export const updateMySqlById = async (
 	mysqlData: Partial<MySql>,
 ) => {
 	const { appName, ...rest } = mysqlData;
+	if (rest.dockerImage !== undefined) {
+		const resolvedImage = resolveDatabaseImage("mysql", rest.dockerImage);
+		validateDatabaseImage(resolvedImage);
+		rest.dockerImage = resolvedImage;
+	}
 	const result = await db
 		.update(mysql)
 		.set({
@@ -147,17 +159,24 @@ export const deployMySql = async (
 			applicationStatus: "running",
 		});
 		onData?.("Starting mysql deployment...");
+
+		const resolvedImage = resolveDatabaseImage("mysql", mysql.dockerImage);
+		validateDatabaseImage(resolvedImage);
+
 		if (mysql.serverId) {
 			await execAsyncRemote(
 				mysql.serverId,
-				`docker pull ${quote([mysql.dockerImage])}`,
+				`docker pull ${quote([resolvedImage])}`,
 				onData,
 			);
 		} else {
-			await pullImage(mysql.dockerImage, onData);
+			await pullImage(resolvedImage, onData);
 		}
 
-		await buildMysql(mysql);
+		await buildMysql({
+			...mysql,
+			dockerImage: resolvedImage,
+		});
 		await waitForSwarmServiceConvergence(mysql.appName, mysql.serverId);
 		await updateMySqlById(mysqlId, {
 			applicationStatus: "done",

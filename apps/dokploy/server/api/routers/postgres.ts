@@ -36,15 +36,15 @@ import {
 	checkServicePermissionAndAccess,
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
+import {
+	assertEntitlement,
+	PlanEntitlementService,
+} from "@dokploy/server/services/plan-entitlement";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
-import {
-	PlanEntitlementService,
-	assertEntitlement,
-} from "@dokploy/server/services/plan-entitlement";
 import {
 	apiChangePostgresStatus,
 	apiCreatePostgres,
@@ -91,31 +91,23 @@ export const postgresRouter = createTRPCRouter({
 						) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You need to use a server to create a Postgres",
+								message: "You need to use a server to create a Postgres",
 							});
 						}
 
-						if (
-							project.organizationId !==
-							ctx.session.activeOrganizationId
-						) {
+						if (project.organizationId !== ctx.session.activeOrganizationId) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You are not authorized to access this project",
+								message: "You are not authorized to access this project",
 							});
 						}
 
 						if (input.serverId) {
-							const accessibleIds = await getAccessibleServerIds(
-								ctx.session,
-							);
+							const accessibleIds = await getAccessibleServerIds(ctx.session);
 							if (!accessibleIds.has(input.serverId)) {
 								throw new TRPCError({
 									code: "UNAUTHORIZED",
-									message:
-										"You are not authorized to access this server",
+									message: "You are not authorized to access this server",
 								});
 							}
 						}
@@ -128,7 +120,7 @@ export const postgresRouter = createTRPCRouter({
 						);
 						await addNewService(ctx, newPostgres.postgresId, tx);
 
-						const mountPath = getMountPath(input.dockerImage);
+						const mountPath = getMountPath(newPostgres.dockerImage);
 
 						await createMount(
 							{
@@ -586,9 +578,7 @@ export const postgresRouter = createTRPCRouter({
 							? rest.memoryReservation
 							: current.memoryReservation,
 					cpuLimit:
-						rest.cpuLimit !== undefined
-							? rest.cpuLimit
-							: current.cpuLimit,
+						rest.cpuLimit !== undefined ? rest.cpuLimit : current.cpuLimit,
 					cpuReservation:
 						rest.cpuReservation !== undefined
 							? rest.cpuReservation

@@ -12,6 +12,8 @@ import {
 import { getRemoteDocker } from "../servers/remote-docker";
 import { withResolvedVaultRefs } from "../vault";
 
+import { resolveDatabaseImage } from "./image-resolution";
+
 export type LibsqlNested = InferResultType<
 	"libsql",
 	{
@@ -24,6 +26,7 @@ export const buildLibsql = async (rawLibsql: LibsqlNested) => {
 	const {
 		appName,
 		env,
+		dockerImage,
 		externalPort,
 		externalGRPCPort,
 		externalAdminPort,
@@ -39,6 +42,8 @@ export const buildLibsql = async (rawLibsql: LibsqlNested) => {
 		mounts,
 		enableNamespaces,
 	} = libsql;
+
+	const resolvedImage = resolveDatabaseImage("libsql", dockerImage);
 
 	const basicAuth = Buffer.from(
 		`${databaseUser}:${databasePassword}`,
@@ -89,7 +94,7 @@ export const buildLibsql = async (rawLibsql: LibsqlNested) => {
 		TaskTemplate: {
 			ContainerSpec: {
 				HealthCheck,
-				Image: "ghcr.io/tursodatabase/libsql-server:v0.24.32",
+				Image: resolvedImage,
 				Env: envVariables,
 				Mounts: [...volumesMount, ...bindsMount, ...filesMount],
 				...(finalCommand

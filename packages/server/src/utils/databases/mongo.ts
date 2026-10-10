@@ -12,6 +12,8 @@ import {
 import { getRemoteDocker } from "../servers/remote-docker";
 import { withResolvedVaultRefs } from "../vault";
 
+import { resolveDatabaseImage } from "./image-resolution";
+
 export type MongoNested = InferResultType<
 	"mongo",
 	{ mounts: true; environment: { with: { project: true } } }
@@ -35,6 +37,8 @@ export const buildMongo = async (rawMongo: MongoNested) => {
 		mounts,
 		replicaSets,
 	} = mongo;
+
+	const resolvedImage = resolveDatabaseImage("mongo", dockerImage);
 
 	const startupScript = `
 #!/bin/bash
@@ -124,7 +128,7 @@ ${command ?? "wait $MONGOD_PID"}`;
 		TaskTemplate: {
 			ContainerSpec: {
 				HealthCheck,
-				Image: dockerImage,
+				Image: resolvedImage,
 				Env: envVariables,
 				Mounts: [...volumesMount, ...bindsMount, ...filesMount],
 				...(StopGracePeriod !== null &&

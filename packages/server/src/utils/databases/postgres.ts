@@ -12,6 +12,8 @@ import {
 import { getRemoteDocker } from "../servers/remote-docker";
 import { withResolvedVaultRefs } from "../vault";
 
+import { resolveDatabaseImage } from "./image-resolution";
+
 export type PostgresNested = InferResultType<
 	"postgres",
 	{ mounts: true; environment: { with: { project: true } } }
@@ -34,6 +36,8 @@ export const buildPostgres = async (rawPostgres: PostgresNested) => {
 		args,
 		mounts,
 	} = postgres;
+
+	const resolvedImage = resolveDatabaseImage("postgres", dockerImage);
 
 	const defaultPostgresEnv = `POSTGRES_DB="${databaseName}"\nPOSTGRES_USER="${databaseUser}"\nPOSTGRES_PASSWORD="${databasePassword}"${
 		env ? `\n${env}` : ""
@@ -75,7 +79,7 @@ export const buildPostgres = async (rawPostgres: PostgresNested) => {
 		TaskTemplate: {
 			ContainerSpec: {
 				HealthCheck,
-				Image: dockerImage,
+				Image: resolvedImage,
 				Env: envVariables,
 				Mounts: [...volumesMount, ...bindsMount, ...filesMount],
 				StopGracePeriod: StopGracePeriod ?? 30_000_000_000,

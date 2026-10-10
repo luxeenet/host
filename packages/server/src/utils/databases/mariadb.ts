@@ -12,6 +12,8 @@ import {
 import { getRemoteDocker } from "../servers/remote-docker";
 import { withResolvedVaultRefs } from "../vault";
 
+import { resolveDatabaseImage } from "./image-resolution";
+
 export type MariadbNested = InferResultType<
 	"mariadb",
 	{ mounts: true; environment: { with: { project: true } } }
@@ -35,6 +37,8 @@ export const buildMariadb = async (rawMariadb: MariadbNested) => {
 		args,
 		mounts,
 	} = mariadb;
+
+	const resolvedImage = resolveDatabaseImage("mariadb", dockerImage);
 
 	const defaultMariadbEnv = `MARIADB_DATABASE="${databaseName}"\nMARIADB_USER="${databaseUser}"\nMARIADB_PASSWORD="${databasePassword}"\nMARIADB_ROOT_PASSWORD="${databaseRootPassword}"${
 		env ? `\n${env}` : ""
@@ -76,7 +80,7 @@ export const buildMariadb = async (rawMariadb: MariadbNested) => {
 		TaskTemplate: {
 			ContainerSpec: {
 				HealthCheck,
-				Image: dockerImage,
+				Image: resolvedImage,
 				Env: envVariables,
 				Mounts: [...volumesMount, ...bindsMount, ...filesMount],
 				...(StopGracePeriod !== null &&

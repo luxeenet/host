@@ -17,6 +17,10 @@ import { TRPCError } from "@trpc/server";
 import { eq, getTableColumns } from "drizzle-orm";
 import { quote } from "shell-quote";
 import type { z } from "zod";
+import {
+	resolveDatabaseImage,
+	validateDatabaseImage,
+} from "../utils/databases/image-resolution";
 import { validUniqueServerAppName } from "./project";
 
 export type Mongo = typeof mongo.$inferSelect;
@@ -35,10 +39,13 @@ export const createMongo = async (
 		});
 	}
 
+	const resolvedImage = resolveDatabaseImage("mongo", input.dockerImage);
+
 	const newMongo = await tx
 		.insert(mongo)
 		.values({
 			...input,
+			dockerImage: resolvedImage,
 			databasePassword: input.databasePassword
 				? input.databasePassword
 				: generatePassword(),
@@ -95,6 +102,11 @@ export const updateMongoById = async (
 	mongoData: Partial<Mongo>,
 ) => {
 	const { appName, ...rest } = mongoData;
+	if (rest.dockerImage !== undefined) {
+		const resolvedImage = resolveDatabaseImage("mongo", rest.dockerImage);
+		validateDatabaseImage(resolvedImage);
+		rest.dockerImage = resolvedImage;
+	}
 	const result = await db
 		.update(mongo)
 		.set({
@@ -164,17 +176,24 @@ export const deployMongo = async (
 		});
 
 		onData?.("Starting mongo deployment...");
+
+		const resolvedImage = resolveDatabaseImage("mongo", mongo.dockerImage);
+		validateDatabaseImage(resolvedImage);
+
 		if (mongo.serverId) {
 			await execAsyncRemote(
 				mongo.serverId,
-				`docker pull ${quote([mongo.dockerImage])}`,
+				`docker pull ${quote([resolvedImage])}`,
 				onData,
 			);
 		} else {
-			await pullImage(mongo.dockerImage, onData);
+			await pullImage(resolvedImage, onData);
 		}
 
-		await buildMongo(mongo);
+		await buildMongo({
+			...mongo,
+			dockerImage: resolvedImage,
+		});
 		await waitForSwarmServiceConvergence(mongo.appName, mongo.serverId);
 		await updateMongoById(mongoId, {
 			applicationStatus: "done",

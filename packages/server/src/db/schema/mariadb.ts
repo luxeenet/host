@@ -135,7 +135,7 @@ const createSchema = createInsertSchema(mariadb, {
 			message: DATABASE_PASSWORD_MESSAGE,
 		})
 		.optional(),
-	dockerImage: z.string().default("mariadb:6"),
+	dockerImage: z.string().default("mariadb:11"),
 	command: z.string().optional(),
 	args: z.array(z.string()).optional(),
 	env: z.string().optional(),

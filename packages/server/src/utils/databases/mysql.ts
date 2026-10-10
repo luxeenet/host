@@ -12,6 +12,8 @@ import {
 import { getRemoteDocker } from "../servers/remote-docker";
 import { withResolvedVaultRefs } from "../vault";
 
+import { resolveDatabaseImage } from "./image-resolution";
+
 export type MysqlNested = InferResultType<
 	"mysql",
 	{ mounts: true; environment: { with: { project: true } } }
@@ -36,6 +38,8 @@ export const buildMysql = async (rawMysql: MysqlNested) => {
 		args,
 		mounts,
 	} = mysql;
+
+	const resolvedImage = resolveDatabaseImage("mysql", dockerImage);
 
 	const defaultMysqlEnv =
 		databaseUser !== "root"
@@ -82,7 +86,7 @@ export const buildMysql = async (rawMysql: MysqlNested) => {
 		TaskTemplate: {
 			ContainerSpec: {
 				HealthCheck,
-				Image: dockerImage,
+				Image: resolvedImage,
 				Env: envVariables,
 				Mounts: [...volumesMount, ...bindsMount, ...filesMount],
 				...(StopGracePeriod !== null &&

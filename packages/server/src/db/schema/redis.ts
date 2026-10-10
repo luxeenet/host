@@ -116,7 +116,7 @@ const createSchema = createInsertSchema(redis, {
 	createdAt: z.string(),
 	name: z.string().min(1),
 	databasePassword: z.string(),
-	dockerImage: z.string().default("redis:8"),
+	dockerImage: z.string().default("redis:7"),
 	command: z.string().optional(),
 	args: z.array(z.string()).optional(),
 	env: z.string().optional(),

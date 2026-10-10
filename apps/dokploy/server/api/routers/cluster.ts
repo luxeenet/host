@@ -20,6 +20,13 @@ export const clusterRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Cluster management requires platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const targetServer = await findServerById(input.serverId);
 				if (targetServer.organizationId !== ctx.session.activeOrganizationId) {
@@ -42,6 +49,13 @@ export const clusterRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Cluster management requires platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const targetServer = await findServerById(input.serverId);
 				if (targetServer.organizationId !== ctx.session.activeOrganizationId) {

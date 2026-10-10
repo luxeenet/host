@@ -121,12 +121,23 @@ export const ContainerFreeMonitoring = ({
 	appName,
 	appType = "application",
 }: Props) => {
-	const { data } = api.application.readAppMonitoring.useQuery(
+	const { data: monitoringResponse } = api.application.readAppMonitoring.useQuery(
 		{ appName },
 		{
 			refetchOnWindowFocus: false,
 		},
 	);
+
+	const data = (monitoringResponse as any)?.stats !== undefined
+		? (monitoringResponse as any)?.stats
+		: monitoringResponse;
+	const serviceLimit = (monitoringResponse as any)?.serviceLimit ?? null;
+	const entitlements = (monitoringResponse as any)?.entitlements ?? {
+		hasAdvancedIoMetrics: true,
+		hasHistoricalCharts: true,
+		maxDataPoints: 300,
+	};
+
 	const [accumulativeData, setAccumulativeData] = useState<DockerStatsJSON>({
 		cpu: [],
 		memory: [],
@@ -198,13 +209,13 @@ export const ContainerFreeMonitoring = ({
 
 			setCurrentData(data);
 
-			const MAX_DATA_POINTS = 300;
+			const maxPoints = entitlements?.maxDataPoints ?? 300;
 			setAccumulativeData((prevData) => ({
-				cpu: [...prevData.cpu, data.cpu].slice(-MAX_DATA_POINTS),
-				memory: [...prevData.memory, data.memory].slice(-MAX_DATA_POINTS),
-				block: [...prevData.block, data.block].slice(-MAX_DATA_POINTS),
-				network: [...prevData.network, data.network].slice(-MAX_DATA_POINTS),
-				disk: [...prevData.disk, data.disk].slice(-MAX_DATA_POINTS),
+				cpu: [...prevData.cpu, data.cpu].slice(-maxPoints),
+				memory: [...prevData.memory, data.memory].slice(-maxPoints),
+				block: [...prevData.block, data.block].slice(-maxPoints),
+				network: [...prevData.network, data.network].slice(-maxPoints),
+				disk: [...prevData.disk, data.disk].slice(-maxPoints),
 			}));
 		};
 
@@ -215,12 +226,24 @@ export const ContainerFreeMonitoring = ({
 		};
 
 		return () => ws.close();
-	}, [appName]);
+	}, [appName, entitlements?.maxDataPoints]);
 
-	const totalMemoryBytes = convertMemoryToBytes(String(currentData.memory.value.total ?? "0"));
+	const effectiveMemoryLimitLabel = serviceLimit?.memoryLimitFormatted ?? (
+		currentData.memory.value.total &&
+		String(currentData.memory.value.total) !== "0" &&
+		String(currentData.memory.value.total) !== "0B" &&
+		String(currentData.memory.value.total) !== "No custom memory limit"
+			? String(currentData.memory.value.total)
+			: null
+	);
+	const hasMemoryLimit = Boolean(effectiveMemoryLimitLabel);
+	const totalMemoryBytes = serviceLimit?.memoryLimitBytes ?? convertMemoryToBytes(String(currentData.memory.value.total ?? "0"));
 	const usedMemoryBytes = convertMemoryToBytes(String(currentData.memory.value.used ?? "0"));
-	const hasMemoryLimit = totalMemoryBytes > 0 && String(currentData.memory.value.total) !== "0" && String(currentData.memory.value.total) !== "0B";
-	const memoryPercentage = hasMemoryLimit ? Math.min((usedMemoryBytes / totalMemoryBytes) * 100, 100) : 0;
+	const memoryPercentage = hasMemoryLimit && totalMemoryBytes > 0
+		? Math.min((usedMemoryBytes / totalMemoryBytes) * 100, 100)
+		: 0;
+
+	const effectiveCpuLimitLabel = serviceLimit?.cpuLimitFormatted ?? null;
 
 	return (
 		<div className="rounded-xl bg-background flex flex-col gap-4">
@@ -241,9 +264,11 @@ export const ContainerFreeMonitoring = ({
 					<CardContent>
 						<div className="flex flex-col gap-2 w-full">
 							<span className="text-sm text-muted-foreground">
-								{hasReceivedStats
-									? `Used: ${String(currentData.cpu.value ?? "0%")}`
-									: "Status: Collecting metrics..."}
+								{!hasReceivedStats
+									? "Status: Metric unavailable"
+									: effectiveCpuLimitLabel
+										? `Used: ${String(currentData.cpu.value ?? "0%")} / Limit: ${effectiveCpuLimitLabel}`
+										: `Used: ${String(currentData.cpu.value ?? "0%")} (No custom CPU limit)`}
 							</span>
 							<Progress
 								value={
@@ -256,7 +281,13 @@ export const ContainerFreeMonitoring = ({
 								}
 								className="w-full"
 							/>
-							<DockerCpuChart accumulativeData={accumulativeData.cpu} />
+							{entitlements?.hasHistoricalCharts ? (
+								<DockerCpuChart accumulativeData={accumulativeData.cpu} />
+							) : (
+								<p className="text-xs text-muted-foreground pt-1">
+									Real-time CPU metrics active. Historical charts available on Developer plan and above.
+								</p>
+							)}
 						</div>
 					</CardContent>
 				</Card>
@@ -268,21 +299,27 @@ export const ContainerFreeMonitoring = ({
 						<div className="flex flex-col gap-2 w-full">
 							<span className="text-sm text-muted-foreground">
 								{!hasReceivedStats
-									? "Status: Collecting metrics..."
+									? "Status: Metric unavailable"
 									: hasMemoryLimit
-										? `Used: ${currentData.memory.value.used} / Limit: ${currentData.memory.value.total}`
-										: `Used: ${currentData.memory.value.used || "0 MB"} (No limit configured)`}
+										? `Used: ${currentData.memory.value.used} / Limit: ${effectiveMemoryLimitLabel}`
+										: `Used: ${currentData.memory.value.used || "0 MB"} (No custom memory limit)`}
 							</span>
 							<Progress
 								value={hasReceivedStats && hasMemoryLimit ? memoryPercentage : 0}
 								className="w-full"
 							/>
-							<DockerMemoryChart
-								accumulativeData={accumulativeData.memory}
-								memoryLimitGB={
-									hasMemoryLimit ? totalMemoryBytes / 1024 ** 3 : 0
-								}
-							/>
+							{entitlements?.hasHistoricalCharts ? (
+								<DockerMemoryChart
+									accumulativeData={accumulativeData.memory}
+									memoryLimitGB={
+										hasMemoryLimit ? totalMemoryBytes / 1024 ** 3 : 0
+									}
+								/>
+							) : (
+								<p className="text-xs text-muted-foreground pt-1">
+									Real-time memory metrics active. Historical charts available on Developer plan and above.
+								</p>
+							)}
 						</div>
 					</CardContent>
 				</Card>
@@ -321,36 +358,40 @@ export const ContainerFreeMonitoring = ({
 					</Card>
 				)}
 
-				<Card className="bg-background">
-					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium">Block I/O</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="flex flex-col gap-2 w-full">
-							<span className="text-sm text-muted-foreground">
-								{!hasReceivedStats
-									? "Status: Waiting for activity..."
-									: `Read: ${formatMb(currentData.block.value.readMb)} / Write: ${formatMb(currentData.block.value.writeMb)}`}
-							</span>
-							<DockerBlockChart accumulativeData={accumulativeData.block} />
-						</div>
-					</CardContent>
-				</Card>
-				<Card className="bg-background">
-					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium">Network I/O</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="flex flex-col gap-2 w-full">
-							<span className="text-sm text-muted-foreground">
-								{!hasReceivedStats
-									? "Status: Waiting for activity..."
-									: `In: ${formatMb(currentData.network.value.inputMb)} / Out: ${formatMb(currentData.network.value.outputMb)}`}
-							</span>
-							<DockerNetworkChart accumulativeData={accumulativeData.network} />
-						</div>
-					</CardContent>
-				</Card>
+				{entitlements?.hasAdvancedIoMetrics && (
+					<>
+						<Card className="bg-background">
+							<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+								<CardTitle className="text-sm font-medium">Block I/O</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<div className="flex flex-col gap-2 w-full">
+									<span className="text-sm text-muted-foreground">
+										{!hasReceivedStats
+											? "Status: Waiting for activity..."
+											: `Read: ${formatMb(currentData.block.value.readMb)} / Write: ${formatMb(currentData.block.value.writeMb)}`}
+									</span>
+									<DockerBlockChart accumulativeData={accumulativeData.block} />
+								</div>
+							</CardContent>
+						</Card>
+						<Card className="bg-background">
+							<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+								<CardTitle className="text-sm font-medium">Network I/O</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<div className="flex flex-col gap-2 w-full">
+									<span className="text-sm text-muted-foreground">
+										{!hasReceivedStats
+											? "Status: Waiting for activity..."
+											: `In: ${formatMb(currentData.network.value.inputMb)} / Out: ${formatMb(currentData.network.value.outputMb)}`}
+									</span>
+									<DockerNetworkChart accumulativeData={accumulativeData.network} />
+								</div>
+							</CardContent>
+						</Card>
+					</>
+				)}
 			</div>
 		</div>
 	);

@@ -17,7 +17,9 @@ interface Props {
 
 export const ShowDatabaseAdvancedSettings = ({ id, type }: Props) => {
 	const { data: auth } = api.user.get.useQuery();
-	const isAdmin = auth?.role === "admin" || auth?.role === "owner";
+	const isPlatformAdmin = Boolean(
+		(auth as any)?.user?.isPlatformAdmin || (auth as any)?.isPlatformAdmin,
+	);
 	const [showInfraOverrides, setShowInfraOverrides] = useState(false);
 
 	return (
@@ -25,44 +27,46 @@ export const ShowDatabaseAdvancedSettings = ({ id, type }: Props) => {
 			{/* Safe Customer Controls: Resource Allocations */}
 			<ShowResources id={id} type={type} />
 
-			{/* Platform Infrastructure Overrides (for platform administrators / advanced operations) */}
-			<Card className="bg-background border-border">
-				<CardHeader className="cursor-pointer" onClick={() => setShowInfraOverrides(!showInfraOverrides)}>
-					<div className="flex items-center justify-between">
-						<div className="flex items-center gap-2">
-							<Server className="size-5 text-muted-foreground" />
-							<div>
-								<CardTitle className="text-base font-semibold">
-									Platform Infrastructure & Container Settings
-								</CardTitle>
-								<CardDescription className="text-xs">
-									Low-level Docker Swarm placement, custom container commands, internal volume mounts, and network attachment.
-								</CardDescription>
+			{/* Platform Infrastructure Overrides (for platform administrators only) */}
+			{isPlatformAdmin && (
+				<Card className="bg-background border-border">
+					<CardHeader className="cursor-pointer" onClick={() => setShowInfraOverrides(!showInfraOverrides)}>
+						<div className="flex items-center justify-between">
+							<div className="flex items-center gap-2">
+								<Server className="size-5 text-muted-foreground" />
+								<div>
+									<CardTitle className="text-base font-semibold">
+										Platform Infrastructure & Container Settings
+									</CardTitle>
+									<CardDescription className="text-xs">
+										Low-level Docker Swarm placement, custom container commands, internal volume mounts, and network attachment.
+									</CardDescription>
+								</div>
 							</div>
+							<Button variant="ghost" size="sm" type="button">
+								{showInfraOverrides ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+							</Button>
 						</div>
-						<Button variant="ghost" size="sm" type="button">
-							{showInfraOverrides ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-						</Button>
-					</div>
-				</CardHeader>
-				{showInfraOverrides && (
-					<CardContent className="flex flex-col gap-5 pt-0 border-t mt-4">
-						<ShowCustomCommand id={id} type={type} />
-						{(type === "mariadb" ||
-						type === "mongo" ||
-						type === "mysql" ||
-						type === "postgres" ||
-						type === "redis") && (
-							<ShowClusterSettings id={id} type={type} />
-						)}
-						<ShowVolumes id={id} type={type} />
-						<AssignNetworks id={id} type={type} />
-					</CardContent>
-				)}
-			</Card>
+					</CardHeader>
+					{showInfraOverrides && (
+						<CardContent className="flex flex-col gap-5 pt-0 border-t mt-4">
+							<ShowCustomCommand id={id} type={type} />
+							{(type === "mariadb" ||
+							type === "mongo" ||
+							type === "mysql" ||
+							type === "postgres" ||
+							type === "redis") && (
+								<ShowClusterSettings id={id} type={type} />
+							)}
+							<ShowVolumes id={id} type={type} />
+							<AssignNetworks id={id} type={type} />
+						</CardContent>
+					)}
+				</Card>
+			)}
 
-			{/* Protected Destructive Actions */}
-			<RebuildDatabase id={id} type={type} />
+			{/* Protected Destructive Actions (platform administrators only) */}
+			{isPlatformAdmin && <RebuildDatabase id={id} type={type} />}
 		</div>
 	);
 };

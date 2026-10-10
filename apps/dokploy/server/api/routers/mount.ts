@@ -77,6 +77,13 @@ export const mountRouter = createTRPCRouter({
 	create: protectedProcedure
 		.input(apiCreateMount)
 		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Volume mount management requires platform administrator privileges.",
+				});
+			}
 			await checkServicePermissionAndAccess(ctx, input.serviceId, {
 				volume: ["create"],
 			});
@@ -92,6 +99,13 @@ export const mountRouter = createTRPCRouter({
 	remove: protectedProcedure
 		.input(apiRemoveMount)
 		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Volume mount management requires platform administrator privileges.",
+				});
+			}
 			const mount = await findMountById(input.mountId);
 			const serviceId =
 				mount.applicationId ||
@@ -138,6 +152,13 @@ export const mountRouter = createTRPCRouter({
 	update: protectedProcedure
 		.input(apiUpdateMount)
 		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Volume mount management requires platform administrator privileges.",
+				});
+			}
 			const mount = await findMountById(input.mountId);
 			const serviceId =
 				mount.applicationId ||

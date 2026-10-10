@@ -575,6 +575,26 @@ export const libsqlRouter = createTRPCRouter({
 				service: ["create"],
 			});
 
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				const forbiddenInfraKeys = [
+					"ulimitsSwarm",
+					"placementSwarm",
+					"modeSwarm",
+					"labelsSwarm",
+					"networkSwarm",
+					"networkIds",
+					"detachDokployNetwork",
+				];
+				for (const key of forbiddenInfraKeys) {
+					if ((rest as any)[key] !== undefined) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: `Infrastructure setting "${key}" requires platform administrator privileges.`,
+						});
+					}
+				}
+			}
+
 			const current = await findLibsqlById(libsqlId);
 			await PlanEntitlementService.assertRuntimeResources(
 				ctx.session.activeOrganizationId,
@@ -655,6 +675,13 @@ export const libsqlRouter = createTRPCRouter({
 	rebuild: protectedProcedure
 		.input(apiRebuildLibsql)
 		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Database rebuild/reset requires platform administrator privileges.",
+				});
+			}
 			await checkServicePermissionAndAccess(ctx, input.libsqlId, {
 				deployment: ["create"],
 			});

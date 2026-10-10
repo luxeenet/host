@@ -57,7 +57,7 @@ export const DockerMemoryChart = ({
 				<CartesianGrid vertical={false} />
 				<YAxis
 					tickFormatter={(value) => `${value} GB`}
-					domain={[0, +memoryLimitGB.toFixed(2)]}
+					domain={memoryLimitGB > 0 ? [0, +memoryLimitGB.toFixed(2)] : [0, "auto"]}
 					tickLine={false}
 					axisLine={false}
 				/>

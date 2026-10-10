@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TRPCError } from "@trpc/server";
 import {
 	PlanEntitlementService,
@@ -145,21 +145,29 @@ describe("Runtime Resource Normalization and Validation", () => {
 			expect(result.effectiveCpuMillicores).toBe(2000);
 		});
 
-		it("should choose reservation when both exist and reservation is greater", () => {
-			const result = normalizeAndCalculateEffectiveResources({
-				memoryLimit: 512 * MB,
-				memoryReservation: 2048 * MB,
-				cpuLimit: 500_000_000, // 500 mCPU
-				cpuReservation: 1500_000_000, // 1500 mCPU
-			});
-			expect(result.effectiveRamMb).toBe(2048);
-			expect(result.effectiveCpuMillicores).toBe(1500);
+		it("should reject when reservation exceeds limit", () => {
+			expect(() =>
+				normalizeAndCalculateEffectiveResources({
+					memoryLimit: 512 * MB,
+					memoryReservation: 2048 * MB,
+				}),
+			).toThrow(TRPCError);
+			expect(() =>
+				normalizeAndCalculateEffectiveResources({
+					cpuLimit: 500_000_000,
+					cpuReservation: 1500_000_000,
+				}),
+			).toThrow(TRPCError);
 		});
 	});
 
 	describe("PlanEntitlementService runtime checks", () => {
 		const MB = 1024 * 1024;
 		const ONE_CPU_NANO = 1_000_000_000;
+
+		afterEach(() => {
+			vi.restoreAllMocks();
+		});
 
 		it("should allow any resource on unlimited plan (-1)", async () => {
 			vi.spyOn(PlanEntitlementService, "getPlanSnapshot").mockResolvedValueOnce({

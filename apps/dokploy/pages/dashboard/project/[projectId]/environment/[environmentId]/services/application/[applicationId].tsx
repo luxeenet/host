@@ -98,6 +98,9 @@ const Service = (
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { data: serverIp } = api.settings.getIp.useQuery();
 	const { data: auth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(auth as any)?.user?.isPlatformAdmin || (auth as any)?.isPlatformAdmin,
+	);
 	const { data: permissions } = api.user.getPermissions.useQuery();
 
 	const { data: environments } = api.environment.byProjectId.useQuery({
@@ -422,14 +425,22 @@ const Service = (
 										<TabsContent value="advanced">
 											<div className="flex flex-col gap-4 pt-2.5">
 												<AddCommand applicationId={applicationId} />
-												<ShowClusterSettings
-													id={applicationId}
-													type="application"
-												/>
-												<ShowBuildServer applicationId={applicationId} />
+												{isPlatformAdmin && (
+													<ShowClusterSettings
+														id={applicationId}
+														type="application"
+													/>
+												)}
+												{isPlatformAdmin && (
+													<ShowBuildServer applicationId={applicationId} />
+												)}
 												<ShowResources id={applicationId} type="application" />
-												<ShowVolumes id={applicationId} type="application" />
-												<AssignNetworks id={applicationId} type="application" />
+												{isPlatformAdmin && (
+													<ShowVolumes id={applicationId} type="application" />
+												)}
+												{isPlatformAdmin && (
+													<AssignNetworks id={applicationId} type="application" />
+												)}
 												<ShowRedirects applicationId={applicationId} />
 												<ShowSecurity applicationId={applicationId} />
 												<ShowPorts applicationId={applicationId} />

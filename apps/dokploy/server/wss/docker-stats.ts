@@ -102,11 +102,58 @@ export const setupDockerStatsMonitoringSocketServer = (
 		}
 
 		if (!user || !session) {
-			ws.close();
+			ws.close(4001, "Unauthorized");
 			return;
 		}
 
-		if (!(await canAccessDockerOverWss(user, session, null, serviceId))) {
+		const isPlatformAdmin = Boolean((user as any)?.isPlatformAdmin);
+
+		let serviceRecord: any = null;
+		if (appName === "dokploy") {
+			if (!isPlatformAdmin) {
+				ws.close(
+					4003,
+					"System monitoring requires platform administrator privileges.",
+				);
+				return;
+			}
+		} else {
+			const { findServiceByAppName } = await import("@dokploy/server");
+			serviceRecord = await findServiceByAppName(appName);
+			if (!serviceRecord) {
+				ws.close(4004, "Service not found");
+				return;
+			}
+
+			if (
+				serviceRecord.organizationId !== session.activeOrganizationId &&
+				!isPlatformAdmin
+			) {
+				ws.close(4003, "Not authorized to access this service's metrics");
+				return;
+			}
+
+			try {
+				const { checkServiceAccess } = await import(
+					"@dokploy/server/services/permission"
+				);
+				await checkServiceAccess(
+					{
+						user: { id: user.id },
+						session: {
+							activeOrganizationId: session.activeOrganizationId ?? "",
+						},
+					},
+					serviceRecord.serviceId,
+					"read",
+				);
+			} catch {
+				ws.close(4003, "Access denied to service");
+				return;
+			}
+		}
+
+		if (!(await canAccessDockerOverWss(user, session, null, serviceRecord?.serviceId ?? serviceId))) {
 			ws.close(4003, "Not authorized");
 			return;
 		}
@@ -114,7 +161,7 @@ export const setupDockerStatsMonitoringSocketServer = (
 			try {
 				// Special case: when monitoring "dokploy", get host system stats instead of container stats
 				if (appName === "dokploy") {
-					if (!(user as any).isPlatformAdmin) {
+					if (!isPlatformAdmin) {
 						ws.close(4003, "System monitoring requires platform administrator privileges.");
 						clearInterval(intervalId);
 						return;
@@ -169,8 +216,30 @@ export const setupDockerStatsMonitoringSocketServer = (
 				}
 				const stat = JSON.parse(stdout);
 
-				await recordAdvancedStats(stat, appName);
+				const { PlanEntitlementService, formatBytes } = await import(
+					"@dokploy/server"
+				);
+				const entitlements =
+					await PlanEntitlementService.getMonitoringEntitlements(
+						session.activeOrganizationId ?? "",
+						isPlatformAdmin,
+					);
+
+				await recordAdvancedStats(stat, appName, serviceRecord?.memoryLimit);
 				const data = await getLastAdvancedStatsFile(appName);
+
+				if (appName !== "dokploy") {
+					const memoryLimitFormatted = serviceRecord?.memoryLimit
+						? formatBytes(Number(serviceRecord.memoryLimit))
+						: null;
+					if (data.memory?.value) {
+						data.memory.value.total = memoryLimitFormatted;
+					}
+					if (!entitlements.hasAdvancedIoMetrics) {
+						data.block = null;
+						data.network = null;
+					}
+				}
 
 				ws.send(
 					JSON.stringify({

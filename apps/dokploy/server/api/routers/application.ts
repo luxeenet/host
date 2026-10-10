@@ -7,6 +7,8 @@ import {
 	findEnvironmentById,
 	findPreviewDeploymentsByApplicationId,
 	findProjectById,
+	findServiceByAppName,
+	formatBytes,
 	generateTraefikMeDomain,
 	getAccessibleServerIds,
 	getApplicationStats,
@@ -824,6 +826,54 @@ export const applicationRouter = createTRPCRouter({
 
 			const { applicationId, ...rest } = input;
 
+			const current = await findApplicationById(applicationId);
+			if (
+				rest.memoryLimit !== undefined ||
+				rest.memoryReservation !== undefined ||
+				rest.cpuLimit !== undefined ||
+				rest.cpuReservation !== undefined
+			) {
+				await PlanEntitlementService.assertRuntimeResources(
+					ctx.session.activeOrganizationId,
+					{
+						memoryLimit:
+							rest.memoryLimit !== undefined
+								? rest.memoryLimit
+								: current.memoryLimit,
+						memoryReservation:
+							rest.memoryReservation !== undefined
+								? rest.memoryReservation
+								: current.memoryReservation,
+						cpuLimit:
+							rest.cpuLimit !== undefined ? rest.cpuLimit : current.cpuLimit,
+						cpuReservation:
+							rest.cpuReservation !== undefined
+								? rest.cpuReservation
+								: current.cpuReservation,
+					},
+				);
+			}
+
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				const forbiddenInfraKeys = [
+					"ulimitsSwarm",
+					"placementSwarm",
+					"modeSwarm",
+					"labelsSwarm",
+					"networkSwarm",
+					"networkIds",
+					"detachDokployNetwork",
+				];
+				for (const key of forbiddenInfraKeys) {
+					if ((rest as any)[key] !== undefined) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: `Infrastructure setting "${key}" requires platform administrator privileges.`,
+						});
+					}
+				}
+			}
+
 			const updateApp = await updateApplication(applicationId, {
 				...rest,
 			});
@@ -1068,16 +1118,128 @@ export const applicationRouter = createTRPCRouter({
 		}),
 	readAppMonitoring: withPermission("monitoring", "read")
 		.input(apiFindMonitoringStats)
-		.query(async ({ input }) => {
+		.query(async ({ input, ctx }) => {
 			if (IS_CLOUD) {
 				throw new TRPCError({
 					code: "UNAUTHORIZED",
 					message: "Functionality not available in cloud version",
 				});
 			}
-			const stats = await getApplicationStats(input.appName);
 
-			return stats;
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+
+			// Special case: host-level monitoring
+			if (input.appName === "dokploy") {
+				if (!isPlatformAdmin) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "Host system monitoring requires platform administrator privileges.",
+					});
+				}
+				const stats = await getApplicationStats(input.appName);
+				return {
+					stats,
+					serviceLimit: null,
+					entitlements: {
+						hasAdvancedIoMetrics: true,
+						hasHistoricalCharts: true,
+						maxDataPoints: 300,
+						retentionHours: 24,
+					},
+				};
+			}
+
+			// Service lookup and tenant isolation
+			const service = await findServiceByAppName(input.appName);
+			if (!service) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Service not found",
+				});
+			}
+
+			if (
+				service.organizationId !== ctx.session.activeOrganizationId &&
+				!isPlatformAdmin
+			) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "You are not authorized to view monitoring for this service",
+				});
+			}
+
+			await checkServiceAccess(ctx, service.serviceId, "read");
+
+			const entitlements =
+				await PlanEntitlementService.getMonitoringEntitlements(
+					ctx.session.activeOrganizationId,
+					isPlatformAdmin,
+				);
+
+			const rawStats = await getApplicationStats(input.appName);
+
+			const memoryLimitBytes = service.memoryLimit
+				? Number(service.memoryLimit)
+				: null;
+			const memoryLimitMb = memoryLimitBytes
+				? Math.round(memoryLimitBytes / (1024 * 1024))
+				: null;
+			const cpuLimitNano = service.cpuLimit ? Number(service.cpuLimit) : null;
+			const cpuLimitMillicores = cpuLimitNano
+				? Math.round(cpuLimitNano / 1_000_000)
+				: null;
+
+			const serviceLimit = {
+				memoryLimitBytes,
+				memoryLimitMb,
+				memoryLimitFormatted: memoryLimitBytes
+					? formatBytes(memoryLimitBytes)
+					: null,
+				cpuLimitMillicores,
+				cpuLimitFormatted: cpuLimitMillicores
+					? `${(cpuLimitMillicores / 1000).toFixed(2)} CPU`
+					: null,
+			};
+
+			if (!rawStats) {
+				return {
+					stats: null,
+					serviceLimit,
+					entitlements,
+				};
+			}
+
+			const sanitizedStats = { ...rawStats };
+
+			if (Array.isArray(sanitizedStats.memory)) {
+				sanitizedStats.memory = sanitizedStats.memory.map((entry: any) => ({
+					...entry,
+					value: {
+						used: entry?.value?.used ?? 0,
+						total: serviceLimit.memoryLimitFormatted ?? null,
+					},
+				}));
+			}
+
+			if (!entitlements.hasAdvancedIoMetrics) {
+				sanitizedStats.block = [];
+				sanitizedStats.network = [];
+			}
+
+			if (!entitlements.hasHistoricalCharts) {
+				if (Array.isArray(sanitizedStats.cpu)) {
+					sanitizedStats.cpu = sanitizedStats.cpu.slice(-1);
+				}
+				if (Array.isArray(sanitizedStats.memory)) {
+					sanitizedStats.memory = sanitizedStats.memory.slice(-1);
+				}
+			}
+
+			return {
+				stats: sanitizedStats,
+				serviceLimit,
+				entitlements,
+			};
 		}),
 	move: protectedProcedure
 		.input(

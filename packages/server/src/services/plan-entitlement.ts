@@ -50,6 +50,22 @@ export interface PlanSnapshot {
 	subscriptionStatus: string;
 }
 
+export interface MonitoringEntitlements {
+	hasAdvancedIoMetrics: boolean;
+	hasHistoricalCharts: boolean;
+	maxDataPoints: number;
+	retentionHours: number;
+}
+
+export interface OrganizationResourceLimits {
+	maxRamMb: number;
+	maxCpuMillicores: number;
+	planName: string;
+	isPlatformAdmin: boolean;
+	minRamMb: number;
+	minCpuMillicores: number;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Service
 // ─────────────────────────────────────────────────────────────
@@ -685,6 +701,90 @@ export class PlanEntitlementService {
 	}
 
 	/**
+	 * Authoritative monitoring capabilities for an organization based on their active subscription plan.
+	 * Basic plans: current metrics only, no advanced I/O (block/network), no historical charts.
+	 * Developer / Business / Enterprise or Platform Admins: full historical charts and advanced I/O.
+	 */
+	static async getMonitoringEntitlements(
+		organizationId: string,
+		isPlatformAdmin = false,
+		executor: any = db,
+	): Promise<MonitoringEntitlements> {
+		if (isPlatformAdmin) {
+			return {
+				hasAdvancedIoMetrics: true,
+				hasHistoricalCharts: true,
+				maxDataPoints: 300,
+				retentionHours: 24,
+			};
+		}
+
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
+		if (!snapshot) {
+			return {
+				hasAdvancedIoMetrics: false,
+				hasHistoricalCharts: false,
+				maxDataPoints: 1,
+				retentionHours: 1,
+			};
+		}
+
+		const isAdvancedPlan = Boolean(
+			snapshot.features["api_access"] ||
+				snapshot.features["docker_access"] ||
+				snapshot.features["compose_access"] ||
+				(snapshot.resources["max_ram_mb"] ?? 0) > 1024 ||
+				snapshot.resources["max_ram_mb"] === -1,
+		);
+
+		if (isAdvancedPlan) {
+			return {
+				hasAdvancedIoMetrics: true,
+				hasHistoricalCharts: true,
+				maxDataPoints: 300,
+				retentionHours: 24,
+			};
+		}
+
+		return {
+			hasAdvancedIoMetrics: false,
+			hasHistoricalCharts: false,
+			maxDataPoints: 1,
+			retentionHours: 1,
+		};
+	}
+
+	/**
+	 * Returns permitted CPU and RAM ranges and plan maximums for the customer-facing UI.
+	 */
+	static async getResourceLimitsForOrganization(
+		organizationId: string,
+		isPlatformAdmin = false,
+		executor: any = db,
+	): Promise<OrganizationResourceLimits> {
+		if (isPlatformAdmin) {
+			return {
+				maxRamMb: -1,
+				maxCpuMillicores: -1,
+				planName: "Platform Administrator",
+				isPlatformAdmin: true,
+				minRamMb: 4,
+				minCpuMillicores: 100,
+			};
+		}
+
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
+		return {
+			maxRamMb: snapshot?.resources["max_ram_mb"] ?? 512,
+			maxCpuMillicores: snapshot?.resources["max_cpu_millicores"] ?? 1000,
+			planName: snapshot?.planName ?? "Basic",
+			isPlatformAdmin: false,
+			minRamMb: 4,
+			minCpuMillicores: 100,
+		};
+	}
+
+	/**
 	 * Validate that requested object storage upload or modification does not exceed plan limits.
 	 * Supports both general storage ("max_storage_gb") and backup storage ("backup_storage_gb").
 	 *
@@ -975,6 +1075,45 @@ export function normalizeAndCalculateEffectiveResources(
 		input.cpuReservation,
 		"cpuReservation",
 	);
+
+	// Validate minimum Docker memory limit (4 MB)
+	if (
+		rawMemoryLimit !== undefined &&
+		rawMemoryLimit > 0 &&
+		rawMemoryLimit < 4 * 1024 * 1024
+	) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Memory limit must be at least 4 MB (4,194,304 bytes).",
+		});
+	}
+
+	// Validate relationships: reservations cannot exceed limits
+	if (
+		rawMemoryLimit !== undefined &&
+		rawMemoryReservation !== undefined &&
+		rawMemoryReservation > 0 &&
+		rawMemoryLimit > 0 &&
+		rawMemoryReservation > rawMemoryLimit
+	) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Memory reservation cannot exceed memory limit.",
+		});
+	}
+
+	if (
+		rawCpuLimit !== undefined &&
+		rawCpuReservation !== undefined &&
+		rawCpuReservation > 0 &&
+		rawCpuLimit > 0 &&
+		rawCpuReservation > rawCpuLimit
+	) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "CPU reservation cannot exceed CPU limit.",
+		});
+	}
 
 	const memoryLimitMb =
 		rawMemoryLimit !== undefined

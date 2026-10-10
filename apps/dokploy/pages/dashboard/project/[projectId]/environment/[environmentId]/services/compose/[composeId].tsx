@@ -88,6 +88,9 @@ const Service = (
 	const { data } = api.compose.one.useQuery({ composeId });
 
 	const { data: auth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(auth as any)?.user?.isPlatformAdmin || (auth as any)?.isPlatformAdmin,
+	);
 	const { data: permissions } = api.user.getPermissions.useQuery();
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { data: serverIp } = api.settings.getIp.useQuery();
@@ -440,11 +443,17 @@ const Service = (
 										<TabsContent value="advanced">
 											<div className="flex flex-col gap-4 pt-2.5">
 												<AddCommandCompose composeId={composeId} />
-												<ShowVolumes id={composeId} type="compose" />
+												{isPlatformAdmin && (
+													<ShowVolumes id={composeId} type="compose" />
+												)}
 												<ShowImport composeId={composeId} />
-												<AssignComposeNetworks composeId={composeId} />
+												{isPlatformAdmin && (
+													<AssignComposeNetworks composeId={composeId} />
+												)}
 												<IsolatedDeploymentTab composeId={composeId} />
-												<FreshVolumes composeId={composeId} />
+												{isPlatformAdmin && (
+													<FreshVolumes composeId={composeId} />
+												)}
 											</div>
 										</TabsContent>
 									)}

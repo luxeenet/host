@@ -13,9 +13,25 @@ export interface Container {
 	Name: string;
 	NetIO: string;
 }
+
+// Format values similar to docker stats
+export const formatBytes = (bytes: number): string => {
+	if (bytes >= 1024 * 1024 * 1024) {
+		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GiB`;
+	}
+	if (bytes >= 1024 * 1024) {
+		return `${(bytes / (1024 * 1024)).toFixed(2)}MiB`;
+	}
+	if (bytes >= 1024) {
+		return `${(bytes / 1024).toFixed(2)}KiB`;
+	}
+	return `${bytes}B`;
+};
+
 export const recordAdvancedStats = async (
 	stats: Container,
 	appName: string,
+	explicitMemoryLimit?: string | null,
 ) => {
 	const { MONITORING_PATH } = paths();
 	const path = `${MONITORING_PATH}/${appName}`;
@@ -23,9 +39,20 @@ export const recordAdvancedStats = async (
 	await promises.mkdir(path, { recursive: true });
 
 	await updateStatsFile(appName, "cpu", stats.CPUPerc);
+
+	let totalMemory: string | null = null;
+	if (appName === "dokploy") {
+		totalMemory = stats.MemUsage.split(" ")[2] || null;
+	} else if (explicitMemoryLimit) {
+		const bytes = Number(explicitMemoryLimit);
+		if (Number.isFinite(bytes) && bytes > 0) {
+			totalMemory = formatBytes(bytes);
+		}
+	}
+
 	await updateStatsFile(appName, "memory", {
 		used: stats.MemUsage.split(" ")[0],
-		total: stats.MemUsage.split(" ")[2],
+		total: totalMemory,
 	});
 
 	await updateStatsFile(appName, "block", {
@@ -114,20 +141,6 @@ export const getHostSystemStats = async (): Promise<Container> => {
 			blockWriteBytes += stat.writeBytes.toBytes();
 		}
 	}
-
-	// Format values similar to docker stats
-	const formatBytes = (bytes: number): string => {
-		if (bytes >= 1024 * 1024 * 1024) {
-			return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GiB`;
-		}
-		if (bytes >= 1024 * 1024) {
-			return `${(bytes / (1024 * 1024)).toFixed(2)}MiB`;
-		}
-		if (bytes >= 1024) {
-			return `${(bytes / 1024).toFixed(2)}KiB`;
-		}
-		return `${bytes}B`;
-	};
 
 	// Format memory usage similar to docker stats format: "used / total"
 	const memUsedFormatted = `${memUsedGB.toFixed(2)}GiB`;

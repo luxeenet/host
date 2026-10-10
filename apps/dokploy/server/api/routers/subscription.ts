@@ -12,6 +12,7 @@ import {
 	platformAdminProcedure,
 	protectedProcedure,
 } from "../trpc";
+import { PlanEntitlementService } from "@dokploy/server/services/plan-entitlement";
 import { seedPlans } from "@dokploy/server/services/plan-seed";
 import { SonicPesaService } from "@dokploy/server/services/sonicpesa";
 
@@ -53,6 +54,15 @@ export const subscriptionRouter = createTRPCRouter({
 			},
 			orderBy: [desc(schema.subscriptions.createdAt)],
 		});
+	}),
+
+	/** Get authoritative CPU and RAM resource limits and ranges for this organization */
+	getResourceLimits: protectedProcedure.query(async ({ ctx }) => {
+		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+		return await PlanEntitlementService.getResourceLimitsForOrganization(
+			ctx.session.activeOrganizationId,
+			isPlatformAdmin,
+		);
 	}),
 
 	/** Subscribe to a plan (creates subscription + first invoice) */

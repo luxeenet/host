@@ -555,6 +555,26 @@ export const redisRouter = createTRPCRouter({
 				service: ["create"],
 			});
 
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				const forbiddenInfraKeys = [
+					"ulimitsSwarm",
+					"placementSwarm",
+					"modeSwarm",
+					"labelsSwarm",
+					"networkSwarm",
+					"networkIds",
+					"detachDokployNetwork",
+				];
+				for (const key of forbiddenInfraKeys) {
+					if ((rest as any)[key] !== undefined) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: `Infrastructure setting "${key}" requires platform administrator privileges.`,
+						});
+					}
+				}
+			}
+
 			const current = await findRedisById(redisId);
 			await PlanEntitlementService.assertRuntimeResources(
 				ctx.session.activeOrganizationId,
@@ -686,6 +706,13 @@ export const redisRouter = createTRPCRouter({
 	rebuild: protectedProcedure
 		.input(apiRebuildRedis)
 		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Database rebuild/reset requires platform administrator privileges.",
+				});
+			}
 			await checkServicePermissionAndAccess(ctx, input.redisId, {
 				deployment: ["create"],
 			});

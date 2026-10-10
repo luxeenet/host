@@ -564,6 +564,26 @@ export const mysqlRouter = createTRPCRouter({
 				service: ["create"],
 			});
 
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				const forbiddenInfraKeys = [
+					"ulimitsSwarm",
+					"placementSwarm",
+					"modeSwarm",
+					"labelsSwarm",
+					"networkSwarm",
+					"networkIds",
+					"detachDokployNetwork",
+				];
+				for (const key of forbiddenInfraKeys) {
+					if ((rest as any)[key] !== undefined) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: `Infrastructure setting "${key}" requires platform administrator privileges.`,
+						});
+					}
+				}
+			}
+
 			const current = await findMySqlById(mysqlId);
 			await PlanEntitlementService.assertRuntimeResources(
 				ctx.session.activeOrganizationId,
@@ -702,6 +722,13 @@ export const mysqlRouter = createTRPCRouter({
 	rebuild: protectedProcedure
 		.input(apiRebuildMysql)
 		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Database rebuild/reset requires platform administrator privileges.",
+				});
+			}
 			await checkServicePermissionAndAccess(ctx, input.mysqlId, {
 				deployment: ["create"],
 			});

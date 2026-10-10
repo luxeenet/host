@@ -57,6 +57,7 @@ export * from "./services/schedule";
 export * from "./services/security";
 export * from "./services/server";
 export * from "./services/server-health";
+export * from "./services/service-lookup";
 export * from "./services/settings";
 export * from "./services/sonicpesa";
 export * from "./services/ssh-key";

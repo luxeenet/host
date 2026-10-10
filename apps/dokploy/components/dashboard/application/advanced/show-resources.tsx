@@ -135,6 +135,12 @@ export const ShowResources = ({ id, type }: Props) => {
 		? mutationMap[type]()
 		: api.mongo.update.useMutation();
 
+	const { data: authUser } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(authUser as any)?.user?.isPlatformAdmin || (authUser as any)?.isPlatformAdmin,
+	);
+	const { data: resourceLimits } = api.subscription.getResourceLimits.useQuery();
+
 	const form = useForm({
 		defaultValues: {
 			cpuLimit: "",
@@ -164,6 +170,53 @@ export const ShowResources = ({ id, type }: Props) => {
 	}, [data, form, form.reset]);
 
 	const onSubmit = async (formData: AddResources) => {
+		// Client-side validations
+		if (formData.memoryLimit && formData.memoryReservation) {
+			const memLimitNum = Number(formData.memoryLimit);
+			const memResNum = Number(formData.memoryReservation);
+			if (memResNum > memLimitNum) {
+				toast.error("Memory reservation cannot exceed memory limit.");
+				return;
+			}
+		}
+
+		if (formData.cpuLimit && formData.cpuReservation) {
+			const cpuLimitNum = Number(formData.cpuLimit);
+			const cpuResNum = Number(formData.cpuReservation);
+			if (cpuResNum > cpuLimitNum) {
+				toast.error("CPU reservation cannot exceed CPU limit.");
+				return;
+			}
+		}
+
+		if (formData.memoryLimit) {
+			const memLimitNum = Number(formData.memoryLimit);
+			if (memLimitNum > 0 && memLimitNum < 4 * 1024 * 1024) {
+				toast.error("Memory limit must be at least 4 MB (4,194,304 bytes).");
+				return;
+			}
+
+			if (resourceLimits && resourceLimits.maxRamMb !== -1) {
+				const requestedMb = Math.ceil(memLimitNum / (1024 * 1024));
+				if (requestedMb > resourceLimits.maxRamMb) {
+					toast.error(
+						`Requested RAM (${requestedMb} MB) exceeds your plan limit of ${resourceLimits.maxRamMb} MB. Please upgrade your plan.`,
+					);
+					return;
+				}
+			}
+		}
+
+		if (formData.cpuLimit && resourceLimits && resourceLimits.maxCpuMillicores !== -1) {
+			const requestedMillicores = Math.ceil(Number(formData.cpuLimit) / 1_000_000);
+			if (requestedMillicores > resourceLimits.maxCpuMillicores) {
+				toast.error(
+					`Requested CPU exceeds your plan limit of ${(resourceLimits.maxCpuMillicores / 1000).toFixed(2)} CPU. Please upgrade your plan.`,
+				);
+				return;
+			}
+		}
+
 		await mutateAsync({
 			applicationId: id || "",
 			libsqlId: id || "",
@@ -177,7 +230,7 @@ export const ShowResources = ({ id, type }: Props) => {
 			memoryLimit: formData.memoryLimit || null,
 			memoryReservation: formData.memoryReservation || null,
 			ulimitsSwarm:
-				formData.ulimitsSwarm && formData.ulimitsSwarm.length > 0
+				isPlatformAdmin && formData.ulimitsSwarm && formData.ulimitsSwarm.length > 0
 					? formData.ulimitsSwarm
 					: null,
 		})
@@ -185,8 +238,8 @@ export const ShowResources = ({ id, type }: Props) => {
 				toast.success("Resources Updated");
 				await refetch();
 			})
-			.catch(() => {
-				toast.error("Error updating the resources");
+			.catch((err: any) => {
+				toast.error(err?.message || "Error updating the resources");
 			});
 	};
 
@@ -200,9 +253,25 @@ export const ShowResources = ({ id, type }: Props) => {
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="flex flex-col gap-4">
+				{resourceLimits && (
+					<div className="flex flex-col gap-1 p-3 rounded-lg border bg-muted/40 text-sm">
+						<span className="font-medium text-foreground">
+							Subscription Plan Entitlement: {resourceLimits.planName}
+						</span>
+						<span className="text-muted-foreground text-xs">
+							Allocatable limits:{" "}
+							{resourceLimits.maxRamMb === -1
+								? "Unlimited RAM"
+								: `Up to ${resourceLimits.maxRamMb} MB RAM`}
+							{" • "}
+							{resourceLimits.maxCpuMillicores === -1
+								? "Unlimited CPU"
+								: `Up to ${(resourceLimits.maxCpuMillicores / 1000).toFixed(2)} CPU`}
+						</span>
+					</div>
+				)}
 				<AlertBlock type="info">
-					Please remember to click Redeploy after modify the resources to apply
-					the changes.
+					Resource changes are saved to the configuration. Click Redeploy to apply updated CPU and Memory limits to your running service.
 				</AlertBlock>
 				<Form {...form}>
 					<form
@@ -372,153 +441,155 @@ export const ShowResources = ({ id, type }: Props) => {
 							/>
 						</div>
 
-						{/* Ulimits Section */}
-						<div className="space-y-4">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<FormLabel className="text-base">Ulimits</FormLabel>
-									<TooltipProvider>
-										<Tooltip delayDuration={0}>
-											<TooltipTrigger type="button">
-												<InfoIcon className="h-4 w-4 text-muted-foreground" />
-											</TooltipTrigger>
-											<TooltipContent className="max-w-xs">
-												<p>
-													Set resource limits for the container. Each ulimit has
-													a soft limit (warning threshold) and hard limit
-													(maximum allowed). Use -1 for unlimited.
-												</p>
-											</TooltipContent>
-										</Tooltip>
-									</TooltipProvider>
+						{/* Ulimits Section (platform administrators only) */}
+						{isPlatformAdmin && (
+							<div className="space-y-4">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<FormLabel className="text-base">Ulimits</FormLabel>
+										<TooltipProvider>
+											<Tooltip delayDuration={0}>
+												<TooltipTrigger type="button">
+													<InfoIcon className="h-4 w-4 text-muted-foreground" />
+												</TooltipTrigger>
+												<TooltipContent className="max-w-xs">
+													<p>
+														Set resource limits for the container. Each ulimit has
+														a soft limit (warning threshold) and hard limit
+														(maximum allowed). Use -1 for unlimited.
+													</p>
+												</TooltipContent>
+											</Tooltip>
+										</TooltipProvider>
+									</div>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onClick={() =>
+											append({ Name: "nofile", Soft: 65535, Hard: 65535 })
+										}
+									>
+										<Plus className="h-4 w-4 mr-1" />
+										Add Ulimit
+									</Button>
 								</div>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									onClick={() =>
-										append({ Name: "nofile", Soft: 65535, Hard: 65535 })
-									}
-								>
-									<Plus className="h-4 w-4 mr-1" />
-									Add Ulimit
-								</Button>
-							</div>
 
-							{fields.length > 0 && (
-								<div className="space-y-3">
-									{fields.map((field, index) => (
-										<div
-											key={field.id}
-											className="flex items-start gap-3 p-3 border rounded-lg bg-muted/30"
-										>
-											<FormField
-												control={form.control}
-												name={`ulimitsSwarm.${index}.Name`}
-												render={({ field }) => (
-													<FormItem className="flex-1">
-														<FormLabel className="text-xs">Type</FormLabel>
-														<Select
-															onValueChange={field.onChange}
-															value={field.value}
-														>
-															<FormControl>
-																<SelectTrigger>
-																	<SelectValue placeholder="Select ulimit" />
-																</SelectTrigger>
-															</FormControl>
-															<SelectContent>
-																{ULIMIT_PRESETS.map((preset) => (
-																	<SelectItem
-																		key={preset.value}
-																		value={preset.value}
-																	>
-																		{preset.label}
-																	</SelectItem>
-																))}
-															</SelectContent>
-														</Select>
-														<FormMessage />
-													</FormItem>
-												)}
-											/>
-											<FormField
-												control={form.control}
-												name={`ulimitsSwarm.${index}.Soft`}
-												render={({ field }) => (
-													<FormItem className="w-32">
-														<FormLabel className="text-xs">
-															Soft Limit
-														</FormLabel>
-														<FormControl>
-															<Input
-																type="number"
-																min={-1}
-																placeholder="65535"
-																{...field}
-																value={
-																	typeof field.value === "number"
-																		? field.value
-																		: ""
-																}
-																onChange={(e) =>
-																	field.onChange(Number(e.target.value))
-																}
-															/>
-														</FormControl>
-														<FormMessage />
-													</FormItem>
-												)}
-											/>
-											<FormField
-												control={form.control}
-												name={`ulimitsSwarm.${index}.Hard`}
-												render={({ field }) => (
-													<FormItem className="w-32">
-														<FormLabel className="text-xs">
-															Hard Limit
-														</FormLabel>
-														<FormControl>
-															<Input
-																type="number"
-																min={-1}
-																placeholder="65535"
-																{...field}
-																value={
-																	typeof field.value === "number"
-																		? field.value
-																		: ""
-																}
-																onChange={(e) =>
-																	field.onChange(Number(e.target.value))
-																}
-															/>
-														</FormControl>
-														<FormMessage />
-													</FormItem>
-												)}
-											/>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon"
-												className="mt-6 text-destructive hover:text-destructive"
-												onClick={() => remove(index)}
+								{fields.length > 0 && (
+									<div className="space-y-3">
+										{fields.map((field, index) => (
+											<div
+												key={field.id}
+												className="flex items-start gap-3 p-3 border rounded-lg bg-muted/30"
 											>
-												<Trash2 className="h-4 w-4" />
-											</Button>
-										</div>
-									))}
-								</div>
-							)}
+												<FormField
+													control={form.control}
+													name={`ulimitsSwarm.${index}.Name`}
+													render={({ field }) => (
+														<FormItem className="flex-1">
+															<FormLabel className="text-xs">Type</FormLabel>
+															<Select
+																onValueChange={field.onChange}
+																value={field.value}
+															>
+																<FormControl>
+																	<SelectTrigger>
+																		<SelectValue placeholder="Select ulimit" />
+																	</SelectTrigger>
+																</FormControl>
+																<SelectContent>
+																	{ULIMIT_PRESETS.map((preset) => (
+																		<SelectItem
+																			key={preset.value}
+																			value={preset.value}
+																		>
+																			{preset.label}
+																		</SelectItem>
+																	))}
+																</SelectContent>
+															</Select>
+															<FormMessage />
+														</FormItem>
+													)}
+												/>
+												<FormField
+													control={form.control}
+													name={`ulimitsSwarm.${index}.Soft`}
+													render={({ field }) => (
+														<FormItem className="w-32">
+															<FormLabel className="text-xs">
+																Soft Limit
+															</FormLabel>
+															<FormControl>
+																<Input
+																	type="number"
+																	min={-1}
+																	placeholder="65535"
+																	{...field}
+																	value={
+																		typeof field.value === "number"
+																			? field.value
+																			: ""
+																	}
+																	onChange={(e) =>
+																		field.onChange(Number(e.target.value))
+																	}
+																/>
+															</FormControl>
+															<FormMessage />
+														</FormItem>
+													)}
+												/>
+												<FormField
+													control={form.control}
+													name={`ulimitsSwarm.${index}.Hard`}
+													render={({ field }) => (
+														<FormItem className="w-32">
+															<FormLabel className="text-xs">
+																Hard Limit
+															</FormLabel>
+															<FormControl>
+																<Input
+																	type="number"
+																	min={-1}
+																	placeholder="65535"
+																	{...field}
+																	value={
+																		typeof field.value === "number"
+																			? field.value
+																			: ""
+																	}
+																	onChange={(e) =>
+																		field.onChange(Number(e.target.value))
+																	}
+																/>
+															</FormControl>
+															<FormMessage />
+														</FormItem>
+													)}
+												/>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon"
+													className="mt-6 text-destructive hover:text-destructive"
+													onClick={() => remove(index)}
+												>
+													<Trash2 className="h-4 w-4" />
+												</Button>
+											</div>
+										))}
+									</div>
+								)}
 
-							{fields.length === 0 && (
-								<p className="text-sm text-muted-foreground">
-									No ulimits configured. Click &quot;Add Ulimit&quot; to set
-									resource limits.
-								</p>
-							)}
-						</div>
+								{fields.length === 0 && (
+									<p className="text-sm text-muted-foreground">
+										No ulimits configured. Click &quot;Add Ulimit&quot; to set
+										resource limits.
+									</p>
+								)}
+							</div>
+						)}
 
 						<div className="flex w-full justify-end">
 							<Button isLoading={isPending} type="submit">

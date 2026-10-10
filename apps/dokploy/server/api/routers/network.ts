@@ -52,6 +52,13 @@ export const networkRouter = createTRPCRouter({
 	create: protectedProcedure
 		.input(apiCreateNetwork)
 		.mutation(async ({ ctx, input }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Network management requires platform administrator privileges.",
+				});
+			}
 			const created = await createNetwork(
 				input,
 				ctx.session.activeOrganizationId,
@@ -81,6 +88,13 @@ export const networkRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Network management requires platform administrator privileges.",
+				});
+			}
 			const result = await importDockerNetworks(
 				ctx.session.activeOrganizationId,
 				input.serverId ?? null,
@@ -113,6 +127,13 @@ export const networkRouter = createTRPCRouter({
 	recreate: protectedProcedure
 		.input(apiFindOneNetwork)
 		.mutation(async ({ ctx, input }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Network management requires platform administrator privileges.",
+				});
+			}
 			const network = await findNetworkById(input.networkId);
 			if (network.organizationId !== ctx.session.activeOrganizationId) {
 				throw new TRPCError({
@@ -133,6 +154,13 @@ export const networkRouter = createTRPCRouter({
 	resync: protectedProcedure
 		.input(apiFindOneNetwork)
 		.mutation(async ({ ctx, input }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Network management requires platform administrator privileges.",
+				});
+			}
 			const network = await findNetworkById(input.networkId);
 			if (network.organizationId !== ctx.session.activeOrganizationId) {
 				throw new TRPCError({
@@ -156,6 +184,13 @@ export const networkRouter = createTRPCRouter({
 	remove: protectedProcedure
 		.input(apiRemoveNetwork)
 		.mutation(async ({ ctx, input }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Network management requires platform administrator privileges.",
+				});
+			}
 			const network = await findNetworkById(input.networkId);
 			if (network.organizationId !== ctx.session.activeOrganizationId) {
 				throw new TRPCError({

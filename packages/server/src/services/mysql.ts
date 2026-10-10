@@ -163,6 +163,12 @@ export const deployMySql = async (
 		const resolvedImage = resolveDatabaseImage("mysql", mysql.dockerImage);
 		validateDatabaseImage(resolvedImage);
 
+		if (mysql.dockerImage !== resolvedImage) {
+			onData?.(
+				`Resolved database image "${mysql.dockerImage}" to canonical image "${resolvedImage}"`,
+			);
+		}
+
 		if (mysql.serverId) {
 			await execAsyncRemote(
 				mysql.serverId,
@@ -180,6 +186,9 @@ export const deployMySql = async (
 		await waitForSwarmServiceConvergence(mysql.appName, mysql.serverId);
 		await updateMySqlById(mysqlId, {
 			applicationStatus: "done",
+			...(mysql.dockerImage !== resolvedImage
+				? { dockerImage: resolvedImage }
+				: {}),
 		});
 		onData?.("Deployment completed successfully!");
 	} catch (error) {

@@ -167,6 +167,12 @@ export const deployPostgres = async (
 		);
 		validateDatabaseImage(resolvedImage);
 
+		if (postgres.dockerImage !== resolvedImage) {
+			onData?.(
+				`Resolved database image "${postgres.dockerImage}" to canonical image "${resolvedImage}"`,
+			);
+		}
+
 		if (postgres.serverId) {
 			await execAsyncRemote(
 				postgres.serverId,
@@ -186,6 +192,9 @@ export const deployPostgres = async (
 
 		await updatePostgresById(postgresId, {
 			applicationStatus: "done",
+			...(postgres.dockerImage !== resolvedImage
+				? { dockerImage: resolvedImage }
+				: {}),
 		});
 
 		onData?.("Deployment completed successfully!");

@@ -163,6 +163,12 @@ export const deployMariadb = async (
 		const resolvedImage = resolveDatabaseImage("mariadb", mariadb.dockerImage);
 		validateDatabaseImage(resolvedImage);
 
+		if (mariadb.dockerImage !== resolvedImage) {
+			onData?.(
+				`Resolved database image "${mariadb.dockerImage}" to canonical image "${resolvedImage}"`,
+			);
+		}
+
 		if (mariadb.serverId) {
 			await execAsyncRemote(
 				mariadb.serverId,
@@ -180,6 +186,9 @@ export const deployMariadb = async (
 		await waitForSwarmServiceConvergence(mariadb.appName, mariadb.serverId);
 		await updateMariadbById(mariadbId, {
 			applicationStatus: "done",
+			...(mariadb.dockerImage !== resolvedImage
+				? { dockerImage: resolvedImage }
+				: {}),
 		});
 		onData?.("Deployment completed successfully!");
 	} catch (error) {

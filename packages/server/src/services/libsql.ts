@@ -160,6 +160,12 @@ export const deployLibsql = async (
 		const resolvedImage = resolveDatabaseImage("libsql", libsql.dockerImage);
 		validateDatabaseImage(resolvedImage);
 
+		if (libsql.dockerImage !== resolvedImage) {
+			onData?.(
+				`Resolved database image "${libsql.dockerImage}" to canonical image "${resolvedImage}"`,
+			);
+		}
+
 		if (libsql.serverId) {
 			await execAsyncRemote(
 				libsql.serverId,
@@ -177,6 +183,9 @@ export const deployLibsql = async (
 		await waitForSwarmServiceConvergence(libsql.appName, libsql.serverId);
 		await updateLibsqlById(libsqlId, {
 			applicationStatus: "done",
+			...(libsql.dockerImage !== resolvedImage
+				? { dockerImage: resolvedImage }
+				: {}),
 		});
 		onData?.("Deployment completed successfully!");
 	} catch (error) {

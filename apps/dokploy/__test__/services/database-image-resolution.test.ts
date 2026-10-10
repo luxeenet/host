@@ -218,7 +218,7 @@ describe("Database Image Resolution & Deployment Contract (All 6 Supported Engin
 		});
 	});
 
-	describe("4. Rejection of Arbitrary Resource Identifiers & Dangerous Inputs", () => {
+	describe("4. Healing of Arbitrary Resource Identifiers & Strict Rejection of Dangerous Inputs", () => {
 		it("detects valid docker image references", () => {
 			expect(isValidDockerImage("postgres:18")).toBe(true);
 			expect(
@@ -229,15 +229,24 @@ describe("Database Image Resolution & Deployment Contract (All 6 Supported Engin
 			).toBe(true);
 		});
 
-		it("rejects arbitrary resource identifiers that lack tags or namespaces", () => {
-			expect(() => resolveDatabaseImage("postgres", "my-customer-db")).toThrow(
-				TRPCError,
+		it("safely heals and resolves arbitrary resource identifiers or legacy database names to canonical engine defaults", () => {
+			// Tests arbitrary resource identifiers or legacy database names (like customer databases "butaxdb", "my-customer-db")
+			expect(resolveDatabaseImage("postgres", "butaxdb")).toBe("postgres:18");
+			expect(resolveDatabaseImage("postgres", "my-customer-db")).toBe(
+				"postgres:18",
 			);
-			expect(() =>
-				resolveDatabaseImage("mysql", "production-db-instance-1"),
-			).toThrow(TRPCError);
-			expect(() => resolveDatabaseImage("redis", "cache-service-app")).toThrow(
-				TRPCError,
+			expect(resolveDatabaseImage("mysql", "production-db-instance-1")).toBe(
+				"mysql:8",
+			);
+			expect(resolveDatabaseImage("mariadb", "mariadb-custom-db")).toBe(
+				"mariadb:11",
+			);
+			expect(resolveDatabaseImage("mongo", "mongo_tenant_db")).toBe("mongo:8");
+			expect(resolveDatabaseImage("redis", "cache-service-app")).toBe(
+				"redis:7",
+			);
+			expect(resolveDatabaseImage("libsql", "libsql-database-prod")).toBe(
+				"ghcr.io/tursodatabase/libsql-server:latest",
 			);
 		});
 
@@ -248,6 +257,21 @@ describe("Database Image Resolution & Deployment Contract (All 6 Supported Engin
 			expect(isValidDockerImage("postgres `touch test`")).toBe(false);
 			expect(isValidDockerImage("postgres image with spaces")).toBe(false);
 			expect(isValidDockerImage("postgres:18:22:extra")).toBe(false);
+		});
+
+		it("strictly rejects dangerous injection attempts or malformed tags with TRPCError", () => {
+			expect(() =>
+				resolveDatabaseImage("postgres", "postgres; rm -rf /"),
+			).toThrow(TRPCError);
+			expect(() =>
+				resolveDatabaseImage("postgres", "postgres$(whoami)"),
+			).toThrow(TRPCError);
+			expect(() =>
+				resolveDatabaseImage("postgres", "postgres image with spaces"),
+			).toThrow(TRPCError);
+			expect(() =>
+				resolveDatabaseImage("postgres", "postgres:18:22:extra"),
+			).toThrow(TRPCError);
 		});
 
 		it("validateDatabaseImage throws BAD_REQUEST TRPCError without leaking secrets", () => {

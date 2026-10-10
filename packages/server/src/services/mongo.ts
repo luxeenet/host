@@ -180,6 +180,12 @@ export const deployMongo = async (
 		const resolvedImage = resolveDatabaseImage("mongo", mongo.dockerImage);
 		validateDatabaseImage(resolvedImage);
 
+		if (mongo.dockerImage !== resolvedImage) {
+			onData?.(
+				`Resolved database image "${mongo.dockerImage}" to canonical image "${resolvedImage}"`,
+			);
+		}
+
 		if (mongo.serverId) {
 			await execAsyncRemote(
 				mongo.serverId,
@@ -197,6 +203,9 @@ export const deployMongo = async (
 		await waitForSwarmServiceConvergence(mongo.appName, mongo.serverId);
 		await updateMongoById(mongoId, {
 			applicationStatus: "done",
+			...(mongo.dockerImage !== resolvedImage
+				? { dockerImage: resolvedImage }
+				: {}),
 		});
 		onData?.("Deployment completed successfully!");
 	} catch (error) {

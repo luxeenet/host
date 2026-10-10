@@ -128,6 +128,14 @@ export function resolveDatabaseImage(
 		return defaultImage;
 	}
 
+	// Reject dangerous characters, whitespace, or injection attempts immediately
+	if (/[\s"'`$;|&><]/.test(trimmed)) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `Invalid Docker image reference "${trimmed}". Docker image reference cannot contain spaces or special characters.`,
+		});
+	}
+
 	// If the user provided a pure version/tag (e.g. "16" or ":16") for standard engine
 	if (/^:?\d+(\.\d+)*$/.test(trimmed)) {
 		const tag = trimmed.startsWith(":") ? trimmed.slice(1) : trimmed;
@@ -144,16 +152,18 @@ export function resolveDatabaseImage(
 		}
 	}
 
-	// Reject arbitrary resource identifiers or service names (no tag, no registry/namespace, no digest)
+	// If requestedImage is an arbitrary resource identifier or database name without tags (:),
+	// namespaces/registries (/), or digests (@), it cannot be pulled from a registry as a database image.
+	// In production, customer databases may have legacy database names or app identifiers stored
+	// in this column (e.g. "butaxdb", "my-customer-db").
+	// To safely protect and self-heal existing customer databases across restarts, updates,
+	// and redeployments, map arbitrary untagged resource identifiers to the canonical engine default.
 	if (
 		!trimmed.includes(":") &&
 		!trimmed.includes("/") &&
 		!trimmed.includes("@")
 	) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: `Invalid Docker image reference "${trimmed}". Arbitrary resource identifiers or database names cannot be used as Docker image references. Please provide a valid tagged image (e.g., "${defaultImage}") or namespaced image.`,
-		});
+		return defaultImage;
 	}
 
 	validateDatabaseImage(trimmed);

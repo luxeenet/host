@@ -130,6 +130,12 @@ export const deployRedis = async (
 		const resolvedImage = resolveDatabaseImage("redis", redis.dockerImage);
 		validateDatabaseImage(resolvedImage);
 
+		if (redis.dockerImage !== resolvedImage) {
+			onData?.(
+				`Resolved database image "${redis.dockerImage}" to canonical image "${resolvedImage}"`,
+			);
+		}
+
 		if (redis.serverId) {
 			await execAsyncRemote(
 				redis.serverId,
@@ -147,6 +153,9 @@ export const deployRedis = async (
 		await waitForSwarmServiceConvergence(redis.appName, redis.serverId);
 		await updateRedisById(redisId, {
 			applicationStatus: "done",
+			...(redis.dockerImage !== resolvedImage
+				? { dockerImage: resolvedImage }
+				: {}),
 		});
 		onData?.("Deployment completed successfully!");
 	} catch (error) {

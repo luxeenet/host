@@ -2,6 +2,7 @@ import dns from "node:dns";
 import { isIP } from "node:net";
 import os from "node:os";
 import { promisify } from "node:util";
+import { BRAND } from "@paas/branding";
 import { db } from "@dokploy/server/db";
 import { getWebServerSettings } from "@dokploy/server/services/web-server-settings";
 import { generateRandomDomain } from "@dokploy/server/templates";
@@ -383,16 +384,170 @@ export const getPublicServerIp = async (serverId?: string): Promise<string> => {
 	return settings?.serverIp || "127.0.0.1";
 };
 
-export const generateTraefikMeDomain = async (
+export const getConfiguredPlatformDomain = async (): Promise<string | null> => {
+	// 1. Explicit environment variable overrides
+	const envDomain =
+		process.env.PLATFORM_DOMAIN || process.env.BRAND_PLATFORM_SUBDOMAIN_BASE;
+	if (envDomain && !isPrivateOrLocalAddress(envDomain) && !isIP(envDomain)) {
+		const clean = envDomain
+			.replace(/^https?:\/\//, "")
+			.split(/[/:]/)[0]!
+			.trim()
+			.toLowerCase();
+		if (clean && clean !== "localhost") return clean;
+	}
+
+	// 2. Web server settings host domain (e.g. panel2021.hatdot.cloud -> hatdot.cloud)
+	const settings = await getWebServerSettings();
+	if (
+		settings?.host &&
+		!isIP(settings.host) &&
+		!isPrivateOrLocalAddress(settings.host)
+	) {
+		const cleanHost = settings.host
+			.replace(/^https?:\/\//, "")
+			.split(/[/:]/)[0]!
+			.trim()
+			.toLowerCase();
+		if (cleanHost && cleanHost !== "localhost") {
+			const baseDomain = cleanHost.replace(
+				/^(panel2021|app|panel|admin|dashboard)\./,
+				"",
+			);
+			if (baseDomain.includes(".")) {
+				return baseDomain;
+			}
+		}
+	}
+
+	// 3. BRAND_DOMAIN from env
+	if (
+		process.env.BRAND_DOMAIN &&
+		!isPrivateOrLocalAddress(process.env.BRAND_DOMAIN) &&
+		!isIP(process.env.BRAND_DOMAIN)
+	) {
+		const clean = process.env.BRAND_DOMAIN
+			.replace(/^https?:\/\//, "")
+			.split(/[/:]/)[0]!
+			.trim()
+			.toLowerCase();
+		if (clean && clean !== "localhost") return clean;
+	}
+
+	// 4. Platform branding config (defaults to hatdot.cloud in production branding)
+	if (
+		BRAND.PLATFORM_SUBDOMAIN_BASE &&
+		BRAND.PLATFORM_SUBDOMAIN_BASE !== "localhost" &&
+		!isIP(BRAND.PLATFORM_SUBDOMAIN_BASE) &&
+		!isPrivateOrLocalAddress(BRAND.PLATFORM_SUBDOMAIN_BASE)
+	) {
+		const clean = BRAND.PLATFORM_SUBDOMAIN_BASE
+			.replace(/^https?:\/\//, "")
+			.split(/[/:]/)[0]!
+			.trim()
+			.toLowerCase();
+		if (clean && clean !== "localhost") return clean;
+	}
+
+	return null;
+};
+
+export const checkWildcardDnsSupport = async (
+	platformDomain: string,
+): Promise<boolean> => {
+	try {
+		const testHost = `test-wildcard-${Math.random().toString(36).substring(2, 8)}.${platformDomain}`;
+		const ips = await withTimeout(dns.promises.resolve4(testHost), 2500);
+		if (ips && Array.isArray(ips) && ips.length > 0) {
+			const hasPublic = ips.some(
+				(ip) => isIP(ip) === 4 && !isPrivateOrLocalAddress(ip),
+			);
+			return hasPublic;
+		}
+		return false;
+	} catch {
+		return false;
+	}
+};
+
+export const isPlatformOrTestDomain = async (
+	host: string,
+): Promise<boolean> => {
+	const clean = host
+		.replace(/^https?:\/\//, "")
+		.split(/[/:]/)[0]!
+		.trim()
+		.toLowerCase();
+	if (
+		clean.includes(".sslip.io") ||
+		clean.includes(".traefik.me") ||
+		clean.includes(".nip.io") ||
+		clean === "localhost" ||
+		clean.endsWith(".localhost") ||
+		isPrivateOrLocalAddress(clean)
+	) {
+		return true;
+	}
+
+	const platformDomain = await getConfiguredPlatformDomain();
+	if (
+		platformDomain &&
+		(clean === platformDomain || clean.endsWith(`.${platformDomain}`))
+	) {
+		return true;
+	}
+
+	return false;
+};
+
+export const resolveGeneratedApplicationDomain = async (
 	appName: string,
-	_userId: string,
 	serverId?: string,
-) => {
+): Promise<{
+	host: string;
+	isPlatformDomain: boolean;
+	supportsHttps: boolean;
+	platformDomain: string | null;
+}> => {
+	const platformDomain = await getConfiguredPlatformDomain();
 	const serverIp = await getPublicServerIp(serverId);
-	return generateRandomDomain({
+	const settings = await getWebServerSettings();
+
+	if (platformDomain) {
+		const wildcardSupported = await checkWildcardDnsSupport(platformDomain);
+		if (wildcardSupported || process.env.ENABLE_PLATFORM_WILDCARD === "true") {
+			const supportsHttps =
+				settings?.certificateType === "letsencrypt" ||
+				Boolean(settings?.https);
+			return {
+				host: `${appName}.${platformDomain}`,
+				isPlatformDomain: true,
+				supportsHttps,
+				platformDomain,
+			};
+		}
+	}
+
+	const sslipHost = generateRandomDomain({
 		serverIp,
 		projectName: appName,
 	});
+
+	return {
+		host: sslipHost,
+		isPlatformDomain: false,
+		supportsHttps: false,
+		platformDomain: null,
+	};
+};
+
+export const generateTraefikMeDomain = async (
+	appName: string,
+	_userId?: string,
+	serverId?: string,
+) => {
+	const { host } = await resolveGeneratedApplicationDomain(appName, serverId);
+	return host;
 };
 
 export const generateWildcardDomain = (
@@ -492,10 +647,92 @@ export const findDomainsByComposeId = async (composeId: string) => {
 	}));
 };
 
+export const findDomainsByOrganizationId = async (organizationId: string) => {
+	const appDomains = await db
+		.select({
+			domainId: domains.domainId,
+			host: domains.host,
+			https: domains.https,
+			port: domains.port,
+			path: domains.path,
+			enabled: domains.enabled,
+			certificateType: domains.certificateType,
+			createdAt: domains.createdAt,
+			applicationId: domains.applicationId,
+			composeId: domains.composeId,
+			serviceName: applications.name,
+			appName: applications.appName,
+			projectId: projects.projectId,
+			environmentId: environments.environmentId,
+			domainType: domains.domainType,
+		})
+		.from(domains)
+		.innerJoin(
+			applications,
+			eq(domains.applicationId, applications.applicationId),
+		)
+		.innerJoin(
+			environments,
+			eq(applications.environmentId, environments.environmentId),
+		)
+		.innerJoin(projects, eq(environments.projectId, projects.projectId))
+		.where(eq(projects.organizationId, organizationId));
+
+	const composeDomains = await db
+		.select({
+			domainId: domains.domainId,
+			host: domains.host,
+			https: domains.https,
+			port: domains.port,
+			path: domains.path,
+			enabled: domains.enabled,
+			certificateType: domains.certificateType,
+			createdAt: domains.createdAt,
+			applicationId: domains.applicationId,
+			composeId: domains.composeId,
+			serviceName: compose.name,
+			appName: compose.appName,
+			projectId: projects.projectId,
+			environmentId: environments.environmentId,
+			domainType: domains.domainType,
+		})
+		.from(domains)
+		.innerJoin(compose, eq(domains.composeId, compose.composeId))
+		.innerJoin(
+			environments,
+			eq(compose.environmentId, environments.environmentId),
+		)
+		.innerJoin(projects, eq(environments.projectId, projects.projectId))
+		.where(eq(projects.organizationId, organizationId));
+
+	const all = [...appDomains, ...composeDomains];
+	all.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+	return all;
+};
+
 export const updateDomainById = async (
 	domainId: string,
 	domainData: Partial<Domain>,
 ) => {
+	if (domainData.host) {
+		const current = await findDomainById(domainId);
+		if (
+			current &&
+			domainData.host.trim().toLowerCase() !== current.host.toLowerCase()
+		) {
+			const targetOrgId = await getServiceOrganizationId({
+				applicationId: current.applicationId,
+				composeId: current.composeId,
+				previewDeploymentId: current.previewDeploymentId,
+			});
+			await checkDomainTenantConflict(
+				domainData.host.trim(),
+				targetOrgId,
+				domainId,
+			);
+		}
+	}
+
 	const domain = await db
 		.update(domains)
 		.set({

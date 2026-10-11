@@ -2,7 +2,7 @@ import { validateRequest } from "@dokploy/server/lib/auth";
 import { brand } from "@paas/branding";
 import { createServerSideHelpers } from "@trpc/react-query/server";
 import copy from "copy-to-clipboard";
-import { HelpCircle, ServerOff } from "lucide-react";
+import { ExternalLink, Globe, HelpCircle, ServerOff } from "lucide-react";
 import type {
 	GetServerSidePropsContext,
 	InferGetServerSidePropsType,
@@ -95,6 +95,13 @@ const Service = (
 		},
 	);
 
+	const { data: domains } = api.domain.byApplicationId.useQuery(
+		{ applicationId },
+		{
+			enabled: !!applicationId,
+		},
+	);
+
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { data: serverIp } = api.settings.getIp.useQuery();
 	const { data: auth } = api.user.get.useQuery();
@@ -113,6 +120,8 @@ const Service = (
 			name: env.name,
 			href: `/dashboard/project/${projectId}/environment/${env.environmentId}`,
 		})) || [];
+
+	const primaryDomain = domains?.[0];
 
 	return (
 		<div className="pb-10">
@@ -151,7 +160,23 @@ const Service = (
 								</span>
 							</div>
 							<div className="flex flex-col h-fit w-fit gap-2">
-								<div className="flex flex-row h-fit w-fit gap-2">
+								<div className="flex flex-row h-fit w-fit gap-2 flex-wrap items-center">
+									{primaryDomain && (
+										<Link
+											href={`${primaryDomain.https ? "https" : "http"}://${primaryDomain.host}${primaryDomain.path || ""}`}
+											target="_blank"
+											rel="noopener noreferrer"
+										>
+											<Badge
+												variant="outline"
+												className="bg-primary/5 hover:bg-primary/10 text-primary border-primary/20 flex items-center gap-1.5 font-normal text-xs transition-colors cursor-pointer"
+											>
+												<Globe className="size-3.5" />
+												{primaryDomain.host}
+												<ExternalLink className="size-3" />
+											</Badge>
+										</Link>
+									)}
 									<Badge
 										className="cursor-pointer"
 										onClick={() => {

@@ -292,17 +292,53 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 	return (
 		<Card className="bg-background">
 			<CardHeader>
-				<CardTitle className="text-xl flex items-center justify-between">
+				<CardTitle className="text-xl flex items-center justify-between flex-wrap gap-2">
 					<span>Build Configuration</span>
 					{inspection?.detected && (
-						<Badge
-							variant="outline"
-							className="bg-primary/10 text-primary border-primary/20 flex items-center gap-1.5 font-normal text-xs"
-						>
-							<Sparkles className="size-3.5" />
-							Detected: {inspection.detected.framework} (Port:{" "}
-							{inspection.detected.suggestedPort})
-						</Badge>
+						<div className="flex items-center gap-2 flex-wrap">
+							<Badge
+								variant="outline"
+								className="bg-primary/10 text-primary border-primary/20 flex items-center gap-1.5 font-normal text-xs"
+							>
+								<Sparkles className="size-3.5" />
+								Detected: {inspection.detected.framework} (Port:{" "}
+								{inspection.detected.suggestedPort})
+							</Badge>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="h-7 text-xs"
+								onClick={() => {
+									if (
+										inspection.detected?.buildType &&
+										isValidBuildType(inspection.detected.buildType)
+									) {
+										form.setValue(
+											"buildType",
+											inspection.detected.buildType as BuildType,
+										);
+										if ("publishDirectory" in inspection.detected && inspection.detected.publishDirectory) {
+											form.setValue(
+												"publishDirectory" as any,
+												inspection.detected.publishDirectory,
+											);
+										}
+										if ("isStaticSpa" in inspection.detected && inspection.detected.isStaticSpa !== undefined) {
+											form.setValue(
+												"isStaticSpa" as any,
+												Boolean(inspection.detected.isStaticSpa),
+											);
+										}
+										toast.success(
+											`Applied recommended settings for ${inspection.detected.framework}`,
+										);
+									}
+								}}
+							>
+								Apply Recommended Settings
+							</Button>
+						</div>
 					)}
 				</CardTitle>
 			</CardHeader>

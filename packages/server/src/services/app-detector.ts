@@ -573,8 +573,126 @@ export const inspectApplication = async (
 		(process.platform === "win32" ? "C:\\dokploy\\apps" : "/etc/dokploy/applications");
 	const codeDir = path.join(appPath, app.appName, "code");
 
-	if (fs.existsSync(codeDir)) {
-		detected = await detectFrameworkFromDirectory(codeDir);
+	const targetDir =
+		app.buildPath && app.buildPath !== "/"
+			? path.join(codeDir, app.buildPath.replace(/^[/\\]+/, ""))
+			: codeDir;
+
+	if (fs.existsSync(targetDir)) {
+		detected = await detectFrameworkFromDirectory(targetDir);
+	} else if (
+		app.sourceType === "github" &&
+		app.githubId &&
+		app.owner &&
+		app.repository
+	) {
+		try {
+			const { findGithubById } = await import("./github");
+			const { authGithub } = await import("../utils/providers/github");
+			const gh = await findGithubById(app.githubId);
+			if (gh) {
+				const octokit = authGithub(gh);
+				const repoPath =
+					app.buildPath && app.buildPath !== "/"
+						? app.buildPath.replace(/^[/\\]+/, "")
+						: "";
+				const { data: contents } = await octokit.rest.repos.getContent({
+					owner: app.owner,
+					repo: app.repository,
+					path: repoPath,
+					ref: app.branch || undefined,
+				});
+
+				if (Array.isArray(contents)) {
+					const files: FileEntry[] = [];
+					const checkFileNames = [
+						"package.json",
+						"dockerfile",
+						"docker-compose.yml",
+						"docker-compose.yaml",
+						"compose.yml",
+						"compose.yaml",
+						"requirements.txt",
+						"pyproject.toml",
+						"gemfile",
+						"composer.json",
+						"go.mod",
+						"cargo.toml",
+						"index.html",
+						"pnpm-lock.yaml",
+						"yarn.lock",
+						"bun.lockb",
+						"bun.lock",
+					];
+
+					for (const item of contents) {
+						if (item.type === "file") {
+							let content: string | undefined;
+							if (
+								checkFileNames.includes(item.name.toLowerCase()) &&
+								item.size < 100 * 1024
+							) {
+								try {
+									const fileRes = await octokit.rest.repos.getContent({
+										owner: app.owner,
+										repo: app.repository,
+										path: item.path,
+										ref: app.branch || undefined,
+									});
+									if ("content" in fileRes.data && fileRes.data.content) {
+										content = Buffer.from(
+											fileRes.data.content,
+											"base64",
+										).toString("utf-8");
+									}
+								} catch {}
+							}
+							files.push({ name: item.name, path: item.path, content });
+						}
+					}
+
+					if (files.length > 0) {
+						detected = detectFrameworkFromFiles(files);
+					} else {
+						detected = {
+							framework: "Auto-detected Application",
+							language: "Auto",
+							buildType: (app.buildType as BuildTypeRecommendation) || "nixpacks",
+							suggestedPort: 3000,
+							confidence: "medium",
+							reason: "Standard Nixpacks cloud builder",
+						};
+					}
+				} else {
+					detected = {
+						framework: "Auto-detected Application",
+						language: "Auto",
+						buildType: (app.buildType as BuildTypeRecommendation) || "nixpacks",
+						suggestedPort: 3000,
+						confidence: "medium",
+						reason: "Standard Nixpacks cloud builder",
+					};
+				}
+			} else {
+				detected = {
+					framework: "Auto-detected Application",
+					language: "Auto",
+					buildType: (app.buildType as BuildTypeRecommendation) || "nixpacks",
+					suggestedPort: 3000,
+					confidence: "medium",
+					reason: "Standard Nixpacks cloud builder",
+				};
+			}
+		} catch {
+			detected = {
+				framework: "Auto-detected Application",
+				language: "Auto",
+				buildType: (app.buildType as BuildTypeRecommendation) || "nixpacks",
+				suggestedPort: 3000,
+				confidence: "medium",
+				reason: "Standard Nixpacks cloud builder",
+			};
+		}
 	} else if (app.buildType === "dockerfile") {
 		detected = {
 			framework: "Dockerfile",

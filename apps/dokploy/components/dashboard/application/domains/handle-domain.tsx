@@ -434,22 +434,28 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 															})
 																.then((genDomain) => {
 																	field.onChange(genDomain);
-																	form.setValue("https", false);
-																	form.setValue("certificateType", "none");
+																	const isPlatform =
+																		!genDomain.includes("sslip.io") &&
+																		!genDomain.includes("traefik.me");
+																	form.setValue("https", isPlatform);
+																	form.setValue(
+																		"certificateType",
+																		isPlatform ? "letsencrypt" : "none",
+																	);
 																})
 																.catch((err) => {
 																	toast.error(err.message);
 																});
 														}}
 													>
-														<Dices className="size-4 mr-1 text-muted-foreground" />
-														<span className="text-xs">Free Test Subdomain</span>
+														<Globe className="size-4 mr-1 text-muted-foreground" />
+														<span className="text-xs">Generate Subdomain</span>
 													</Button>
 												</TooltipTrigger>
-												<TooltipContent side="left" className="max-w-52">
+												<TooltipContent side="left" className="max-w-56">
 													<p>
-														Generate an instant development subdomain (.sslip.io)
-														requiring no DNS setup.
+														Generate a stable platform subdomain or development
+														hostname for instant routing.
 													</p>
 												</TooltipContent>
 											</Tooltip>
@@ -517,11 +523,22 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 												</span>
 												<span className="font-bold">{dnsInfo.recordType}</span>
 											</div>
-											<div>
-												<span className="text-muted-foreground block text-[10px] uppercase font-sans">
-													Name / Host
-												</span>
-												<span className="font-bold">{dnsInfo.recordName}</span>
+											<div className="flex items-center justify-between">
+												<div>
+													<span className="text-muted-foreground block text-[10px] uppercase font-sans">
+														Name / Host
+													</span>
+													<span className="font-bold">{dnsInfo.recordName}</span>
+												</div>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon"
+													className="size-6"
+													onClick={() => copyToClipboard(dnsInfo.recordName)}
+												>
+													<Copy className="size-3" />
+												</Button>
 											</div>
 											<div className="flex items-center justify-between">
 												<div>

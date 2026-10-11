@@ -21,6 +21,7 @@ import {
 	PenBoxIcon,
 	RefreshCw,
 	Server,
+	ShieldCheck,
 	Trash2,
 	XCircle,
 } from "lucide-react";
@@ -151,6 +152,18 @@ export const ShowDomains = ({ id, type }: Props) => {
 		api.domain.delete.useMutation();
 	const { mutateAsync: toggleEnable, isPending: isToggling } =
 		api.domain.toggleEnable.useMutation();
+	const { mutateAsync: activateHttps, isPending: isActivatingHttps } =
+		api.domain.activateHttps.useMutation();
+
+	const handleActivateHttps = async (domainId: string) => {
+		try {
+			const res = await activateHttps({ domainId });
+			toast.success(res.message || "HTTPS activated successfully");
+			refetch();
+		} catch (err: any) {
+			toast.error(err?.message || "Failed to activate HTTPS");
+		}
+	};
 
 	const handleToggleEnable = async (domainId: string) => {
 		try {
@@ -225,8 +238,10 @@ export const ShowDomains = ({ id, type }: Props) => {
 		handleValidateDomain,
 		handleDeleteDomain,
 		handleToggleEnable,
+		handleActivateHttps,
 		isDeleting: isRemoving,
 		isToggling,
+		isActivatingHttps,
 		serverIp: application?.server?.ipAddress?.toString() || ip?.toString(),
 		canCreateDomain,
 		canDeleteDomain,
@@ -600,6 +615,19 @@ export const ShowDomains = ({ id, type }: Props) => {
 															</TooltipContent>
 														</Tooltip>
 													</TooltipProvider>
+
+													{!item.https && canCreateDomain && (
+														<Button
+															variant="outline"
+															size="sm"
+															className="h-6 px-2 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+															disabled={isActivatingHttps}
+															onClick={() => handleActivateHttps(item.domainId)}
+														>
+															<ShieldCheck className="size-3" />
+															Activate HTTPS
+														</Button>
+													)}
 
 													{item.certificateType && (
 														<TooltipProvider>

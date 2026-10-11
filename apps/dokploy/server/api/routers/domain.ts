@@ -4,15 +4,18 @@ import {
 	findDomainById,
 	findDomainsByApplicationId,
 	findDomainsByComposeId,
+	findDomainsByOrganizationId,
 	findPreviewDeploymentById,
 	findServerById,
 	generateTraefikMeDomain,
 	getDnsInstructionsForDomain,
 	getServerIpCandidates,
 	getWebServerSettings,
+	isPlatformOrTestDomain,
 	manageDomain,
 	removeDomain,
 	removeDomainById,
+	resolveGeneratedApplicationDomain,
 	updateDomainById,
 	validateDomain,
 } from "@dokploy/server";
@@ -55,13 +58,33 @@ export const domainRouter = createTRPCRouter({
 				return await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
 					async (tx) => {
-						// Plan entitlement — enforce custom domain quota
-						await assertEntitlement(
-							PlanEntitlementService.checkCanAddDomain(
-								ctx.session.activeOrganizationId,
-								tx,
-							),
-						);
+						// Plan entitlement — enforce custom domain quota only for customer custom domains
+						if (!isPlatformOrTestDomain(input.host)) {
+							await assertEntitlement(
+								PlanEntitlementService.checkCanAddDomain(
+									ctx.session.activeOrganizationId,
+									tx,
+								),
+							);
+
+							// If user requested Let's Encrypt / HTTPS upfront on a custom domain, check DNS first
+							if (input.https || input.certificateType === "letsencrypt") {
+								let serverId: string | undefined = undefined;
+								if (input.applicationId) {
+									try {
+										const app = await findApplicationById(input.applicationId);
+										serverId = app.serverId || undefined;
+									} catch {}
+								}
+								const expectedIps = await getServerIpCandidates(serverId);
+								const dnsCheck = await validateDomain(input.host, expectedIps);
+								if (!dnsCheck.isValid) {
+									// Safely default to HTTP so Traefik ACME challenges don't fail before DNS propagates
+									input.https = false;
+									input.certificateType = "none";
+								}
+							}
+						}
 
 						const domain = await createDomain(input, tx);
 						await audit(ctx, {
@@ -90,7 +113,41 @@ export const domainRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
 				domain: ["read"],
 			});
-			return await findDomainsByApplicationId(input.applicationId);
+			const existing = await findDomainsByApplicationId(input.applicationId);
+			if (existing.length === 0) {
+				try {
+					const app = await findApplicationById(input.applicationId);
+					if (app) {
+						const { host, supportsHttps } =
+							await resolveGeneratedApplicationDomain(
+								app.appName,
+								app.serverId || undefined,
+							);
+						if (host) {
+							let port = 3000;
+							if (app.buildType === "static") {
+								port = 80;
+							} else if (app.ports && app.ports[0]?.targetPort) {
+								port = app.ports[0].targetPort;
+							}
+
+							await createDomain({
+								applicationId: app.applicationId,
+								domainType: "application",
+								host,
+								https: supportsHttps,
+								certificateType: supportsHttps ? "letsencrypt" : "none",
+								port,
+								path: "/",
+							});
+							return await findDomainsByApplicationId(input.applicationId);
+						}
+					}
+				} catch (err) {
+					console.error("Auto-provision domain in byApplicationId failed:", err);
+				}
+			}
+			return existing;
 		}),
 	byComposeId: protectedProcedure
 		.input(apiFindCompose)
@@ -100,6 +157,11 @@ export const domainRouter = createTRPCRouter({
 			});
 			return await findDomainsByComposeId(input.composeId);
 		}),
+	all: protectedProcedure.query(async ({ ctx }) => {
+		return await findDomainsByOrganizationId(
+			ctx.session.activeOrganizationId,
+		);
+	}),
 	generateDomain: withPermission("domain", "create")
 		.input(z.object({ appName: z.string(), serverId: z.string().optional() }))
 		.mutation(async ({ input, ctx }) => {
@@ -120,6 +182,80 @@ export const domainRouter = createTRPCRouter({
 			return settings?.serverIp || "";
 		}),
 
+	activateHttps: protectedProcedure
+		.input(z.object({ domainId: z.string() }))
+		.mutation(async ({ input, ctx }) => {
+			const currentDomain = await findDomainById(input.domainId);
+			const serviceId = currentDomain.applicationId || currentDomain.composeId;
+			if (serviceId) {
+				await checkServicePermissionAndAccess(ctx, serviceId, {
+					domain: ["create"],
+				});
+			} else if (currentDomain.previewDeploymentId) {
+				const preview = await findPreviewDeploymentById(
+					currentDomain.previewDeploymentId,
+				);
+				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
+					domain: ["create"],
+				});
+			}
+
+			// Enforce plan entitlement for automatic SSL
+			await assertEntitlement(
+				PlanEntitlementService.checkCanUseSslAuto(
+					ctx.session.activeOrganizationId,
+				),
+			);
+
+			let serverId: string | undefined = undefined;
+			if (currentDomain.applicationId) {
+				try {
+					const app = await findApplicationById(currentDomain.applicationId);
+					serverId = app.serverId || undefined;
+				} catch {}
+			}
+			const expectedIps = await getServerIpCandidates(serverId);
+			const dnsCheck = await validateDomain(currentDomain.host, expectedIps);
+			if (!dnsCheck.isValid) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: `DNS verification failed: "${currentDomain.host}" does not point to this server (${expectedIps.join(", ")}). Current DNS resolves to: ${dnsCheck.resolvedIp ? dnsCheck.resolvedIp : "no records found"}. Please point your DNS A record to this server first.`,
+				});
+			}
+
+			const result = await updateDomainById(input.domainId, {
+				https: true,
+				certificateType: "letsencrypt",
+			});
+
+			const domain = await findDomainById(input.domainId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "domain",
+				resourceId: domain.domainId,
+				resourceName: `${domain.host} (HTTPS activated)`,
+			});
+
+			if (domain.applicationId) {
+				const application = await findApplicationById(domain.applicationId);
+				await manageDomain(application, domain);
+			} else if (domain.previewDeploymentId) {
+				const previewDeployment = await findPreviewDeploymentById(
+					domain.previewDeploymentId,
+				);
+				const application = await findApplicationById(
+					previewDeployment.applicationId,
+				);
+				application.appName = previewDeployment.appName;
+				await manageDomain(application, domain);
+			}
+
+			return {
+				...result,
+				message: `HTTPS successfully activated for ${domain.host}`,
+			};
+		}),
+
 	update: protectedProcedure
 		.input(apiUpdateDomain)
 		.mutation(async ({ input, ctx }) => {
@@ -136,6 +272,36 @@ export const domainRouter = createTRPCRouter({
 				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
 					domain: ["create"],
 				});
+			}
+
+			const targetHost = input.host?.trim() || currentDomain.host;
+
+			// If enabling HTTPS / Let's Encrypt on a custom domain, enforce DNS check and plan entitlement
+			if (
+				!isPlatformOrTestDomain(targetHost) &&
+				(input.https || input.certificateType === "letsencrypt")
+			) {
+				await assertEntitlement(
+					PlanEntitlementService.checkCanUseSslAuto(
+						ctx.session.activeOrganizationId,
+					),
+				);
+
+				let serverId: string | undefined = undefined;
+				if (currentDomain.applicationId) {
+					try {
+						const app = await findApplicationById(currentDomain.applicationId);
+						serverId = app.serverId || undefined;
+					} catch {}
+				}
+				const expectedIps = await getServerIpCandidates(serverId);
+				const dnsCheck = await validateDomain(targetHost, expectedIps);
+				if (!dnsCheck.isValid) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: `Cannot activate HTTPS: DNS for "${targetHost}" is not pointing to this server (${expectedIps.join(", ")}). Currently resolves to: ${dnsCheck.resolvedIp ? dnsCheck.resolvedIp : "no records found"}. Please update your DNS records first.`,
+					});
+				}
 			}
 
 			const result = await updateDomainById(input.domainId, input);

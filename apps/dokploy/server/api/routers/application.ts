@@ -25,6 +25,7 @@ import {
 	removePreviewDeployment,
 	removeService,
 	removeTraefikConfig,
+	resolveGeneratedApplicationDomain,
 	runPreflightCheck,
 	startService,
 	startServiceRemote,
@@ -148,6 +149,38 @@ export const applicationRouter = createTRPCRouter({
 						}
 
 						const newApplication = await createApplication(input, tx);
+
+						// Automatically provision a default stable application URL so the customer can access it immediately
+						try {
+							const { host, supportsHttps } =
+								await resolveGeneratedApplicationDomain(
+									newApplication.appName,
+									newApplication.serverId || undefined,
+								);
+							if (host) {
+								let port = 3000;
+								if (newApplication.buildType === "static") {
+									port = 80;
+								}
+								await createDomain(
+									{
+										applicationId: newApplication.applicationId,
+										domainType: "application",
+										host,
+										https: supportsHttps,
+										certificateType: supportsHttps ? "letsencrypt" : "none",
+										port,
+										path: "/",
+									},
+									tx,
+								);
+							}
+						} catch (domainErr) {
+							console.error(
+								"Failed to auto-provision initial application domain:",
+								domainErr,
+							);
+						}
 
 						await addNewService(ctx, newApplication.applicationId);
 						await audit(ctx, {

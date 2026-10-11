@@ -41,6 +41,7 @@ vi.mock("@dokploy/server/services/domain", () => ({
 		return [];
 	}),
 	validateDomain: vi.fn(async () => ({ isValid: true, resolvedIp: "1.2.3.4" })),
+	isPlatformOrTestDomain: vi.fn(async () => true),
 }));
 
 describe("Deployment Pre-flight Readiness Check", () => {

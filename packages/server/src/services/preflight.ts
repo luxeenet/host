@@ -1,6 +1,10 @@
 import os from "node:os";
 import { findApplicationById } from "./application";
-import { findDomainsByApplicationId, validateDomain } from "./domain";
+import {
+	findDomainsByApplicationId,
+	isPlatformOrTestDomain,
+	validateDomain,
+} from "./domain";
 import { inspectApplication } from "./app-detector";
 
 export interface PreflightItem {
@@ -170,12 +174,13 @@ export const runPreflightCheck = async (
 	// 6. Domain DNS readiness check
 	if (domains.length > 0) {
 		for (const d of domains) {
-			if (d.host.includes(".traefik.me") || d.host.includes(".sslip.io") || d.host.includes("localhost")) {
+			const isPlatform = await isPlatformOrTestDomain(d.host);
+			if (isPlatform) {
 				items.push({
 					id: `dns-${d.domainId}`,
 					title: `Domain DNS (${d.host})`,
 					status: "pass",
-					summary: "Automatic development / wildcard domain configured.",
+					summary: "Automatic platform / development domain configured.",
 				});
 			} else {
 				const dnsCheck = await validateDomain(d.host).catch(() => ({ isValid: false, resolvedIp: undefined }));
@@ -197,6 +202,14 @@ export const runPreflightCheck = async (
 				}
 			}
 		}
+	} else {
+		items.push({
+			id: "dns-routing",
+			title: "Public Routing Domain",
+			status: "warn",
+			summary: "No public routing domain is attached to this application yet.",
+			fixSuggestion: "A default platform subdomain will be created automatically upon deployment, or you can add a domain in the Domains tab.",
+		});
 	}
 
 	const hasFailure = items.some((i) => i.status === "fail");

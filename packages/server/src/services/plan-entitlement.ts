@@ -13,6 +13,7 @@
  */
 import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { BRAND } from "@paas/branding";
 import { db } from "../db";
 import * as schema from "../db/schema";
 
@@ -415,7 +416,7 @@ export class PlanEntitlementService {
 		if (limit === -1) return { allowed: true };
 
 		const appDomainRes = await executor
-			.select({ value: count() })
+			.select({ host: schema.domains.host })
 			.from(schema.domains)
 			.innerJoin(
 				schema.applications,
@@ -432,7 +433,7 @@ export class PlanEntitlementService {
 			.where(eq(schema.projects.organizationId, organizationId));
 
 		const composeDomainRes = await executor
-			.select({ value: count() })
+			.select({ host: schema.domains.host })
 			.from(schema.domains)
 			.innerJoin(
 				schema.compose,
@@ -448,8 +449,38 @@ export class PlanEntitlementService {
 			)
 			.where(eq(schema.projects.organizationId, organizationId));
 
-		const value =
-			(appDomainRes[0]?.value ?? 0) + (composeDomainRes[0]?.value ?? 0);
+		const allHosts: string[] = [
+			...appDomainRes.map((r: any) => r.host),
+			...composeDomainRes.map((r: any) => r.host),
+		];
+
+		const customHosts = allHosts.filter((h: string) => {
+			if (!h) return false;
+			const clean = h.trim().toLowerCase();
+			if (
+				clean.includes(".sslip.io") ||
+				clean.includes(".traefik.me") ||
+				clean.includes(".nip.io") ||
+				clean === "localhost" ||
+				clean.endsWith(".localhost")
+			) {
+				return false;
+			}
+			const platformBase =
+				process.env.PLATFORM_DOMAIN ||
+				process.env.BRAND_PLATFORM_SUBDOMAIN_BASE ||
+				BRAND.PLATFORM_SUBDOMAIN_BASE;
+			if (
+				platformBase &&
+				(clean === platformBase.toLowerCase() ||
+					clean.endsWith(`.${platformBase.toLowerCase()}`))
+			) {
+				return false;
+			}
+			return true;
+		});
+
+		const value = customHosts.length;
 
 		if (value >= limit) {
 			return {
@@ -461,6 +492,38 @@ export class PlanEntitlementService {
 		}
 
 		return { allowed: true, current: value, limit };
+	}
+
+	/**
+	 * Check if org plan permits automated SSL certificate management.
+	 */
+	static async checkCanUseSslAuto(
+		organizationId: string,
+		executor: any = db,
+	): Promise<EntitlementResult> {
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		if (!snapshot.features || Object.keys(snapshot.features).length === 0) {
+			return { allowed: true };
+		}
+
+		const featureEnabled = snapshot.features["ssl_auto"] ?? true;
+		if (!featureEnabled) {
+			return {
+				allowed: false,
+				reason:
+					"Your plan does not include automated SSL certificates. Upgrade your plan to enable HTTPS.",
+			};
+		}
+
+		return { allowed: true };
 	}
 
 	/**

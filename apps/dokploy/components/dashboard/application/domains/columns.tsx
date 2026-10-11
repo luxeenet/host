@@ -7,6 +7,7 @@ import {
 	PenBoxIcon,
 	RefreshCw,
 	Server,
+	ShieldCheck,
 	Trash2,
 	XCircle,
 } from "lucide-react";
@@ -37,8 +38,10 @@ interface ColumnsProps {
 	handleValidateDomain: (host: string) => Promise<void>;
 	handleDeleteDomain: (domainId: string) => Promise<void>;
 	handleToggleEnable: (domainId: string) => Promise<void>;
+	handleActivateHttps?: (domainId: string) => Promise<void>;
 	isDeleting: boolean;
 	isToggling: boolean;
+	isActivatingHttps?: boolean;
 	serverIp?: string;
 	canCreateDomain: boolean;
 	canDeleteDomain: boolean;
@@ -51,8 +54,10 @@ export const createColumns = ({
 	handleValidateDomain,
 	handleDeleteDomain,
 	handleToggleEnable,
+	handleActivateHttps,
 	isDeleting,
 	isToggling,
+	isActivatingHttps,
 	serverIp,
 	canCreateDomain,
 	canDeleteDomain,
@@ -172,6 +177,18 @@ export const createColumns = ({
 						<Badge variant="outline" className="capitalize">
 							{domain.certificateType}
 						</Badge>
+					)}
+					{!domain.https && canCreateDomain && handleActivateHttps && (
+						<Button
+							variant="outline"
+							size="sm"
+							className="h-6 px-2 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+							disabled={isActivatingHttps}
+							onClick={() => handleActivateHttps(domain.domainId)}
+						>
+							<ShieldCheck className="size-3" />
+							Activate HTTPS
+						</Button>
 					)}
 					{!domain.host.includes("sslip.io") && (
 						<TooltipProvider>

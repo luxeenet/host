@@ -12,13 +12,15 @@ export const getPaketoCommand = (application: ApplicationNested) => {
 		application.environment.env,
 	);
 
+	const builderImage = "paketobuildpacks/builder-jammy-full";
+
 	const args = [
 		"build",
 		appName,
 		"--path",
 		buildAppDirectory,
 		"--builder",
-		"paketobuildpacks/builder-jammy-full",
+		builderImage,
 	];
 
 	if (cleanCache) {
@@ -31,13 +33,20 @@ export const getPaketoCommand = (application: ApplicationNested) => {
 
 	const command = `pack ${args.join(" ")}`;
 	const bashCommand = `
-echo "Starting Paketo build..." ;
+echo "Starting Paketo Cloud Native Buildpack deployment for ${appName}..." ;
+if ! command -v pack >/dev/null 2>&1; then
+  echo "❌ Buildpack CLI 'pack' is not installed or available on this host." ;
+  echo "💡 Please ensure Cloud Native Buildpacks (pack) is installed or select Nixpacks or Dockerfile in settings." ;
+  exit 1;
+fi
+
 ${command} || { 
-  echo "❌ Paketo build failed" ;
+  echo "❌ Paketo Buildpack build failed." ;
+  echo "💡 Tip: Verify stack compatibility and ensure project files are recognized by Paketo Jammy builder." ;
   exit 1;
 }
 echo "✅ Paketo build completed." ;
-		`;
+`;
 
 	return bashCommand;
 };

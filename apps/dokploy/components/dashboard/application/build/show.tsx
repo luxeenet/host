@@ -342,7 +342,64 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 					)}
 				</CardTitle>
 			</CardHeader>
-			<CardContent>
+			<CardContent className="space-y-6">
+				{inspection?.detected && (
+					<div className="rounded-lg border bg-muted/20 p-3.5 text-xs space-y-2.5">
+						<div className="flex items-center justify-between flex-wrap gap-2">
+							<div className="flex items-center gap-1.5 font-medium text-foreground">
+								<Sparkles className="size-3.5 text-primary" />
+								<span>Deterministic Inspection Diagnosis</span>
+							</div>
+							<Badge variant="outline" className="text-[10px] font-mono">
+								Confidence: {inspection.detected.confidence}
+							</Badge>
+						</div>
+						<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-y-2 gap-x-4 text-muted-foreground">
+							<div>
+								<span className="font-medium text-foreground block">Detected:</span>
+								{inspection.detected.framework}
+							</div>
+							<div>
+								<span className="font-medium text-foreground block">Builder:</span>
+								{inspection.detected.buildType}
+							</div>
+							{inspection.detected.runtimeVersion && (
+								<div>
+									<span className="font-medium text-foreground block">Runtime:</span>
+									Node.js {inspection.detected.runtimeVersion}
+								</div>
+							)}
+							{inspection.detected.packageManager && (
+								<div>
+									<span className="font-medium text-foreground block">Package Manager:</span>
+									{inspection.detected.packageManager}
+								</div>
+							)}
+							{inspection.detected.buildCommand && (
+								<div>
+									<span className="font-medium text-foreground block">Build Command:</span>
+									<code className="text-[11px] font-mono text-foreground">{inspection.detected.buildCommand}</code>
+								</div>
+							)}
+							{inspection.detected.publishDirectory && (
+								<div>
+									<span className="font-medium text-foreground block">Output Directory:</span>
+									{inspection.detected.publishDirectory}
+								</div>
+							)}
+							<div>
+								<span className="font-medium text-foreground block">Suggested Port:</span>
+								{inspection.detected.suggestedPort}
+							</div>
+						</div>
+						{inspection.detected.reason && (
+							<p className="text-[11px] text-muted-foreground border-t pt-2">
+								{inspection.detected.reason}
+							</p>
+						)}
+					</div>
+				)}
+
 				<Form {...form}>
 					<form
 						onSubmit={form.handleSubmit(onSubmit)}

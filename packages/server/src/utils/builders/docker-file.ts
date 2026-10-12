@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
 	getEnvironmentVariablesObject,
 	prepareEnvironmentVariablesForShell,
@@ -26,9 +27,7 @@ export const getDockerCommand = (application: ApplicationNested) => {
 	try {
 		const image = `${appName}`;
 
-		const defaultContextPath =
-			dockerFilePath.substring(0, dockerFilePath.lastIndexOf("/") + 1) || ".";
-
+		const defaultContextPath = path.dirname(dockerFilePath) || ".";
 		const dockerContextPath =
 			getDockerContextPath(application) || defaultContextPath;
 
@@ -85,21 +84,25 @@ export const getDockerCommand = (application: ApplicationNested) => {
 		}
 
 		for (const key in secrets) {
-			// Although buildx is smart enough to know we may be referring to an environment variable name,
-			// we still make sure it doesn't fall back to `type=file`.
-			// See: https://docs.docker.com/reference/cli/docker/buildx/build/#secret
+			// Ensure secret type is env
 			commandArgs.push("--secret", `type=env,id=${key}`);
 		}
 
 		command += `
-echo ${quote([`Building ${appName}`])} ;
+echo ${quote([`Building ${appName} using Dockerfile`])} ;
+if [ ! -f ${quote([dockerFilePath])} ]; then
+  echo ${quote([`❌ Dockerfile not found at: ${dockerFilePath}`])} ;
+  echo "Please verify the Dockerfile path in your application settings." ;
+  exit 1;
+fi
+
 cd ${quote([dockerContextPath])} || {
-  echo ${quote([`❌ The path ${dockerContextPath} does not exist`])} ;
+  echo ${quote([`❌ Docker context path ${dockerContextPath} does not exist`])} ;
   exit 1;
 }
 
 ${joinedSecrets} docker ${commandArgs.join(" ")} || {
-  echo "❌ Docker build failed" ;
+  echo "❌ Docker build failed. Inspect the Docker engine logs above for details." ;
   exit 1;
 }
 echo "✅ Docker build completed." ;

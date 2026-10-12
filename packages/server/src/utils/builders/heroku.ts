@@ -12,13 +12,15 @@ export const getHerokuCommand = (application: ApplicationNested) => {
 		application.environment.env,
 	);
 
+	const builderImage = `heroku/builder:${application.herokuVersion || "24"}`;
+
 	const args = [
 		"build",
 		appName,
 		"--path",
 		buildAppDirectory,
 		"--builder",
-		`heroku/builder:${application.herokuVersion || "24"}`,
+		builderImage,
 	];
 
 	if (cleanCache) {
@@ -31,13 +33,20 @@ export const getHerokuCommand = (application: ApplicationNested) => {
 
 	const command = `pack ${args.join(" ")}`;
 	const bashCommand = `
-echo "Starting heroku build..." ;
+echo "Starting Heroku Cloud Native Buildpack deployment for ${appName}..." ;
+if ! command -v pack >/dev/null 2>&1; then
+  echo "❌ Buildpack CLI 'pack' is not installed or available on this host." ;
+  echo "💡 Please ensure Cloud Native Buildpacks (pack) is installed or select Nixpacks or Dockerfile in settings." ;
+  exit 1;
+fi
+
 ${command} || { 
-  echo "❌ Heroku build failed" ;
+  echo "❌ Heroku Buildpack build failed." ;
+  echo "💡 Tip: Verify that your repository contains a supported language/framework, Procfile, or valid project configuration for builder: ${builderImage}." ;
   exit 1;
 }
 echo "✅ Heroku build completed." ;
-		`;
+`;
 
 	return bashCommand;
 };

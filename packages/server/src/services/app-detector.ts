@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+	resolveNodeRuntime,
+	resolvePackageManagerAndCommands,
+} from "../utils/builders/runtime-resolver";
 import { findApplicationById } from "./application";
 
 export interface FileEntry {
@@ -13,7 +17,9 @@ export type BuildTypeRecommendation =
 	| "dockerfile"
 	| "railpack"
 	| "static"
-	| "compose";
+	| "compose"
+	| "paketo_buildpacks"
+	| "heroku_buildpacks";
 
 export interface DetectionResult {
 	framework: string;
@@ -25,6 +31,8 @@ export interface DetectionResult {
 	publishDirectory?: string;
 	dockerfilePath?: string;
 	packageManager?: "npm" | "pnpm" | "yarn" | "bun";
+	runtimeVersion?: string;
+	isStaticSpa?: boolean;
 	confidence: "high" | "medium" | "low";
 	reason: string;
 	suggestedEnv?: Array<{ key: string; description: string; required: boolean }>;
@@ -46,7 +54,9 @@ export interface ApplicationInspection {
  * Deterministically inspect a virtual or physical list of files to detect framework,
  * builder, start/build commands, and default container ports without requiring AI.
  */
-export const detectFrameworkFromFiles = (files: FileEntry[]): DetectionResult => {
+export const detectFrameworkFromFiles = (
+	files: FileEntry[],
+): DetectionResult => {
 	const fileMap = new Map<string, FileEntry>();
 	for (const file of files) {
 		const normPath = file.path.replace(/^[/\\]+/, "").toLowerCase();
@@ -114,15 +124,56 @@ export const detectFrameworkFromFiles = (files: FileEntry[]): DetectionResult =>
 		};
 	}
 
-	// Package Manager detection
-	let packageManager: "npm" | "pnpm" | "yarn" | "bun" = "npm";
-	if (getFile("pnpm-lock.yaml")) {
-		packageManager = "pnpm";
-	} else if (getFile("yarn.lock")) {
-		packageManager = "yarn";
-	} else if (getFile("bun.lockb") || getFile("bun.lock")) {
-		packageManager = "bun";
+	// 3. Check for explicit nixpacks.toml configuration
+	const nixpacksConfig = getFile("nixpacks.toml");
+	if (nixpacksConfig) {
+		return {
+			framework: "Nixpacks Configured Project",
+			language: "Nixpacks",
+			buildType: "nixpacks",
+			suggestedPort: 3000,
+			confidence: "high",
+			reason: "Detected custom nixpacks.toml build configuration",
+		};
 	}
+
+	// 4. Check for Cloud Native Buildpacks project.toml
+	const projectToml = getFile("project.toml");
+	if (projectToml) {
+		return {
+			framework: "Cloud Native Buildpack",
+			language: "Buildpack",
+			buildType: "paketo_buildpacks",
+			suggestedPort: 8080,
+			confidence: "high",
+			reason: "Detected Cloud Native Buildpacks configuration (project.toml)",
+		};
+	}
+
+	// Package Manager and Runtime detection via runtime-resolver
+	const fileItems = Array.from(fileMap.values()).map((f) => ({
+		name: f.name || path.basename(f.path),
+		path: f.path,
+		content: f.content,
+	}));
+
+	const pkgFile = getFile("package.json");
+	const nvmrcFile = getFile(".nvmrc");
+	const nodeVersionFile = getFile(".node-version");
+	const runtimeTxtFile = getFile("runtime.txt");
+
+	const pmRes = resolvePackageManagerAndCommands({
+		files: fileItems,
+		packageJsonContent: pkgFile?.content,
+	});
+	const packageManager = pmRes.packageManager;
+
+	const nodeRuntime = resolveNodeRuntime({
+		packageJsonContent: pkgFile?.content,
+		nvmrcContent: nvmrcFile?.content,
+		nodeVersionContent: nodeVersionFile?.content,
+		runtimeTxtContent: runtimeTxtFile?.content,
+	});
 
 	const runPrefix =
 		packageManager === "pnpm"
@@ -134,7 +185,6 @@ export const detectFrameworkFromFiles = (files: FileEntry[]): DetectionResult =>
 					: "npm run";
 
 	// 3. Node.js / JavaScript / TypeScript projects (package.json)
-	const pkgFile = getFile("package.json");
 	if (pkgFile?.content) {
 		try {
 			const pkg = JSON.parse(pkgFile.content);
@@ -273,6 +323,8 @@ export const detectFrameworkFromFiles = (files: FileEntry[]): DetectionResult =>
 						? `${runPrefix} preview -- --port 4173 --host 0.0.0.0`
 						: undefined,
 					publishDirectory: "dist",
+					isStaticSpa: true,
+					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
 					reason: `Detected Vite (${spaType}) frontend in package.json`,
@@ -448,20 +500,38 @@ export const detectFrameworkFromFiles = (files: FileEntry[]): DetectionResult =>
 			buildType: "nixpacks",
 			suggestedPort: 3000,
 			confidence: "high",
-			reason: isRails ? "Detected Ruby on Rails in Gemfile" : "Detected Ruby Gemfile",
+			reason: isRails
+				? "Detected Ruby on Rails in Gemfile"
+				: "Detected Ruby Gemfile",
 		};
 	}
 
-	// 9. Static HTML site
-	const indexHtml = getFile("index.html");
+	// 9. Static HTML site (root or subfolder without requiring Node.js)
+	const indexHtml =
+		getFile("index.html") ||
+		getFile("public/index.html") ||
+		getFile("dist/index.html") ||
+		getFile("out/index.html") ||
+		getFile("build/index.html");
 	if (indexHtml) {
+		let pubDir: string | undefined;
+		const norm = indexHtml.path.replace(/^[/\\]+/, "").toLowerCase();
+		if (norm.startsWith("public/")) pubDir = "public";
+		else if (norm.startsWith("dist/")) pubDir = "dist";
+		else if (norm.startsWith("out/")) pubDir = "out";
+		else if (norm.startsWith("build/")) pubDir = "build";
+
 		return {
 			framework: "Static HTML",
 			language: "HTML",
 			buildType: "static",
 			suggestedPort: 80,
+			publishDirectory: pubDir,
+			isStaticSpa: false,
 			confidence: "high",
-			reason: "Detected static HTML assets with index.html",
+			reason: pubDir
+				? `Detected static HTML assets with entry point in ${pubDir}/index.html`
+				: "Detected static HTML assets with index.html at root",
 		};
 	}
 
@@ -520,6 +590,9 @@ export const detectFrameworkFromDirectory = async (
 						"yarn.lock",
 						"bun.lockb",
 						"bun.lock",
+						"package-lock.json",
+						".nvmrc",
+						".node-version",
 						"index.html",
 						"index.php",
 					].includes(entry.name.toLowerCase())
@@ -570,7 +643,9 @@ export const inspectApplication = async (
 	// In dokploy, cloned code is placed in APPLICATIONS_PATH/appName/code or custom paths
 	const appPath =
 		process.env.APPLICATIONS_PATH ||
-		(process.platform === "win32" ? "C:\\dokploy\\apps" : "/etc/dokploy/applications");
+		(process.platform === "win32"
+			? "C:\\dokploy\\apps"
+			: "/etc/dokploy/applications");
 	const codeDir = path.join(appPath, app.appName, "code");
 
 	const targetDir =
@@ -623,6 +698,9 @@ export const inspectApplication = async (
 						"yarn.lock",
 						"bun.lockb",
 						"bun.lock",
+						"package-lock.json",
+						".nvmrc",
+						".node-version",
 					];
 
 					for (const item of contents) {
@@ -657,7 +735,8 @@ export const inspectApplication = async (
 						detected = {
 							framework: "Auto-detected Application",
 							language: "Auto",
-							buildType: (app.buildType as BuildTypeRecommendation) || "nixpacks",
+							buildType:
+								(app.buildType as BuildTypeRecommendation) || "nixpacks",
 							suggestedPort: 3000,
 							confidence: "medium",
 							reason: "Standard Nixpacks cloud builder",

@@ -5,6 +5,7 @@ import {
 	GO_CATALOG,
 	isLegacyRuntimePermitted,
 	JAVA_CATALOG,
+	NIXPKGS_ARCHIVES,
 	NODE_CATALOG,
 	PHP_CATALOG,
 	PYTHON_CATALOG,
@@ -75,6 +76,18 @@ export interface FileItem {
  * Extract requested Node.js major version number from raw version string.
  */
 export const parseNodeVersion = (rawVersion: string): number | null => {
+	if (!rawVersion || typeof rawVersion !== "string") return null;
+	if (rawVersion.includes("||")) {
+		const parts = rawVersion.split("||").map((p) => p.trim());
+		for (const part of parts) {
+			const m = parseNodeVersion(part);
+			if (m === 22) return 22;
+		}
+		for (const part of [...parts].reverse()) {
+			const m = parseNodeVersion(part);
+			if (m !== null) return m;
+		}
+	}
 	const cleaned = rawVersion.trim().replace(/^[v^~>=<\s]+/, "");
 	const match = cleaned.match(/^(\d+)/);
 	if (match?.[1]) {
@@ -83,11 +96,114 @@ export const parseNodeVersion = (rawVersion: string): number | null => {
 	return null;
 };
 
+export interface LockfileAuditResult {
+	isCrossPlatformLockfile: boolean;
+	hasNativeDependencies: boolean;
+	nativePackagesDetected: string[];
+	missingLinuxBindings: string[];
+	warning?: string;
+	safeInstallCommand: string;
+}
+
+/**
+ * Audit lockfile for cross-platform optional dependency omissions (npm/cli#4828).
+ */
+export const auditLockfilePlatformCompatibility = (params: {
+	packageJsonContent?: string;
+	lockfileContent?: string;
+	hasNpmLock?: boolean;
+}): LockfileAuditResult => {
+	const nativePackagesDetected: string[] = [];
+	const missingLinuxBindings: string[] = [];
+	let isCrossPlatformLockfile = false;
+
+	if (params.packageJsonContent) {
+		try {
+			const pkg = JSON.parse(params.packageJsonContent);
+			const allDeps = {
+				...(pkg.dependencies || {}),
+				...(pkg.devDependencies || {}),
+			};
+
+			if (allDeps.rolldown || (allDeps.vite && /^[\^~]?[89]/.test(allDeps.vite))) {
+				nativePackagesDetected.push("rolldown");
+			}
+			if (allDeps.vite) {
+				nativePackagesDetected.push("vite");
+			}
+			if (allDeps["@rollup/rollup"] || allDeps.rollup) {
+				nativePackagesDetected.push("rollup");
+			}
+			if (allDeps.esbuild) {
+				nativePackagesDetected.push("esbuild");
+			}
+			if (allDeps["@swc/core"]) {
+				nativePackagesDetected.push("@swc/core");
+			}
+			if (allDeps.sharp) {
+				nativePackagesDetected.push("sharp");
+			}
+		} catch {}
+	}
+
+	if (params.lockfileContent && nativePackagesDetected.length > 0) {
+		const lock = params.lockfileContent;
+		const hasWindowsOrDarwin =
+			lock.includes("win32-x64") ||
+			lock.includes("win32-arm64") ||
+			lock.includes("darwin-x64") ||
+			lock.includes("darwin-arm64");
+
+		if (nativePackagesDetected.includes("rolldown")) {
+			const hasLinuxRolldown = lock.includes("@rolldown/binding-linux-x64-gnu");
+			if (hasWindowsOrDarwin && !hasLinuxRolldown) {
+				isCrossPlatformLockfile = true;
+				missingLinuxBindings.push("@rolldown/binding-linux-x64-gnu");
+			}
+		}
+
+		if (nativePackagesDetected.includes("rollup")) {
+			const hasLinuxRollup = lock.includes("@rollup/rollup-linux-x64-gnu");
+			if (hasWindowsOrDarwin && !hasLinuxRollup) {
+				isCrossPlatformLockfile = true;
+				missingLinuxBindings.push("@rollup/rollup-linux-x64-gnu");
+			}
+		}
+
+		if (nativePackagesDetected.includes("esbuild")) {
+			const hasLinuxEsbuild = lock.includes("@esbuild/linux-x64");
+			if (hasWindowsOrDarwin && !hasLinuxEsbuild) {
+				isCrossPlatformLockfile = true;
+				missingLinuxBindings.push("@esbuild/linux-x64");
+			}
+		}
+	}
+
+	let warning: string | undefined;
+	if (isCrossPlatformLockfile) {
+		warning = `⚠️ Lockfile Platform Warning: package-lock.json was generated on a non-Linux platform and excludes Linux native optional dependencies (${missingLinuxBindings.join(", ")}). Due to npm bug npm/cli#4828, native optional dependencies may be omitted during installation. HatDot will ensure Linux bindings are installed during build without altering your lockfile.`;
+	}
+
+	const safeInstallCommand = params.hasNpmLock
+		? "npm ci --include=dev --include=optional"
+		: "npm install --include=dev --include=optional";
+
+	return {
+		isCrossPlatformLockfile,
+		hasNativeDependencies: nativePackagesDetected.length > 0,
+		nativePackagesDetected,
+		missingLinuxBindings,
+		warning,
+		safeInstallCommand,
+	};
+};
+
 /**
  * Resolve Node.js runtime version.
  * - Supports legacy Node.js 18 via pinned Nixpkgs archive without silent substitution.
  * - Supports legacy Node.js 16 via NixOS 23.11 archive.
  * - Preserves modern Node.js 20, 22, and 24 with standard channels.
+ * - Resolves Node.js 22 modern patch release (22.13.1) when project or dependency constraints require >=22.12.0 (e.g. Vite 8 / Rolldown).
  * - Respects configuration precedence: Explicit Setting > .nvmrc > .node-version > runtime.txt > package.json engines > default (22).
  */
 export const resolveNodeRuntime = (params: {
@@ -134,10 +250,81 @@ export const resolveNodeRuntime = (params: {
 		} catch {}
 	}
 
+	// Inspect dependency engine constraints and modern build tooling requirements
+	let requiresNode22Modern = false;
+
+	if (params.packageJsonContent) {
+		try {
+			const pkg = JSON.parse(params.packageJsonContent);
+			const allDeps = {
+				...(pkg.dependencies || {}),
+				...(pkg.devDependencies || {}),
+			};
+			const engineNode = String(pkg.engines?.node || "");
+
+			// Explicit engines.node requires >=22.12.0 or ^22.13.0 or 22.13+
+			if (
+				/22\.1[2-9]|22\.[2-9]|\^22\.1[3-9]|>=22\.1[2-9]/.test(engineNode)
+			) {
+				requiresNode22Modern = true;
+			}
+
+			// Dependencies known to require Node >=20.19.0 || >=22.12.0
+			const hasVite8 = allDeps.vite && /^[\^~]?[89]/.test(allDeps.vite);
+			const hasRolldown = Boolean(allDeps.rolldown);
+			const hasViteReact5 =
+				allDeps["@vitejs/plugin-react"] &&
+				/^[\^~]?[5-9]/.test(allDeps["@vitejs/plugin-react"]);
+			const hasJsdom29 =
+				allDeps.jsdom &&
+				/^[\^~]?(?:29|3[0-9])/.test(allDeps.jsdom);
+
+			if (hasVite8 || hasRolldown || hasViteReact5 || hasJsdom29) {
+				requiresNode22Modern = true;
+			}
+		} catch {}
+	}
+
+	if (
+		rawVersion &&
+		/22\.1[2-9]|22\.[2-9]|\^22\.1[3-9]|>=22\.1[2-9]/.test(rawVersion)
+	) {
+		requiresNode22Modern = true;
+	}
+
 	if (rawVersion) {
 		const major = parseNodeVersion(rawVersion);
 		if (major !== null) {
 			const majorStr = String(major);
+
+			// Incompatibility check: Vite 8 / Rolldown require Node >=20.19.0 || >=22.12.0
+			if (requiresNode22Modern && (major === 18 || major === 16 || major === 14)) {
+				return {
+					requestedVersion: rawVersion,
+					isEol: true,
+					resolvedVersion: majorStr,
+					nixPackage: `nodejs_${majorStr}`,
+					isPermitted: false,
+					policyError: `❌ Dependency Engine Conflict: Modern project dependencies (Vite 8 / Rolldown) require Node.js ^20.19.0 || >=22.12.0, which conflicts with requested Node.js ${majorStr}. Please upgrade your project to Node.js 20 or 22 in package.json engines or .nvmrc.`,
+					isAvailable: false,
+					unavailabilityReason: `Node.js ${majorStr} is incompatible with Vite 8 / Rolldown engine requirements.`,
+				};
+			}
+
+			// If Node 22 is selected and modern patch >=22.12.0 is required
+			if (major === 22 && requiresNode22Modern) {
+				return {
+					requestedVersion: rawVersion,
+					isEol: false,
+					resolvedVersion: "22.13.1",
+					nixPackage: "nodejs_22",
+					nixpkgsArchive: NIXPKGS_ARCHIVES.MODERN_22_13.commit,
+					archiveLabel: NIXPKGS_ARCHIVES.MODERN_22_13.label,
+					isPermitted: true,
+					isAvailable: true,
+				};
+			}
+
 			const entry = NODE_CATALOG[majorStr];
 
 			if (entry) {
@@ -201,6 +388,18 @@ export const resolveNodeRuntime = (params: {
 	}
 
 	// Default fallback: Active LTS (Node 22)
+	if (requiresNode22Modern) {
+		return {
+			isEol: false,
+			resolvedVersion: "22.13.1",
+			nixPackage: "nodejs_22",
+			nixpkgsArchive: NIXPKGS_ARCHIVES.MODERN_22_13.commit,
+			archiveLabel: NIXPKGS_ARCHIVES.MODERN_22_13.label,
+			isPermitted: true,
+			isAvailable: true,
+		};
+	}
+
 	return {
 		isEol: false,
 		resolvedVersion: "22",
@@ -896,6 +1095,7 @@ export const generateNixpacksToml = (options: {
 	nixpkgsArchive?: string;
 	nixPkgs?: string[];
 	providers?: string[];
+	setupCmds?: string[];
 	installCmd?: string;
 	buildCmd?: string;
 	startCmd?: string;
@@ -911,7 +1111,8 @@ export const generateNixpacksToml = (options: {
 
 	if (
 		options.nixpkgsArchive ||
-		(options.nixPkgs && options.nixPkgs.length > 0)
+		(options.nixPkgs && options.nixPkgs.length > 0) ||
+		(options.setupCmds && options.setupCmds.length > 0)
 	) {
 		lines.push("");
 		lines.push("[phases.setup]");
@@ -921,6 +1122,11 @@ export const generateNixpacksToml = (options: {
 		if (options.nixPkgs && options.nixPkgs.length > 0) {
 			lines.push(
 				`nixPkgs = [${options.nixPkgs.map((p) => `"${p}"`).join(", ")}]`,
+			);
+		}
+		if (options.setupCmds && options.setupCmds.length > 0) {
+			lines.push(
+				`cmds = [${options.setupCmds.map((c) => JSON.stringify(c)).join(", ")}]`,
 			);
 		}
 	}

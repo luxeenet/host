@@ -60,6 +60,8 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	let preResolvedArchive: string | undefined;
 	let preResolvedProvider: string | undefined;
 	let preResolvedPort: number | undefined;
+	let preResolvedSetupCmds: string[] | undefined;
+	let preResolvedPythonVersion: string | undefined;
 
 	if (fs.existsSync(buildAppDirectory)) {
 		try {
@@ -67,10 +69,17 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 
 			if (detected.language === "Python") {
 				preResolvedProvider = "python";
-				preResolvedInstallCmd = detected.installCommand || "pip install -r requirements.txt";
+				preResolvedPythonVersion = detected.runtimeVersion || "3.11";
+				preResolvedInstallCmd =
+					detected.installCommand ||
+					"test -f /opt/venv/bin/pip && /opt/venv/bin/pip install -r requirements.txt || python3 -m pip install -r requirements.txt || pip install -r requirements.txt";
 				preResolvedStartCmd = detected.startCommand;
 				preResolvedBuildCmd = detected.buildCommand;
 				preResolvedPort = detected.suggestedPort || 8501;
+				preResolvedSetupCmds = [
+					"python3 -m venv --copies /opt/venv 2>/dev/null || python -m venv --copies /opt/venv || true",
+					"/opt/venv/bin/python -m ensurepip --upgrade 2>/dev/null || true",
+				];
 			} else if (detected.language === "Go") {
 				preResolvedProvider = "go";
 				preResolvedStartCmd = detected.startCommand;
@@ -156,6 +165,24 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 				preResolvedBuildCmd = pm.buildCommand;
 				preResolvedStartCmd = pm.startCommand;
 				preResolvedPort = detected.suggestedPort || 3000;
+
+				// Native optional binding remediation for Rolldown / Vite 8 on cross-platform lockfiles (npm/cli#4828)
+				if (pkgContent) {
+					try {
+						const parsedPkg = JSON.parse(pkgContent);
+						const allDeps = {
+							...(parsedPkg.dependencies || {}),
+							...(parsedPkg.devDependencies || {}),
+						};
+						if (allDeps.rolldown || (allDeps.vite && /^[\^~]?[89]/.test(allDeps.vite))) {
+							const rolldownFix =
+								'if [ -d "node_modules/rolldown" ] && [ ! -d "node_modules/@rolldown/binding-linux-x64-gnu" ]; then echo "⚡ HatDot detected missing Rolldown Linux native binding in cross-platform lockfile. Installing @rolldown/binding-linux-x64-gnu into container..." && npm i @rolldown/binding-linux-x64-gnu --no-save || true; fi';
+							preResolvedBuildCmd = preResolvedBuildCmd
+								? `${rolldownFix}; ${preResolvedBuildCmd}`
+								: `${rolldownFix}; npm run build`;
+						}
+					} catch {}
+				}
 			}
 
 			// Write or augment nixpacks.toml with pinned archive, isolated provider, and start command
@@ -167,6 +194,7 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 					generateNixpacksToml({
 						nixpkgsArchive: preResolvedArchive,
 						providers: preResolvedProvider ? [preResolvedProvider] : undefined,
+						setupCmds: preResolvedSetupCmds,
 						installCmd: preResolvedInstallCmd,
 						buildCmd: preResolvedBuildCmd,
 						startCmd: effectiveStart,
@@ -176,12 +204,18 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 			} else if (preResolvedProvider) {
 				try {
 					const existingToml = fs.readFileSync(nixpacksTomlPath, "utf-8");
-					if (!existingToml.includes("providers")) {
-						fs.writeFileSync(
-							nixpacksTomlPath,
-							`providers = ["${preResolvedProvider}"]\n\n${existingToml}`,
-							"utf-8",
-						);
+					let updatedToml = existingToml;
+					if (!updatedToml.includes("providers")) {
+						updatedToml = `providers = ["${preResolvedProvider}"]\n\n${updatedToml}`;
+					}
+					if (preResolvedArchive && !updatedToml.includes("nixpkgsArchive")) {
+						updatedToml += `\n\n[phases.setup]\nnixpkgsArchive = "${preResolvedArchive}"\n`;
+					}
+					if (preResolvedSetupCmds && preResolvedSetupCmds.length > 0 && !updatedToml.includes("cmds")) {
+						updatedToml += `\n[phases.setup]\ncmds = [${preResolvedSetupCmds.map((c) => JSON.stringify(c)).join(", ")}]\n`;
+					}
+					if (updatedToml !== existingToml) {
+						fs.writeFileSync(nixpacksTomlPath, updatedToml, "utf-8");
 					}
 				} catch {}
 			}
@@ -246,6 +280,10 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		args.push("--env", `NIXPACKS_NODE_VERSION=${preResolvedNodeEnv}`);
 	}
 
+	if (preResolvedPythonVersion && !envVariables.some((e) => e.startsWith("NIXPACKS_PYTHON_VERSION="))) {
+		args.push("--env", `NIXPACKS_PYTHON_VERSION=${preResolvedPythonVersion}`);
+	}
+
 	if (preResolvedArchive && !hasCustomerArchive) {
 		args.push("--env", `NIXPACKS_PKGS_ARCHIVE=${preResolvedArchive}`);
 		args.push("--env", `NIXPACKS_NIXPKGS_ARCHIVE=${preResolvedArchive}`);
@@ -291,6 +329,7 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	// Pinned Nixpkgs archive hashes
 	const archive2405 = NIXPKGS_ARCHIVES.LEGACY_24_05.commit;
 	const archive2311 = NIXPKGS_ARCHIVES.LEGACY_23_11.commit;
+	const archive2213 = NIXPKGS_ARCHIVES.MODERN_22_13.commit;
 
 	// Shell preflight ensures runtime compatibility even if repository was cloned inside the deploy bash script
 	const preflightShell = `
@@ -306,10 +345,21 @@ if [ -d ${quote([buildAppDirectory])} ]; then
     if [ ! -f "${buildAppDirectory}/package.json" ]; then
       export NIXPACKS_PROVIDER="python"
       echo "✓ HatDot detected pure Python application. Enforcing Python provider (disabling Node/npm)." ;
+
+      DETECTED_PYTHON=""
+      if [ -f "${buildAppDirectory}/.python-version" ]; then
+        DETECTED_PYTHON=$(cat "${buildAppDirectory}/.python-version" | tr -d 'v\\r\\n ' | cut -d. -f1,2)
+      elif [ -f "${buildAppDirectory}/runtime.txt" ]; then
+        DETECTED_PYTHON=$(cat "${buildAppDirectory}/runtime.txt" | sed -E 's/^python[-_]?//I' | tr -d 'v\\r\\n ' | cut -d. -f1,2)
+      fi
+      if [ -n "$DETECTED_PYTHON" ]; then
+        export NIXPACKS_PYTHON_VERSION="$DETECTED_PYTHON"
+      fi
+
       if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
-        printf 'providers = ["python"]\n' > "${buildAppDirectory}/nixpacks.toml" ;
+        printf 'providers = ["python"]\n\n[phases.setup]\ncmds = ["python3 -m venv --copies /opt/venv 2>/dev/null || python -m venv --copies /opt/venv || true", "/opt/venv/bin/python -m ensurepip --upgrade 2>/dev/null || true"]\n' > "${buildAppDirectory}/nixpacks.toml" ;
       elif ! grep -q "providers" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
-        printf '\nproviders = ["python"]\n' >> "${buildAppDirectory}/nixpacks.toml" ;
+        printf '\nproviders = ["python"]\n\n[phases.setup]\ncmds = ["python3 -m venv --copies /opt/venv 2>/dev/null || python -m venv --copies /opt/venv || true", "/opt/venv/bin/python -m ensurepip --upgrade 2>/dev/null || true"]\n' >> "${buildAppDirectory}/nixpacks.toml" ;
       fi
       if [ -z "$NIXPACKS_INSTALL_CMD" ]; then
         if [ -f "${buildAppDirectory}/uv.lock" ]; then
@@ -319,7 +369,7 @@ if [ -d ${quote([buildAppDirectory])} ]; then
         elif [ -f "${buildAppDirectory}/Pipfile" ]; then
           export NIXPACKS_INSTALL_CMD="pipenv install --deploy" ;
         elif [ -f "${buildAppDirectory}/requirements.txt" ]; then
-          export NIXPACKS_INSTALL_CMD="pip install -r requirements.txt" ;
+          export NIXPACKS_INSTALL_CMD="test -f /opt/venv/bin/pip && /opt/venv/bin/pip install -r requirements.txt || python3 -m pip install -r requirements.txt || pip install -r requirements.txt" ;
         fi
       fi
       if [ -z "$NIXPACKS_START_CMD" ]; then
@@ -344,9 +394,20 @@ if [ -d ${quote([buildAppDirectory])} ]; then
   if [ "$NIXPACKS_PROVIDER" = "python" ]; then
     if echo "$NIXPACKS_INSTALL_CMD" | grep -qi "npm"; then
       echo "⚠️ Warning: Inconsistent install command detected ('$NIXPACKS_INSTALL_CMD' on Python project). Correcting to pip." ;
-      export NIXPACKS_INSTALL_CMD="pip install -r requirements.txt" ;
+      export NIXPACKS_INSTALL_CMD="test -f /opt/venv/bin/pip && /opt/venv/bin/pip install -r requirements.txt || python3 -m pip install -r requirements.txt || pip install -r requirements.txt" ;
     fi
   fi
+
+  # Enforce Node provider for JS/TS apps to prevent Caddy injection
+  if [ -f "${buildAppDirectory}/package.json" ]; then
+    export NIXPACKS_PROVIDER="node"
+    if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
+      printf 'providers = ["node"]\n' > "${buildAppDirectory}/nixpacks.toml" ;
+    elif ! grep -q "providers" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
+      printf '\nproviders = ["node"]\n' >> "${buildAppDirectory}/nixpacks.toml" ;
+    fi
+  fi
+
   REQUESTED_NODE=""
   if [ -f "${buildAppDirectory}/.nvmrc" ]; then
     REQUESTED_NODE=$(cat "${buildAppDirectory}/.nvmrc" | tr -d 'v\\r\\n ' | cut -d. -f1)
@@ -360,6 +421,39 @@ if [ -d ${quote([buildAppDirectory])} ]; then
 
   # Check policy for End-Of-Life runtimes
   ALLOW_LEGACY="\${ALLOW_LEGACY_RUNTIMES:-\${HATDOT_ALLOW_EOL_RUNTIMES:-true}}"
+
+  # Detect modern dependency engine constraints (Vite 8, Rolldown, jsdom 29)
+  REQUIRES_NODE22_MODERN=$(node -e "
+    try {
+      const p = require('${buildAppDirectory}/package.json');
+      const deps = { ...(p.dependencies || {}), ...(p.devDependencies || {}) };
+      const eng = String((p.engines && p.engines.node) || '');
+      const hasVite8 = deps.vite && /^[\^~]?[89]/.test(deps.vite);
+      const hasRoll = Boolean(deps.rolldown);
+      const hasViteReact5 = deps['@vitejs/plugin-react'] && /^[\^~]?[5-9]/.test(deps['@vitejs/plugin-react']);
+      const hasJsdom29 = deps.jsdom && /^[\^~]?(?:29|3[0-9])/.test(deps.jsdom);
+      const engModern = /22\.1[2-9]|22\.[2-9]|\^22\.1[3-9]|>=22\.1[2-9]/.test(eng);
+      console.log(Boolean(hasVite8 || hasRoll || hasViteReact5 || hasJsdom29 || engModern));
+    } catch(e) { console.log('false'); }
+  " 2>/dev/null || echo 'false')
+
+  if [ "$REQUIRES_NODE22_MODERN" = "true" ] && ([ "$REQUESTED_NODE" = "18" ] || [ "$REQUESTED_NODE" = "16" ] || [ "$REQUESTED_NODE" = "14" ]); then
+    echo "❌ Dependency Engine Conflict: Modern project dependencies (Vite 8 / Rolldown) require Node.js ^20.19.0 || >=22.12.0, which conflicts with requested Node.js $REQUESTED_NODE." ;
+    echo "💡 Remediation: Upgrade your project to Node.js 20 or 22 in package.json engines or .nvmrc." ;
+    exit 1;
+  fi
+
+  if [ "$REQUIRES_NODE22_MODERN" = "true" ] && ([ "$REQUESTED_NODE" = "22" ] || [ -z "$REQUESTED_NODE" ]); then
+    echo "✓ HatDot detected modern engine requirements (Vite 8 / Rolldown). Pinning compatible Node.js 22.13.1 runtime (${archive2213})." ;
+    export NIXPACKS_NODE_VERSION="22.13.1" ;
+    export NIXPACKS_PKGS_ARCHIVE="${archive2213}" ;
+    export NIXPACKS_NIXPKGS_ARCHIVE="${archive2213}" ;
+    if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
+      printf '# Generated by HatDot for Node.js 22.13.1 compatibility\nproviders = ["node"]\n\n[phases.setup]\nnixpkgsArchive = "%s"\n' "${archive2213}" > "${buildAppDirectory}/nixpacks.toml" ;
+    elif ! grep -q "nixpkgsArchive" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
+      printf '\n[phases.setup]\nnixpkgsArchive = "%s"\n' "${archive2213}" >> "${buildAppDirectory}/nixpacks.toml" ;
+    fi
+  fi
 
   if [ "$REQUESTED_NODE" = "18" ]; then
     if [ "$ALLOW_LEGACY" = "false" ]; then
@@ -425,10 +519,28 @@ if [ -d ${quote([buildAppDirectory])} ]; then
         export NIXPACKS_BUILD_CMD="yarn build" ;
       fi
     elif [ -f "${buildAppDirectory}/package-lock.json" ]; then
-      export NIXPACKS_INSTALL_CMD="npm ci" ;
+      export NIXPACKS_INSTALL_CMD="npm ci --include=dev --include=optional" ;
       if [ "$HAS_BUILD_SCRIPT" = "true" ] && [ -z "$NIXPACKS_BUILD_CMD" ]; then
         export NIXPACKS_BUILD_CMD="npm run build" ;
       fi
+    elif [ -f "${buildAppDirectory}/package.json" ]; then
+      export NIXPACKS_INSTALL_CMD="npm i --include=dev --include=optional" ;
+      if [ "$HAS_BUILD_SCRIPT" = "true" ] && [ -z "$NIXPACKS_BUILD_CMD" ]; then
+        export NIXPACKS_BUILD_CMD="npm run build" ;
+      fi
+    fi
+  fi
+
+  # Fix cross-platform lockfile optional dependency omissions (npm/cli#4828)
+  if [ -f "${buildAppDirectory}/package.json" ]; then
+    NATIVE_REPAIR='if [ -d "node_modules/rolldown" ] && [ ! -d "node_modules/@rolldown/binding-linux-x64-gnu" ]; then echo "⚡ HatDot detected missing Rolldown Linux native binding in cross-platform lockfile. Installing @rolldown/binding-linux-x64-gnu..." && npm i @rolldown/binding-linux-x64-gnu --no-save || true; fi'
+    if [ -n "$NIXPACKS_BUILD_CMD" ]; then
+      case "$NIXPACKS_BUILD_CMD" in
+        *"@rolldown/binding-linux-x64-gnu"*) ;;
+        *) export NIXPACKS_BUILD_CMD="\${NATIVE_REPAIR}; \${NIXPACKS_BUILD_CMD}" ;;
+      esac
+    elif [ "$HAS_BUILD_SCRIPT" = "true" ]; then
+      export NIXPACKS_BUILD_CMD="\${NATIVE_REPAIR}; npm run build" ;
     fi
   fi
 

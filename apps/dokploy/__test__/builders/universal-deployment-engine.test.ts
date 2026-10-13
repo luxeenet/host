@@ -16,6 +16,7 @@ import { getNixpacksCommand } from "@dokploy/server/utils/builders/nixpacks";
 import { getPaketoCommand } from "@dokploy/server/utils/builders/paketo";
 import { NIXPKGS_ARCHIVES } from "@dokploy/server/utils/builders/runtime-catalog";
 import {
+	auditLockfilePlatformCompatibility,
 	generateNixpacksToml,
 	parseNodeVersion,
 	resolveDotnetRuntime,
@@ -1367,6 +1368,199 @@ dependencies = [
 			expect(getRailpackCommand(app)).not.toContain("--provider");
 			expect(getHerokuCommand(app)).not.toContain("--provider");
 			expect(getPaketoCommand(app)).not.toContain("--provider");
+		});
+	});
+
+	describe("13. Customer Production Regression Fixtures: Vite 8 / Rolldown & Python Virtual Environment", () => {
+		it("resolves Node.js 22.13.1 via MODERN_22_13 archive when Vite 8 and Rolldown dependencies are present", () => {
+			const res = resolveNodeRuntime({
+				packageJsonContent: JSON.stringify({
+					name: "portfolio-app",
+					dependencies: {
+						react: "^19.0.0",
+						"react-dom": "^19.0.0",
+					},
+					devDependencies: {
+						vite: "^8.3.4",
+						rolldown: "^1.2.13",
+						"@vitejs/plugin-react": "^5.2.0",
+					},
+				}),
+			});
+
+			expect(res.resolvedVersion).toBe("22.13.1");
+			expect(res.nixPackage).toBe("nodejs_22");
+			expect(res.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.MODERN_22_13.commit);
+			expect(res.archiveLabel).toBe(NIXPKGS_ARCHIVES.MODERN_22_13.label);
+			expect(res.isPermitted).toBe(true);
+			expect(res.isAvailable).toBe(true);
+		});
+
+		it("resolves Node.js 22.13.1 when package.json engines specifies modern patch range ^20.19.0 || >=22.12.0", () => {
+			const res = resolveNodeRuntime({
+				packageJsonContent: JSON.stringify({
+					name: "modern-vite-app",
+					engines: {
+						node: "^20.19.0 || >=22.12.0",
+					},
+				}),
+			});
+
+			expect(res.resolvedVersion).toBe("22.13.1");
+			expect(res.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.MODERN_22_13.commit);
+		});
+
+		it("rejects incompatible legacy Node 18 runtime with actionable conflict diagnostic when modern Vite 8 / Rolldown dependencies are declared", () => {
+			const res = resolveNodeRuntime({
+				explicitVersion: "18",
+				packageJsonContent: JSON.stringify({
+					name: "portfolio-app",
+					dependencies: {
+						rolldown: "^1.2.13",
+					},
+					devDependencies: {
+						vite: "^8.3.4",
+					},
+				}),
+			});
+
+			expect(res.isPermitted).toBe(false);
+			expect(res.isAvailable).toBe(false);
+			expect(res.policyError).toContain("Dependency Engine Conflict");
+			expect(res.policyError).toContain("Vite 8 / Rolldown");
+			expect(res.policyError).toContain("Node.js 18");
+		});
+
+		it("audits lockfiles generated on non-Linux platforms (Windows/macOS) missing @rolldown/binding-linux-x64-gnu (npm/cli#4828)", () => {
+			const pkgContent = JSON.stringify({
+				name: "portfolio-app",
+				devDependencies: {
+					vite: "^8.3.4",
+					rolldown: "^1.2.13",
+				},
+			});
+
+			// Windows-generated lockfile containing win32-x64 but lacking linux-x64
+			const windowsLockfile = `
+{
+  "name": "portfolio-app",
+  "packages": {
+    "node_modules/@rolldown/binding-win32-x64-msvc": {
+      "version": "1.2.13",
+      "os": ["win32"],
+      "cpu": ["x64"]
+    }
+  }
+}
+			`;
+
+			const auditResult = auditLockfilePlatformCompatibility({
+				packageJsonContent: pkgContent,
+				lockfileContent: windowsLockfile,
+				hasNpmLock: true,
+			});
+
+			expect(auditResult.isCrossPlatformLockfile).toBe(true);
+			expect(auditResult.missingLinuxBindings).toContain(
+				"@rolldown/binding-linux-x64-gnu",
+			);
+			expect(auditResult.warning).toContain("npm/cli#4828");
+			expect(auditResult.safeInstallCommand).toContain("--include=optional");
+		});
+
+		it("recognizes complete cross-platform lockfiles that already contain Linux native bindings", () => {
+			const pkgContent = JSON.stringify({
+				name: "portfolio-app",
+				devDependencies: {
+					rolldown: "^1.2.13",
+				},
+			});
+
+			const completeLockfile = `
+{
+  "name": "portfolio-app",
+  "packages": {
+    "node_modules/@rolldown/binding-linux-x64-gnu": {
+      "version": "1.2.13",
+      "os": ["linux"],
+      "cpu": ["x64"]
+    }
+  }
+}
+			`;
+
+			const auditResult = auditLockfilePlatformCompatibility({
+				packageJsonContent: pkgContent,
+				lockfileContent: completeLockfile,
+				hasNpmLock: true,
+			});
+
+			expect(auditResult.isCrossPlatformLockfile).toBe(false);
+			expect(auditResult.missingLinuxBindings).toHaveLength(0);
+		});
+
+		it("Nixpacks preflight enforces providers = ['node'] for Node.js apps and injects native binding remediation before build", () => {
+			const app = createMockApp({
+				appName: "vite-portfolio",
+				buildType: "nixpacks",
+				command: "npm run preview -- --port 4173 --host 0.0.0.0",
+			});
+
+			const cmd = getNixpacksCommand(app);
+			expect(cmd).toContain('providers = ["node"]');
+			expect(cmd).toContain("NIXPACKS_PROVIDER=\"node\"");
+			expect(cmd).toContain("npm ci --include=dev --include=optional");
+			expect(cmd).toContain("@rolldown/binding-linux-x64-gnu");
+			expect(cmd).toContain("--no-save");
+			expect(cmd).toContain("PORT=4173");
+		});
+
+		it("Nixpacks preflight initializes Python virtual environment setup phase commands to prevent 'pip: command not found'", () => {
+			const app = createMockApp({
+				appName: "py-streamlit-app",
+				buildType: "nixpacks",
+				command: "streamlit run app.py --server.port=8501 --server.address=0.0.0.0",
+			});
+
+			const cmd = getNixpacksCommand(app);
+			expect(cmd).toContain('providers = ["python"]');
+			expect(cmd).toContain("NIXPACKS_PROVIDER=\"python\"");
+			expect(cmd).toContain("python3 -m venv --copies /opt/venv");
+			expect(cmd).toContain("/opt/venv/bin/python -m ensurepip");
+			expect(cmd).toContain("test -f /opt/venv/bin/pip");
+			expect(cmd).toContain("PORT=8501");
+		});
+
+		it("preserves standard Node.js 18, 20, and 24 without forcing blanket upgrades when modern Vite 8 dependencies are not present", () => {
+			// Regular Node 18 project
+			const res18 = resolveNodeRuntime({
+				packageJsonContent: JSON.stringify({
+					name: "legacy-express",
+					engines: { node: "18" },
+					dependencies: { express: "^4.18.2" },
+				}),
+			});
+			expect(res18.resolvedVersion).toBe("18");
+			expect(res18.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+
+			// Regular Node 20 project
+			const res20 = resolveNodeRuntime({
+				packageJsonContent: JSON.stringify({
+					name: "regular-next",
+					engines: { node: "20" },
+					dependencies: { next: "14.2.0" },
+				}),
+			});
+			expect(res20.resolvedVersion).toBe("20");
+
+			// Regular Node 24 project
+			const res24 = resolveNodeRuntime({
+				packageJsonContent: JSON.stringify({
+					name: "bleeding-edge",
+					engines: { node: "24" },
+				}),
+			});
+			expect(res24.resolvedVersion).toBe("24");
 		});
 	});
 });

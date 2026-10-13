@@ -24,6 +24,16 @@ export const NIXPKGS_ARCHIVES = {
 		tarballUrl:
 			"https://github.com/NixOS/nixpkgs/archive/057f9aecfb71c4437d2b247823be2864e70f14b3.tar.gz",
 	},
+	/**
+	 * NixOS 24.11 channel release snapshot providing Node.js 22.13.1
+	 * Resolves Vite 8, Rolldown 1.2+, jsdom 29+, and >=22.12.0 engine requirements
+	 */
+	MODERN_22_13: {
+		commit: "51ad838b03a05b1de6f9f2a0fffecee64a9788ee",
+		label: "NixOS 24.11 (Node.js 22.13.1)",
+		tarballUrl:
+			"https://github.com/NixOS/nixpkgs/archive/51ad838b03a05b1de6f9f2a0fffecee64a9788ee.tar.gz",
+	},
 } as const;
 
 export interface RuntimeVersionInfo {

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { detectFrameworkFromDirectorySync } from "@dokploy/server/services/app-detector";
 import { getStaticCommand } from "@dokploy/server/utils/builders/static";
 import { nanoid } from "nanoid";
 import { quote } from "shell-quote";
@@ -55,58 +56,104 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	let preResolvedStartCmd: string | undefined;
 	let preResolvedArchive: string | undefined;
 	let preResolvedProvider: string | undefined;
+	let preResolvedPort: number | undefined;
 
 	if (fs.existsSync(buildAppDirectory)) {
 		try {
-			let pkgContent: string | undefined;
-			let nvmrcContent: string | undefined;
-			let nodeVersionContent: string | undefined;
-			let runtimeTxtContent: string | undefined;
+			const detected = detectFrameworkFromDirectorySync(buildAppDirectory);
 
-			const pkgPath = path.join(buildAppDirectory, "package.json");
-			const nvmrcPath = path.join(buildAppDirectory, ".nvmrc");
-			const nodeVerPath = path.join(buildAppDirectory, ".node-version");
-			const runtimeTxtPath = path.join(buildAppDirectory, "runtime.txt");
+			if (detected.language === "Python") {
+				preResolvedProvider = "python";
+				preResolvedInstallCmd = detected.installCommand || "pip install -r requirements.txt";
+				preResolvedStartCmd = detected.startCommand;
+				preResolvedBuildCmd = detected.buildCommand;
+				preResolvedPort = detected.suggestedPort || 8501;
+			} else if (detected.language === "Go") {
+				preResolvedProvider = "go";
+				preResolvedStartCmd = detected.startCommand;
+				preResolvedBuildCmd = detected.buildCommand;
+				preResolvedInstallCmd = detected.installCommand;
+				preResolvedPort = detected.suggestedPort || 8080;
+			} else if (detected.language === "Rust") {
+				preResolvedProvider = "rust";
+				preResolvedStartCmd = detected.startCommand;
+				preResolvedBuildCmd = detected.buildCommand;
+				preResolvedInstallCmd = detected.installCommand;
+				preResolvedPort = detected.suggestedPort || 8080;
+			} else if (detected.language === "Java") {
+				preResolvedProvider = "java";
+				preResolvedStartCmd = detected.startCommand;
+				preResolvedBuildCmd = detected.buildCommand;
+				preResolvedInstallCmd = detected.installCommand;
+				preResolvedPort = detected.suggestedPort || 8080;
+			} else if (detected.language === "PHP") {
+				preResolvedProvider = "php";
+				preResolvedStartCmd = detected.startCommand;
+				preResolvedInstallCmd = detected.installCommand;
+				preResolvedPort = detected.suggestedPort || 80;
+			} else if (detected.language === "Ruby") {
+				preResolvedProvider = "ruby";
+				preResolvedStartCmd = detected.startCommand;
+				preResolvedInstallCmd = detected.installCommand;
+				preResolvedPort = detected.suggestedPort || 3000;
+			} else if (detected.language === "C#" || detected.language === ".NET") {
+				preResolvedProvider = "dotnet";
+				preResolvedStartCmd = detected.startCommand;
+				preResolvedBuildCmd = detected.buildCommand;
+				preResolvedInstallCmd = detected.installCommand;
+				preResolvedPort = detected.suggestedPort || 5000;
+			} else {
+				let pkgContent: string | undefined;
+				let nvmrcContent: string | undefined;
+				let nodeVersionContent: string | undefined;
+				let runtimeTxtContent: string | undefined;
 
-			if (fs.existsSync(pkgPath)) {
-				pkgContent = fs.readFileSync(pkgPath, "utf-8");
-				preResolvedProvider = "node";
+				const pkgPath = path.join(buildAppDirectory, "package.json");
+				const nvmrcPath = path.join(buildAppDirectory, ".nvmrc");
+				const nodeVerPath = path.join(buildAppDirectory, ".node-version");
+				const runtimeTxtPath = path.join(buildAppDirectory, "runtime.txt");
+
+				if (fs.existsSync(pkgPath)) {
+					pkgContent = fs.readFileSync(pkgPath, "utf-8");
+					preResolvedProvider = "node";
+				}
+				if (fs.existsSync(nvmrcPath)) {
+					nvmrcContent = fs.readFileSync(nvmrcPath, "utf-8");
+				}
+				if (fs.existsSync(nodeVerPath)) {
+					nodeVersionContent = fs.readFileSync(nodeVerPath, "utf-8");
+				}
+				if (fs.existsSync(runtimeTxtPath)) {
+					runtimeTxtContent = fs.readFileSync(runtimeTxtPath, "utf-8");
+				}
+
+				const runtime = resolveNodeRuntime({
+					packageJsonContent: pkgContent,
+					nvmrcContent,
+					nodeVersionContent,
+					runtimeTxtContent,
+				});
+
+				preResolvedNodeEnv = runtime.resolvedVersion;
+				if (runtime.nixpkgsArchive) {
+					preResolvedArchive = runtime.nixpkgsArchive;
+				}
+
+				const files = fs.readdirSync(buildAppDirectory).map((name) => ({
+					name,
+					path: path.join(buildAppDirectory, name),
+				}));
+
+				const pm = resolvePackageManagerAndCommands({
+					files,
+					packageJsonContent: pkgContent,
+				});
+
+				preResolvedInstallCmd = pm.installCommand;
+				preResolvedBuildCmd = pm.buildCommand;
+				preResolvedStartCmd = pm.startCommand;
+				preResolvedPort = detected.suggestedPort || 3000;
 			}
-			if (fs.existsSync(nvmrcPath)) {
-				nvmrcContent = fs.readFileSync(nvmrcPath, "utf-8");
-			}
-			if (fs.existsSync(nodeVerPath)) {
-				nodeVersionContent = fs.readFileSync(nodeVerPath, "utf-8");
-			}
-			if (fs.existsSync(runtimeTxtPath)) {
-				runtimeTxtContent = fs.readFileSync(runtimeTxtPath, "utf-8");
-			}
-
-			const runtime = resolveNodeRuntime({
-				packageJsonContent: pkgContent,
-				nvmrcContent,
-				nodeVersionContent,
-				runtimeTxtContent,
-			});
-
-			preResolvedNodeEnv = runtime.resolvedVersion;
-			if (runtime.nixpkgsArchive) {
-				preResolvedArchive = runtime.nixpkgsArchive;
-			}
-
-			const files = fs.readdirSync(buildAppDirectory).map((name) => ({
-				name,
-				path: path.join(buildAppDirectory, name),
-			}));
-
-			const pm = resolvePackageManagerAndCommands({
-				files,
-				packageJsonContent: pkgContent,
-			});
-
-			preResolvedInstallCmd = pm.installCommand;
-			preResolvedBuildCmd = pm.buildCommand;
-			preResolvedStartCmd = pm.startCommand;
 
 			// Write or augment nixpacks.toml with pinned archive, isolated provider, and start command
 			const effectiveStart = customerCommand?.trim() || preResolvedStartCmd;
@@ -115,8 +162,10 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 				fs.writeFileSync(
 					nixpacksTomlPath,
 					generateNixpacksToml({
-						nixpkgsArchive: runtime.nixpkgsArchive,
+						nixpkgsArchive: preResolvedArchive,
 						providers: preResolvedProvider ? [preResolvedProvider] : undefined,
+						installCmd: preResolvedInstallCmd,
+						buildCmd: preResolvedBuildCmd,
 						startCmd: effectiveStart,
 					}),
 					"utf-8",
@@ -144,6 +193,40 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 			e.startsWith("NIXPACKS_NIXPKGS_ARCHIVE="),
 	);
 
+	// Explicit customer-provided start command takes precedence over inferred commands
+	const activeStartCommand = customerCommand?.trim() || preResolvedStartCmd;
+
+	let effectiveProvider = preResolvedProvider;
+	if (!effectiveProvider && activeStartCommand) {
+		if (
+			activeStartCommand.includes("streamlit") ||
+			activeStartCommand.includes("uvicorn") ||
+			activeStartCommand.includes("gunicorn") ||
+			activeStartCommand.includes("flask") ||
+			activeStartCommand.includes("manage.py")
+		) {
+			effectiveProvider = "python";
+		}
+	}
+
+	let effectivePort = preResolvedPort;
+	if (!effectivePort && activeStartCommand) {
+		const portMatch =
+			activeStartCommand.match(/--server\.port[=\s](\d+)/) ||
+			activeStartCommand.match(/--port[=\s](\d+)/) ||
+			activeStartCommand.match(/-p[=\s](\d+)/);
+		if (portMatch) {
+			effectivePort = Number(portMatch[1]);
+		} else if (activeStartCommand.includes("streamlit")) {
+			effectivePort = 8501;
+		}
+	}
+
+	let effectiveInstallCmd = preResolvedInstallCmd;
+	if (!effectiveInstallCmd && effectiveProvider === "python") {
+		effectiveInstallCmd = "pip install -r requirements.txt";
+	}
+
 	if (preResolvedNodeEnv && !hasCustomerNodeVersion) {
 		args.push("--env", `NIXPACKS_NODE_VERSION=${preResolvedNodeEnv}`);
 	}
@@ -153,10 +236,10 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		args.push("--env", `NIXPACKS_NIXPKGS_ARCHIVE=${preResolvedArchive}`);
 	}
 
-	if (preResolvedInstallCmd && !hasCustomerInstallCmd) {
+	if (effectiveInstallCmd && !hasCustomerInstallCmd) {
 		args.push(
 			"--env",
-			`NIXPACKS_INSTALL_CMD=${quote([preResolvedInstallCmd])}`,
+			`NIXPACKS_INSTALL_CMD=${quote([effectiveInstallCmd])}`,
 		);
 	}
 
@@ -164,16 +247,23 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		args.push("--env", `NIXPACKS_BUILD_CMD=${quote([preResolvedBuildCmd])}`);
 	}
 
-	// Explicit customer-provided start command takes precedence over inferred commands
-	const activeStartCommand = customerCommand?.trim() || preResolvedStartCmd;
+	if (effectivePort) {
+		const hasPortEnv = envVariables.some((e) => e.startsWith("PORT="));
+		if (!hasPortEnv) {
+			args.push("--env", `PORT=${effectivePort}`);
+			args.push("--env", `NIXPACKS_PORT=${effectivePort}`);
+		}
+	}
+
 	if (activeStartCommand && !hasCustomerStartCmd) {
 		args.push("--start-cmd", quote([activeStartCommand]));
 		args.push("--env", `NIXPACKS_START_CMD=${quote([activeStartCommand])}`);
 	}
 
 	// Isolate provider to avoid spurious cross-language provider detection (e.g. Node detected as Python)
-	if (preResolvedProvider) {
-		args.push("--provider", preResolvedProvider);
+	if (effectiveProvider) {
+		args.push("--provider", effectiveProvider);
+		args.push("--env", `NIXPACKS_PROVIDER=${quote([effectiveProvider])}`);
 	}
 
 	if (publishDirectory) {
@@ -196,6 +286,47 @@ export HOST="\${HOST:-0.0.0.0}"
 export NIXPACKS_HOST="\${NIXPACKS_HOST:-0.0.0.0}"
 
 if [ -d ${quote([buildAppDirectory])} ]; then
+  # Pure Python detection in preflight shell
+  if [ -f "${buildAppDirectory}/requirements.txt" ] || [ -f "${buildAppDirectory}/pyproject.toml" ] || [ -f "${buildAppDirectory}/Pipfile" ] || [ -f "${buildAppDirectory}/app.py" ] || [ -f "${buildAppDirectory}/streamlit_app.py" ]; then
+    if [ ! -f "${buildAppDirectory}/package.json" ]; then
+      export NIXPACKS_PROVIDER="python"
+      echo "✓ HatDot detected pure Python application. Enforcing Python provider (disabling Node/npm)." ;
+      if [ -z "$NIXPACKS_INSTALL_CMD" ]; then
+        if [ -f "${buildAppDirectory}/uv.lock" ]; then
+          export NIXPACKS_INSTALL_CMD="uv sync" ;
+        elif [ -f "${buildAppDirectory}/poetry.lock" ]; then
+          export NIXPACKS_INSTALL_CMD="poetry install --no-interaction" ;
+        elif [ -f "${buildAppDirectory}/Pipfile" ]; then
+          export NIXPACKS_INSTALL_CMD="pipenv install --deploy" ;
+        elif [ -f "${buildAppDirectory}/requirements.txt" ]; then
+          export NIXPACKS_INSTALL_CMD="pip install -r requirements.txt" ;
+        fi
+      fi
+      if [ -z "$NIXPACKS_START_CMD" ]; then
+        if [ -f "${buildAppDirectory}/streamlit_app.py" ]; then
+          export NIXPACKS_START_CMD="streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0" ;
+        elif [ -f "${buildAppDirectory}/app.py" ] && grep -qi "streamlit" "${buildAppDirectory}/requirements.txt" 2>/dev/null; then
+          export NIXPACKS_START_CMD="streamlit run app.py --server.port=8501 --server.address=0.0.0.0" ;
+        elif [ -f "${buildAppDirectory}/app.py" ] && grep -qi "streamlit" "${buildAppDirectory}/app.py" 2>/dev/null; then
+          export NIXPACKS_START_CMD="streamlit run app.py --server.port=8501 --server.address=0.0.0.0" ;
+        elif [ -f "${buildAppDirectory}/manage.py" ]; then
+          export NIXPACKS_START_CMD="python manage.py runserver 0.0.0.0:8000" ;
+        elif [ -f "${buildAppDirectory}/main.py" ]; then
+          export NIXPACKS_START_CMD="python main.py" ;
+        elif [ -f "${buildAppDirectory}/app.py" ]; then
+          export NIXPACKS_START_CMD="python app.py" ;
+        fi
+      fi
+    fi
+  fi
+
+  # Consistency check: Never let JS package manager run on pure Python project
+  if [ "$NIXPACKS_PROVIDER" = "python" ]; then
+    if echo "$NIXPACKS_INSTALL_CMD" | grep -qi "npm"; then
+      echo "⚠️ Warning: Inconsistent install command detected ('$NIXPACKS_INSTALL_CMD' on Python project). Correcting to pip." ;
+      export NIXPACKS_INSTALL_CMD="pip install -r requirements.txt" ;
+    fi
+  fi
   REQUESTED_NODE=""
   if [ -f "${buildAppDirectory}/.nvmrc" ]; then
     REQUESTED_NODE=$(cat "${buildAppDirectory}/.nvmrc" | tr -d 'v\\r\\n ' | cut -d. -f1)
@@ -340,8 +471,13 @@ if [ "$NIX_STATUS" != "0" ]; then
     echo "❌ Deployment Error: The requested runtime has reached End-Of-Life and was removed from the package repository." ;
     echo "💡 Remediation: Specify a compatible package archive or upgrade to a modern supported runtime in settings." ;
   elif grep -qi "no start command could be found" "$TMP_LOG" 2>/dev/null; then
-    echo "❌ Start Command Error: No start command could be found for this application." ;
-    echo "💡 Remediation: Add a 'start' script to your package.json (e.g. 'node server.js' or 'next start'), configure a Custom Start Command in Application Settings, or configure a Publish Directory if deploying a static web app." ;
+    if [ "$NIXPACKS_PROVIDER" = "python" ] || [ -f "${buildAppDirectory}/requirements.txt" ] || [ -f "${buildAppDirectory}/app.py" ]; then
+      echo "❌ Start Command Error: No start command could be found for this Python application." ;
+      echo "💡 Remediation: Ensure your application provides a recognized entry point (app.py, main.py) or configure a Custom Start Command in Application Settings (e.g. 'streamlit run app.py --server.port=8501 --server.address=0.0.0.0')." ;
+    else
+      echo "❌ Start Command Error: No start command could be found for this application." ;
+      echo "💡 Remediation: Add a 'start' script to your package.json (e.g. 'node server.js' or 'next start'), configure a Custom Start Command in Application Settings, or configure a Publish Directory if deploying a static web app." ;
+    fi
   else
     echo "❌ Nixpacks build failed with exit code $NIX_STATUS" ;
   fi

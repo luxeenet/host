@@ -1,7 +1,9 @@
+import fs from "node:fs";
 import { resolveServiceNetworks } from "@dokploy/server/services/network";
 import { findRegistryByIdWithCredentials } from "@dokploy/server/services/registry";
 import type { InferResultType } from "@dokploy/server/types/with";
 import type { CreateServiceOptions } from "dockerode";
+import { getBuildAppDirectory } from "../filesystem/directory";
 import { getRegistryTag, uploadImageRemoteCommand } from "../cluster/upload";
 import {
 	calculateResources,
@@ -135,9 +137,24 @@ export const mechanizeDockerContainer = async (
 		envVariables.push("NIXPACKS_HOST=0.0.0.0");
 	}
 	if (!hasPort) {
-		const targetPort =
-			application.ports?.[0]?.targetPort ??
-			(application.buildType === "static" ? 80 : 3000);
+		let targetPort = application.ports?.[0]?.targetPort;
+		if (!targetPort) {
+			if (application.buildType === "static") {
+				targetPort = 80;
+			} else {
+				try {
+					const buildDir = getBuildAppDirectory(application);
+					if (fs.existsSync(buildDir)) {
+						const { detectFrameworkFromDirectorySync } = require("@dokploy/server/services/app-detector");
+						const det = detectFrameworkFromDirectorySync(buildDir);
+						if (det?.suggestedPort) {
+							targetPort = det.suggestedPort;
+						}
+					}
+				} catch {}
+				targetPort = targetPort ?? 3000;
+			}
+		}
 		envVariables.push(`PORT=${targetPort}`);
 		envVariables.push(`NIXPACKS_PORT=${targetPort}`);
 	}

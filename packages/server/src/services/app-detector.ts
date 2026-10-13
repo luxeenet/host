@@ -58,6 +58,12 @@ export interface DetectionResult {
 	confidence: "high" | "medium" | "low";
 	reason: string;
 	suggestedEnv?: Array<{ key: string; description: string; required: boolean }>;
+	projectRoot?: string;
+	installCommand?: string;
+	bindHost?: string;
+	conflicts?: string[];
+	runtimeEvidence?: string;
+	packageManagerEvidence?: string;
 }
 
 export interface ApplicationInspection {
@@ -72,6 +78,135 @@ export interface ApplicationInspection {
 	};
 }
 
+const IGNORED_SCAN_DIRS = new Set([
+	".git",
+	"node_modules",
+	".venv",
+	"venv",
+	"env",
+	"__pycache__",
+	".pytest_cache",
+	".mypy_cache",
+	"dist",
+	"build",
+	"out",
+	"target",
+	".next",
+	".nuxt",
+	".output",
+	".turbo",
+	".cache",
+	".idea",
+	".vscode",
+	"vendor",
+	"storage",
+	"logs",
+	"coverage",
+]);
+
+export const isRecognizedProjectManifest = (fileName: string): boolean => {
+	const lower = fileName.toLowerCase();
+	return (
+		[
+			"package.json",
+			"requirements.txt",
+			"pyproject.toml",
+			"pipfile",
+			"pipfile.lock",
+			"poetry.lock",
+			"uv.lock",
+			"setup.py",
+			"setup.cfg",
+			"app.py",
+			"main.py",
+			"streamlit_app.py",
+			"manage.py",
+			"dockerfile",
+			"dockerfile.production",
+			"docker-compose.yml",
+			"docker-compose.yaml",
+			"compose.yml",
+			"compose.yaml",
+			"nixpacks.toml",
+			"go.mod",
+			"cargo.toml",
+			"pom.xml",
+			"build.gradle",
+			"build.gradle.kts",
+			"composer.json",
+			"gemfile",
+			"index.html",
+			"index.php",
+		].includes(lower) ||
+		lower.endsWith(".csproj") ||
+		lower.endsWith(".sln")
+	);
+};
+
+export const resolveProjectRoot = (
+	baseDir: string,
+	explicitSubPath?: string,
+): {
+	resolvedRoot: string;
+	isAmbiguous: boolean;
+	candidates: string[];
+	ambiguityWarning?: string;
+} => {
+	if (explicitSubPath && explicitSubPath.trim() && explicitSubPath.trim() !== "/") {
+		const clean = explicitSubPath.trim().replace(/^[/\\]+/, "").replace(/\\/g, "/");
+		const full = path.join(baseDir, clean);
+		if (fs.existsSync(full)) {
+			return { resolvedRoot: clean, isAmbiguous: false, candidates: [clean] };
+		}
+	}
+
+	if (!fs.existsSync(baseDir)) {
+		return { resolvedRoot: "", isAmbiguous: false, candidates: [] };
+	}
+
+	try {
+		const rootEntries = fs.readdirSync(baseDir, { withFileTypes: true });
+		const hasRootManifest = rootEntries.some(
+			(e) => e.isFile() && isRecognizedProjectManifest(e.name),
+		);
+
+		if (hasRootManifest) {
+			return { resolvedRoot: "", isAmbiguous: false, candidates: [""] };
+		}
+
+		const candidates: string[] = [];
+		for (const entry of rootEntries) {
+			if (entry.isDirectory() && !IGNORED_SCAN_DIRS.has(entry.name)) {
+				const subDir = path.join(baseDir, entry.name);
+				try {
+					const subEntries = fs.readdirSync(subDir, { withFileTypes: true });
+					const hasSubManifest = subEntries.some(
+						(se) => se.isFile() && isRecognizedProjectManifest(se.name),
+					);
+					if (hasSubManifest) {
+						candidates.push(entry.name);
+					}
+				} catch {}
+			}
+		}
+
+		if (candidates.length === 1 && candidates[0]) {
+			return { resolvedRoot: candidates[0], isAmbiguous: false, candidates };
+		}
+
+		if (candidates.length > 1) {
+			return {
+				resolvedRoot: "",
+				isAmbiguous: true,
+				candidates,
+				ambiguityWarning: `Multiple application projects detected: [${candidates.join(", ")}]. Please specify a project root in Application Settings to select a specific subproject.`,
+			};
+		}
+	} catch {}
+
+	return { resolvedRoot: "", isAmbiguous: false, candidates: [] };
+};
+
 /**
  * Deterministically inspect a virtual or physical list of files to detect framework,
  * builder, start/build commands, runtime versions, and default container ports.
@@ -79,21 +214,42 @@ export interface ApplicationInspection {
 export const detectFrameworkFromFiles = (
 	files: FileEntry[],
 ): DetectionResult => {
-	const fileMap = new Map<string, FileEntry>();
+	const rootFileMap = new Map<string, FileEntry>();
+	const allFileMap = new Map<string, FileEntry>();
+
 	for (const file of files) {
-		const normPath = file.path.replace(/^[/\\]+/, "").toLowerCase();
+		const normPath = file.path.replace(/^[/\\]+/, "").toLowerCase().replace(/\\/g, "/");
 		const baseName = (file.name || path.basename(file.path)).toLowerCase();
-		fileMap.set(normPath, file);
-		fileMap.set(baseName, file);
+		allFileMap.set(normPath, file);
+		if (!allFileMap.has(baseName)) {
+			allFileMap.set(baseName, file);
+		}
+
+		// A file is considered root if it has no directory separators or is directly at './'
+		const isRoot = !normPath.includes("/") || (normPath.startsWith("./") && !normPath.slice(2).includes("/"));
+		if (isRoot) {
+			const cleanRootName = normPath.replace(/^\.\//, "");
+			rootFileMap.set(cleanRootName, file);
+			rootFileMap.set(baseName, file);
+		}
 	}
+
+	const getRootFile = (name: string): FileEntry | undefined => {
+		const lower = name.toLowerCase();
+		return rootFileMap.get(lower);
+	};
 
 	const getFile = (name: string): FileEntry | undefined => {
 		const lower = name.toLowerCase();
-		return fileMap.get(lower);
+		return rootFileMap.get(lower) || allFileMap.get(lower);
 	};
 
 	// 1. Check for Docker Compose
 	const composeFile =
+		getRootFile("docker-compose.yml") ||
+		getRootFile("docker-compose.yaml") ||
+		getRootFile("compose.yml") ||
+		getRootFile("compose.yaml") ||
 		getFile("docker-compose.yml") ||
 		getFile("docker-compose.yaml") ||
 		getFile("compose.yml") ||
@@ -117,7 +273,11 @@ export const detectFrameworkFromFiles = (
 	}
 
 	// 2. Check for explicit Dockerfile
-	const dockerfile = getFile("dockerfile") || getFile("dockerfile.production");
+	const dockerfile =
+		getRootFile("dockerfile") ||
+		getRootFile("dockerfile.production") ||
+		getFile("dockerfile") ||
+		getFile("dockerfile.production");
 	if (dockerfile) {
 		let port = 3000;
 		let foundExpose = false;
@@ -147,7 +307,7 @@ export const detectFrameworkFromFiles = (
 	}
 
 	// 3. Check for explicit nixpacks.toml configuration
-	const nixpacksConfig = getFile("nixpacks.toml");
+	const nixpacksConfig = getRootFile("nixpacks.toml") || getFile("nixpacks.toml");
 	if (nixpacksConfig) {
 		return {
 			framework: "Nixpacks Configured Project",
@@ -160,7 +320,7 @@ export const detectFrameworkFromFiles = (
 	}
 
 	// 4. Check for Cloud Native Buildpacks project.toml
-	const projectToml = getFile("project.toml");
+	const projectToml = getRootFile("project.toml") || getFile("project.toml");
 	if (projectToml) {
 		return {
 			framework: "Cloud Native Buildpack",
@@ -172,17 +332,55 @@ export const detectFrameworkFromFiles = (
 		};
 	}
 
+	// Python manifests inspection
+	const rootReqs = getRootFile("requirements.txt");
+	const rootPyproject = getRootFile("pyproject.toml");
+	const rootPipfile = getRootFile("pipfile");
+	const rootPipfileLock = getRootFile("pipfile.lock");
+	const rootPoetryLock = getRootFile("poetry.lock");
+	const rootUvLock = getRootFile("uv.lock");
+	const rootSetupPy = getRootFile("setup.py");
+	const rootSetupCfg = getRootFile("setup.cfg");
+	const rootPythonVer = getRootFile(".python-version");
+	const rootAppPy = getRootFile("app.py");
+	const rootMainPy = getRootFile("main.py");
+	const rootStreamlitAppPy = getRootFile("streamlit_app.py");
+	const rootManagePy = getRootFile("manage.py");
+	const rootRuntimeTxt = getRootFile("runtime.txt");
+
+	const hasRootPythonManifest = Boolean(
+		rootReqs ||
+		rootPyproject ||
+		rootPipfile ||
+		rootPipfileLock ||
+		rootPoetryLock ||
+		rootUvLock ||
+		rootSetupPy ||
+		rootSetupCfg ||
+		rootPythonVer ||
+		rootAppPy ||
+		rootMainPy ||
+		rootStreamlitAppPy ||
+		rootManagePy ||
+		(rootRuntimeTxt?.content && /python/i.test(rootRuntimeTxt.content)),
+	);
+
+	// Root package.json check (nested frontend/package.json must not hijack root Python)
+	const rootPkgFile = getRootFile("package.json");
+	const allPkgFile = getFile("package.json");
+	const effectivePkgFile = rootPkgFile || (!hasRootPythonManifest ? allPkgFile : undefined);
+
 	// File items for JS package manager resolution
-	const fileItems = Array.from(fileMap.values()).map((f) => ({
+	const fileItems = Array.from(rootFileMap.size > 0 ? rootFileMap.values() : allFileMap.values()).map((f) => ({
 		name: f.name || path.basename(f.path),
 		path: f.path,
 		content: f.content,
 	}));
 
-	const pkgFile = getFile("package.json");
-	const nvmrcFile = getFile(".nvmrc");
-	const nodeVersionFile = getFile(".node-version");
-	const runtimeTxtFile = getFile("runtime.txt");
+	const pkgFile = effectivePkgFile;
+	const nvmrcFile = getRootFile(".nvmrc") || getFile(".nvmrc");
+	const nodeVersionFile = getRootFile(".node-version") || getFile(".node-version");
+	const runtimeTxtFile = getRootFile("runtime.txt") || getFile("runtime.txt");
 
 	const pmRes = resolvePackageManagerAndCommands({
 		files: fileItems,
@@ -207,7 +405,7 @@ export const detectFrameworkFromFiles = (
 					: "npm run";
 
 	// 5. Node.js / JavaScript / TypeScript projects (package.json)
-	if (pkgFile?.content) {
+	if (pkgFile?.content && (!hasRootPythonManifest || rootPkgFile)) {
 		try {
 			const pkg = JSON.parse(pkgFile.content);
 			const allDeps = {
@@ -369,19 +567,20 @@ export const detectFrameworkFromFiles = (
 							? "Svelte"
 							: "Web";
 				const hasStartScript = Boolean(scripts.start);
+				const hasPreviewScript = Boolean(scripts.preview);
 				return {
 					framework: `Vite (${spaType})`,
 					language: allDeps.typescript ? "TypeScript" : "JavaScript",
-					buildType: hasStartScript ? "nixpacks" : "static",
-					suggestedPort: hasStartScript ? 3000 : 80,
+					buildType: hasStartScript || hasPreviewScript ? "nixpacks" : "static",
+					suggestedPort: hasStartScript ? 3000 : hasPreviewScript ? 4173 : 80,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
 					startCommand: hasStartScript
 						? `${runPrefix} start`
-						: scripts.preview
+						: hasPreviewScript
 							? `${runPrefix} preview -- --port 4173 --host 0.0.0.0`
 							: undefined,
 					publishDirectory: "dist",
-					isStaticSpa: true,
+					isStaticSpa: !hasStartScript && !hasPreviewScript,
 					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
@@ -490,79 +689,194 @@ export const detectFrameworkFromFiles = (
 
 	// 6. Python Projects
 	const reqs =
+		rootReqs ||
+		rootPyproject ||
+		rootPipfile ||
+		rootPoetryLock ||
+		rootUvLock ||
+		rootSetupPy ||
 		getFile("requirements.txt") ||
 		getFile("pyproject.toml") ||
 		getFile("pipfile") ||
 		getFile("pipfile.lock") ||
 		getFile("poetry.lock") ||
 		getFile("uv.lock") ||
-		getFile("pdm.lock");
+		getFile("pdm.lock") ||
+		getFile("setup.py") ||
+		getFile("setup.cfg");
 
-	if (reqs?.content || getFile("main.py") || getFile(".python-version")) {
-		const pythonVerFile = getFile(".python-version");
+	const isPython = Boolean(
+		hasRootPythonManifest ||
+		reqs ||
+		getFile("app.py") ||
+		getFile("main.py") ||
+		getFile("streamlit_app.py") ||
+		getFile("manage.py") ||
+		getFile(".python-version") ||
+		(runtimeTxtFile?.content && /python/i.test(runtimeTxtFile.content)),
+	);
+
+	if (isPython) {
+		let pyPm: "pip" | "poetry" | "uv" | "pipenv" = "pip";
+		let pyInstall = "pip install -r requirements.txt";
+		if (getRootFile("uv.lock") || getFile("uv.lock")) {
+			pyPm = "uv";
+			pyInstall = "uv sync";
+		} else if (
+			getRootFile("poetry.lock") ||
+			getFile("poetry.lock") ||
+			((rootPyproject || getFile("pyproject.toml"))?.content &&
+				/\[tool\.poetry\]/i.test((rootPyproject || getFile("pyproject.toml"))?.content || ""))
+		) {
+			pyPm = "poetry";
+			pyInstall = "poetry install --no-interaction";
+		} else if (
+			getRootFile("pipfile.lock") ||
+			getRootFile("pipfile") ||
+			getFile("pipfile.lock") ||
+			getFile("pipfile")
+		) {
+			pyPm = "pipenv";
+			pyInstall = "pipenv install --deploy";
+		} else {
+			pyPm = "pip";
+			pyInstall = (rootReqs || getFile("requirements.txt"))
+				? "pip install -r requirements.txt"
+				: (rootSetupPy || getFile("setup.py"))
+					? "pip install -e ."
+					: "pip install -r requirements.txt";
+		}
+
+		const pythonVerFile = getRootFile(".python-version") || getFile(".python-version");
 		const pyRuntime = resolvePythonRuntime({
 			pythonVersionContent: pythonVerFile?.content,
 			runtimeTxtContent: runtimeTxtFile?.content,
-			pyprojectContent: getFile("pyproject.toml")?.content,
-			pipfileContent: getFile("pipfile")?.content,
+			pyprojectContent: (rootPyproject || getFile("pyproject.toml"))?.content,
+			pipfileContent: (rootPipfile || getFile("pipfile"))?.content,
 		});
 
-		const lower = (reqs?.content || "").toLowerCase();
-		if (lower.includes("fastapi") || lower.includes("uvicorn")) {
+		const combinedPyContent = [
+			(rootReqs || getFile("requirements.txt"))?.content,
+			(rootPyproject || getFile("pyproject.toml"))?.content,
+			(rootPipfile || getFile("pipfile"))?.content,
+			(rootSetupPy || getFile("setup.py"))?.content,
+			(rootAppPy || getFile("app.py"))?.content,
+			(rootMainPy || getFile("main.py"))?.content,
+			(rootStreamlitAppPy || getFile("streamlit_app.py"))?.content,
+		]
+			.filter(Boolean)
+			.join("\n")
+			.toLowerCase();
+
+		const hasStreamlitDep = combinedPyContent.includes("streamlit");
+		const hasStreamlitFile = Boolean(rootStreamlitAppPy || getFile("streamlit_app.py"));
+		const hasStreamlitCode = /import\s+streamlit|from\s+streamlit/i.test(combinedPyContent);
+
+		if (hasStreamlitDep || hasStreamlitFile || hasStreamlitCode) {
+			const entryFile = rootStreamlitAppPy
+				? (rootStreamlitAppPy.name || "streamlit_app.py")
+				: (rootAppPy || getFile("app.py"))
+					? ((rootAppPy || getFile("app.py"))?.name || "app.py")
+					: (rootMainPy || getFile("main.py"))
+						? ((rootMainPy || getFile("main.py"))?.name || "main.py")
+						: "app.py";
+
+			return {
+				framework: "Streamlit (Python)",
+				language: "Python",
+				buildType: "nixpacks",
+				suggestedPort: 8501,
+				bindHost: "0.0.0.0",
+				packageManager: pyPm,
+				installCommand: pyInstall,
+				startCommand: `streamlit run ${entryFile} --server.port=8501 --server.address=0.0.0.0`,
+				runtimeVersion: pyRuntime.resolvedVersion,
+				confidence: "high",
+				reason: hasStreamlitDep
+					? "Detected Streamlit dependencies in requirements/manifest"
+					: "Detected Streamlit entrypoint and code",
+			};
+		}
+
+		if (combinedPyContent.includes("fastapi") || combinedPyContent.includes("uvicorn")) {
+			const entry = (rootMainPy || getFile("main.py"))
+				? "main:app"
+				: (rootAppPy || getFile("app.py"))
+					? "app:app"
+					: "main:app";
 			return {
 				framework: "FastAPI",
 				language: "Python",
 				buildType: "nixpacks",
 				suggestedPort: 8000,
-				startCommand: "uvicorn main:app --host 0.0.0.0 --port 8000",
+				bindHost: "0.0.0.0",
+				packageManager: pyPm,
+				installCommand: pyInstall,
+				startCommand: `uvicorn ${entry} --host 0.0.0.0 --port 8000`,
 				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
 				reason: "Detected FastAPI dependencies in requirements/pyproject",
 			};
 		}
-		if (lower.includes("django")) {
+
+		if (combinedPyContent.includes("django") || Boolean(rootManagePy || getFile("manage.py"))) {
 			return {
 				framework: "Django",
 				language: "Python",
 				buildType: "nixpacks",
 				suggestedPort: 8000,
+				bindHost: "0.0.0.0",
+				packageManager: pyPm,
+				installCommand: pyInstall,
 				startCommand: "python manage.py runserver 0.0.0.0:8000",
 				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
-				reason: "Detected Django dependencies in requirements/pyproject",
+				reason: "Detected Django project manifest or manage.py",
 			};
 		}
-		if (lower.includes("flask")) {
+
+		if (combinedPyContent.includes("flask")) {
 			return {
 				framework: "Flask",
 				language: "Python",
 				buildType: "nixpacks",
 				suggestedPort: 5000,
+				bindHost: "0.0.0.0",
+				packageManager: pyPm,
+				installCommand: pyInstall,
 				startCommand: "flask run --host=0.0.0.0 --port=5000",
 				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
 				reason: "Detected Flask dependencies in requirements/pyproject",
 			};
 		}
-		if (lower.includes("streamlit")) {
+
+		if (combinedPyContent.includes("gradio")) {
+			const entry = (rootAppPy || getFile("app.py"))
+				? ((rootAppPy || getFile("app.py"))?.name || "app.py")
+				: (rootMainPy || getFile("main.py"))
+					? ((rootMainPy || getFile("main.py"))?.name || "main.py")
+					: "app.py";
 			return {
-				framework: "Streamlit",
+				framework: "Gradio",
 				language: "Python",
 				buildType: "nixpacks",
-				suggestedPort: 8501,
-				startCommand:
-					"streamlit run app.py --server.port=8501 --server.address=0.0.0.0",
+				suggestedPort: 7860,
+				bindHost: "0.0.0.0",
+				packageManager: pyPm,
+				installCommand: pyInstall,
+				startCommand: `python ${entry}`,
 				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
-				reason: "Detected Streamlit dependencies",
+				reason: "Detected Gradio dependencies in requirements/pyproject",
 			};
 		}
 
 		let pythonStart: string | undefined;
-		if (getFile("main.py")) {
-			pythonStart = "python main.py";
-		} else if (getFile("app.py")) {
-			pythonStart = "python app.py";
+		if (rootMainPy || getFile("main.py")) {
+			pythonStart = `python ${(rootMainPy || getFile("main.py"))?.name || "main.py"}`;
+		} else if (rootAppPy || getFile("app.py")) {
+			pythonStart = `python ${(rootAppPy || getFile("app.py"))?.name || "app.py"}`;
 		} else if (getFile("server.py")) {
 			pythonStart = "python server.py";
 		} else if (getFile("wsgi.py")) {
@@ -574,9 +888,12 @@ export const detectFrameworkFromFiles = (
 			language: "Python",
 			buildType: "nixpacks",
 			suggestedPort: 8000,
+			bindHost: "0.0.0.0",
+			packageManager: pyPm,
+			installCommand: pyInstall,
 			startCommand: pythonStart,
 			runtimeVersion: pyRuntime.resolvedVersion,
-			confidence: "medium",
+			confidence: pythonStart ? "medium" : "low",
 			reason: pythonStart
 				? `Detected Python application with entrypoint (${pythonStart})`
 				: "Detected Python project configuration",
@@ -630,13 +947,13 @@ export const detectFrameworkFromFiles = (
 	}
 
 	// 8. .NET / C# Projects
-	const csproj = Array.from(fileMap.values()).find(
+	const csproj = Array.from(allFileMap.values()).find(
 		(f) =>
 			f.name.toLowerCase().endsWith(".csproj") ||
 			f.path.toLowerCase().endsWith(".csproj"),
 	);
 	const globalJson = getFile("global.json");
-	const slnFile = Array.from(fileMap.values()).find((f) =>
+	const slnFile = Array.from(allFileMap.values()).find((f) =>
 		f.name.toLowerCase().endsWith(".sln"),
 	);
 
@@ -891,6 +1208,143 @@ export const detectFrameworkFromDirectory = async (
 					path: entry.name,
 					content,
 				});
+			}
+		}
+
+		const hasRootManifest = files.some((f) => isRecognizedProjectManifest(f.name));
+		if (!hasRootManifest) {
+			const { resolvedRoot } = resolveProjectRoot(dirPath);
+			if (resolvedRoot) {
+				const nestedPath = path.join(dirPath, resolvedRoot);
+				if (fs.existsSync(nestedPath)) {
+					const nestedResult = await detectFrameworkFromDirectory(nestedPath);
+					nestedResult.projectRoot = resolvedRoot;
+					return nestedResult;
+				}
+			}
+		}
+
+		return detectFrameworkFromFiles(files);
+	} catch (error) {
+		return {
+			framework: "Generic Application",
+			language: "Auto",
+			buildType: "nixpacks",
+			suggestedPort: 3000,
+			confidence: "low",
+			reason:
+				error instanceof Error
+					? `Inspection fallback: ${error.message}`
+					: "Directory inspection fallback",
+		};
+	}
+};
+
+/**
+ * Synchronously scan a directory on the server filesystem to detect application details
+ */
+export const detectFrameworkFromDirectorySync = (
+	dirPath: string,
+): DetectionResult => {
+	try {
+		if (!fs.existsSync(dirPath)) {
+			return {
+				framework: "Generic Application",
+				language: "Auto",
+				buildType: "nixpacks",
+				suggestedPort: 3000,
+				confidence: "low",
+				reason: "Source directory does not exist; using sensible defaults",
+			};
+		}
+
+		const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+		const files: FileEntry[] = [];
+
+		for (const entry of entries) {
+			if (entry.isFile()) {
+				const filePath = path.join(dirPath, entry.name);
+				let content: string | undefined;
+				const lowerName = entry.name.toLowerCase();
+
+				// Read configuration files for inspection
+				if (
+					[
+						"package.json",
+						"dockerfile",
+						"dockerfile.production",
+						"docker-compose.yml",
+						"docker-compose.yaml",
+						"compose.yml",
+						"compose.yaml",
+						"requirements.txt",
+						"pyproject.toml",
+						"pipfile",
+						"pipfile.lock",
+						"poetry.lock",
+						"uv.lock",
+						"pdm.lock",
+						"setup.py",
+						"setup.cfg",
+						"gemfile",
+						"composer.json",
+						"go.mod",
+						"cargo.toml",
+						"pom.xml",
+						"build.gradle",
+						"build.gradle.kts",
+						"global.json",
+						"pnpm-lock.yaml",
+						"yarn.lock",
+						"bun.lockb",
+						"bun.lock",
+						"package-lock.json",
+						".nvmrc",
+						".node-version",
+						".python-version",
+						".php-version",
+						".ruby-version",
+						".java-version",
+						"next.config.js",
+						"next.config.mjs",
+						"next.config.ts",
+						"index.html",
+						"index.php",
+						"app.py",
+						"main.py",
+						"streamlit_app.py",
+						"manage.py",
+						"server.py",
+					].includes(lowerName) ||
+					lowerName.endsWith(".csproj") ||
+					lowerName.endsWith(".sln")
+				) {
+					try {
+						const stat = fs.statSync(filePath);
+						if (stat.size < 512 * 1024) {
+							content = fs.readFileSync(filePath, "utf-8");
+						}
+					} catch {}
+				}
+
+				files.push({
+					name: entry.name,
+					path: entry.name,
+					content,
+				});
+			}
+		}
+
+		const hasRootManifest = files.some((f) => isRecognizedProjectManifest(f.name));
+		if (!hasRootManifest) {
+			const { resolvedRoot } = resolveProjectRoot(dirPath);
+			if (resolvedRoot) {
+				const nestedPath = path.join(dirPath, resolvedRoot);
+				if (fs.existsSync(nestedPath)) {
+					const nestedResult = detectFrameworkFromDirectorySync(nestedPath);
+					nestedResult.projectRoot = resolvedRoot;
+					return nestedResult;
+				}
 			}
 		}
 

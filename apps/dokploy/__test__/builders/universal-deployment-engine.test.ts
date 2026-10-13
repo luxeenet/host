@@ -1,7 +1,13 @@
 import {
 	detectFrameworkFromFiles,
+	resolveProjectRoot,
+	isRecognizedProjectManifest,
 	type FileEntry,
 } from "@dokploy/server/services/app-detector";
+import {
+	validateArchiveEntries,
+	ArchiveValidationError,
+} from "@dokploy/server/utils/builders/archive-validation";
 import type { ApplicationNested } from "@dokploy/server/utils/builders";
 import { getDockerCommand } from "@dokploy/server/utils/builders/docker-file";
 import { getHerokuCommand } from "@dokploy/server/utils/builders/heroku";
@@ -864,6 +870,379 @@ describe("Universal Deployment Engine — Comprehensive Compatibility Suite", ()
 			const domain = { port: 3000, host: "express.example.com" } as any;
 			const upstreamPort = resolveDomainUpstreamPort(domain, app);
 			expect(upstreamPort).toBe(3000);
+		});
+	});
+
+	describe("13. Universal ZIP Deployment, Language Detection & Builder Resolution Suite", () => {
+		// Python-only applications
+		it("demonstrated failure fix: pure Python Streamlit app.py + requirements.txt produces Python builder plan with port 8501 and no npm", () => {
+			const streamlitFiles: FileEntry[] = [
+				{
+					name: "requirements.txt",
+					path: "requirements.txt",
+					content: "streamlit==1.32.0\npandas==2.2.0\nnumpy==1.26.4\n",
+				},
+				{
+					name: "app.py",
+					path: "app.py",
+					content: "import streamlit as st\nst.title('Hello HatDot')",
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(streamlitFiles);
+			expect(detected.framework).toBe("Streamlit (Python)");
+			expect(detected.language).toBe("Python");
+			expect(detected.buildType).toBe("nixpacks");
+			expect(detected.suggestedPort).toBe(8501);
+			expect(detected.bindHost).toBe("0.0.0.0");
+			expect(detected.packageManager).toBe("pip");
+			expect(detected.installCommand).toBe("pip install -r requirements.txt");
+			expect(detected.startCommand).toBe(
+				"streamlit run app.py --server.port=8501 --server.address=0.0.0.0",
+			);
+			expect(detected.confidence).toBe("high");
+
+			// Assert generated Nixpacks configuration
+			const toml = generateNixpacksToml({
+				providers: ["python"],
+				installCmd: detected.installCommand,
+				startCmd: detected.startCommand,
+			});
+			expect(toml).toContain('providers = ["python"]');
+			expect(toml).toContain('cmds = ["pip install -r requirements.txt"]');
+			expect(toml).toContain(
+				'cmd = "streamlit run app.py --server.port=8501 --server.address=0.0.0.0"',
+			);
+			expect(toml).not.toContain("npm");
+
+			// Assert generated Nixpacks CLI command
+			const app = createMockApp({
+				appName: "streamlit-app",
+				command: detected.startCommand,
+			});
+			const nixpacksCmd = getNixpacksCommand(app);
+			expect(nixpacksCmd).toContain(
+				"--start-cmd 'streamlit run app.py --server.port=8501 --server.address=0.0.0.0'",
+			);
+			expect(nixpacksCmd).toContain("PORT=8501");
+			expect(nixpacksCmd).toContain("NIXPACKS_PORT=8501");
+			expect(nixpacksCmd).toContain("NIXPACKS_PROVIDER=\"python\"");
+			expect(nixpacksCmd).toContain("pip install -r requirements.txt");
+			expect(nixpacksCmd).toContain("NIXPACKS_INSTALL_CMD='pip install -r requirements.txt'");
+			expect(nixpacksCmd).not.toMatch(/(?<!p)npm install/);
+			expect(nixpacksCmd).not.toContain("NIXPACKS_INSTALL_CMD='npm install'");
+		});
+
+		it("detects Streamlit configured with pyproject.toml without package.json", () => {
+			const pyprojectFiles: FileEntry[] = [
+				{
+					name: "pyproject.toml",
+					path: "pyproject.toml",
+					content: `
+[tool.poetry]
+name = "my-streamlit-app"
+version = "0.1.0"
+dependencies = [
+    "python = '^3.11'",
+    "streamlit = '^1.32.0'"
+]
+`,
+				},
+				{
+					name: "app.py",
+					path: "app.py",
+					content: "import streamlit as st\nst.write('Data dashboard')",
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(pyprojectFiles);
+			expect(detected.framework).toBe("Streamlit (Python)");
+			expect(detected.language).toBe("Python");
+			expect(detected.packageManager).toBe("poetry");
+			expect(detected.installCommand).toBe("poetry install --no-interaction");
+			expect(detected.suggestedPort).toBe(8501);
+			expect(detected.startCommand).toContain("streamlit run app.py");
+		});
+
+		it("detects Streamlit with custom entrypoint streamlit_app.py", () => {
+			const files: FileEntry[] = [
+				{
+					name: "requirements.txt",
+					path: "requirements.txt",
+					content: "streamlit>=1.30.0",
+				},
+				{
+					name: "streamlit_app.py",
+					path: "streamlit_app.py",
+					content: "import streamlit as st",
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.framework).toBe("Streamlit (Python)");
+			expect(detected.startCommand).toBe(
+				"streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0",
+			);
+			expect(detected.suggestedPort).toBe(8501);
+		});
+
+		it("detects Django application with manage.py and requirements.txt", () => {
+			const files: FileEntry[] = [
+				{
+					name: "requirements.txt",
+					path: "requirements.txt",
+					content: "django>=5.0.0\ngunicorn>=21.0.0",
+				},
+				{
+					name: "manage.py",
+					path: "manage.py",
+					content: "#!/usr/bin/env python\nimport os\n",
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.framework).toBe("Django");
+			expect(detected.language).toBe("Python");
+			expect(detected.packageManager).toBe("pip");
+			expect(detected.suggestedPort).toBe(8000);
+			expect(detected.startCommand).toBe("python manage.py runserver 0.0.0.0:8000");
+		});
+
+		it("detects Flask application with requirements.txt", () => {
+			const files: FileEntry[] = [
+				{
+					name: "requirements.txt",
+					path: "requirements.txt",
+					content: "flask>=3.0.0\nwerkzeug>=3.0.0",
+				},
+				{
+					name: "app.py",
+					path: "app.py",
+					content: "from flask import Flask\napp = Flask(__name__)",
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.framework).toBe("Flask");
+			expect(detected.language).toBe("Python");
+			expect(detected.packageManager).toBe("pip");
+			expect(detected.suggestedPort).toBe(5000);
+			expect(detected.startCommand).toBe("flask run --host=0.0.0.0 --port=5000");
+		});
+
+		it("detects FastAPI application with uvicorn start command", () => {
+			const files: FileEntry[] = [
+				{
+					name: "requirements.txt",
+					path: "requirements.txt",
+					content: "fastapi>=0.110.0\nuvicorn>=0.28.0",
+				},
+				{
+					name: "main.py",
+					path: "main.py",
+					content: "from fastapi import FastAPI\napp = FastAPI()",
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.framework).toBe("FastAPI");
+			expect(detected.language).toBe("Python");
+			expect(detected.packageManager).toBe("pip");
+			expect(detected.suggestedPort).toBe(8000);
+			expect(detected.startCommand).toBe("uvicorn main:app --host 0.0.0.0 --port 8000");
+		});
+
+		it("detects Gradio machine learning application", () => {
+			const files: FileEntry[] = [
+				{
+					name: "requirements.txt",
+					path: "requirements.txt",
+					content: "gradio>=4.20.0\ntorch>=2.2.0",
+				},
+				{
+					name: "app.py",
+					path: "app.py",
+					content: "import gradio as gr",
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.framework).toBe("Gradio");
+			expect(detected.language).toBe("Python");
+			expect(detected.suggestedPort).toBe(7860);
+			expect(detected.startCommand).toBe("python app.py");
+		});
+
+		it("preserves customer custom startup command overriding framework default", () => {
+			const app = createMockApp({
+				appName: "custom-python-app",
+				command: "python -m gunicorn app:server --workers 4 --bind 0.0.0.0:8501",
+			});
+			const nixCmd = getNixpacksCommand(app);
+			expect(nixCmd).toContain(
+				"--start-cmd 'python -m gunicorn app:server --workers 4 --bind 0.0.0.0:8501'",
+			);
+		});
+
+		// Mixed and ambiguous projects
+		it("does not allow a nested frontend/package.json to hijack a root Python Streamlit application", () => {
+			const files: FileEntry[] = [
+				{
+					name: "requirements.txt",
+					path: "requirements.txt",
+					content: "streamlit==1.32.0",
+				},
+				{
+					name: "app.py",
+					path: "app.py",
+					content: "import streamlit as st\nst.write('Root Python')",
+				},
+				{
+					name: "package.json",
+					path: "frontend/package.json",
+					content: JSON.stringify({
+						name: "nested-client",
+						dependencies: { react: "^18.2.0" },
+					}),
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.language).toBe("Python");
+			expect(detected.framework).toBe("Streamlit (Python)");
+			expect(detected.packageManager).toBe("pip");
+			expect(detected.suggestedPort).toBe(8501);
+		});
+
+		// JavaScript applications
+		it("detects Vite application with preview script as Nixpacks on port 4173", () => {
+			const files: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						name: "vite-preview-app",
+						scripts: {
+							build: "vite build",
+							preview: "vite preview",
+						},
+						devDependencies: { vite: "^5.2.0" },
+					}),
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.framework).toContain("Vite");
+			expect(detected.buildType).toBe("nixpacks");
+			expect(detected.suggestedPort).toBe(4173);
+			expect(detected.startCommand).toContain("preview");
+		});
+
+		it("detects Vite application without start/preview scripts as static on port 80", () => {
+			const files: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						name: "vite-static-spa",
+						scripts: {
+							build: "vite build",
+						},
+						devDependencies: { vite: "^5.2.0" },
+					}),
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.framework).toContain("Vite");
+			expect(detected.buildType).toBe("static");
+			expect(detected.suggestedPort).toBe(80);
+			expect(detected.publishDirectory).toBe("dist");
+		});
+
+		it("detects Bun package manager with bun.lockb and generates frozen bun install", () => {
+			const res = resolvePackageManagerAndCommands({
+				files: [
+					{ name: "package.json", path: "package.json" },
+					{ name: "bun.lockb", path: "bun.lockb" },
+				],
+				packageJsonContent: JSON.stringify({
+					name: "bun-app",
+					scripts: { start: "bun run index.ts" },
+				}),
+			});
+
+			expect(res.packageManager).toBe("bun");
+			expect(res.installCommand).toBe("bun install --frozen-lockfile");
+			expect(res.startCommand).toBe("bun start");
+		});
+
+		it("detects pnpm package manager with pnpm-lock.yaml and generates frozen pnpm install", () => {
+			const res = resolvePackageManagerAndCommands({
+				files: [
+					{ name: "package.json", path: "package.json" },
+					{ name: "pnpm-lock.yaml", path: "pnpm-lock.yaml" },
+				],
+				packageJsonContent: JSON.stringify({
+					name: "pnpm-app",
+					scripts: { start: "node server.js" },
+				}),
+			});
+
+			expect(res.packageManager).toBe("pnpm");
+			expect(res.installCommand).toBe("pnpm install --frozen-lockfile");
+		});
+
+		it("detects conflicting JavaScript lockfiles accurately", () => {
+			const res = resolvePackageManagerAndCommands({
+				files: [
+					{ name: "package.json", path: "package.json" },
+					{ name: "package-lock.json", path: "package-lock.json" },
+					{ name: "yarn.lock", path: "yarn.lock" },
+				],
+				packageJsonContent: JSON.stringify({ name: "conflict-app" }),
+			});
+
+			expect(res.hasConflictingLockfiles).toBe(true);
+		});
+
+		// Safety and archive validation
+		it("rejects ZIP archives attempting path traversal", () => {
+			expect(() => {
+				validateArchiveEntries([
+					{
+						entryName: "../../../etc/passwd",
+						isDirectory: false,
+						size: 100,
+						compressedSize: 50,
+						externalAttributes: 0,
+					},
+				]);
+			}).toThrowError(ArchiveValidationError);
+		});
+
+		it("rejects ZIP archives containing dangerous symlinks", () => {
+			expect(() => {
+				validateArchiveEntries([
+					{
+						entryName: "symlink_entry",
+						isDirectory: false,
+						size: 10,
+						compressedSize: 10,
+						// S_IFLNK unix bit: 0o120000 in high 16 bits = 0xA0000000
+						externalAttributes: 0xa1ed0000,
+					},
+				]);
+			}).toThrowError(ArchiveValidationError);
+		});
+
+		it("identifies valid project manifests deterministically", () => {
+			expect(isRecognizedProjectManifest("requirements.txt")).toBe(true);
+			expect(isRecognizedProjectManifest("pyproject.toml")).toBe(true);
+			expect(isRecognizedProjectManifest("package.json")).toBe(true);
+			expect(isRecognizedProjectManifest("app.py")).toBe(true);
+			expect(isRecognizedProjectManifest("Dockerfile")).toBe(true);
+			expect(isRecognizedProjectManifest("random.txt")).toBe(false);
 		});
 	});
 });

@@ -128,6 +128,18 @@ export const getBuildAppDirectory = (application: Application) => {
 		buildPath = application?.giteaBuildPath || "";
 	} else if (sourceType === "drop") {
 		buildPath = application?.dropBuildPath || "";
+		if (!buildPath) {
+			const baseCodeDir = path.join(APPLICATIONS_PATH, appName, "code");
+			if (fs.existsSync(baseCodeDir)) {
+				try {
+					const { resolveProjectRoot } = require("@dokploy/server/services/app-detector");
+					const { resolvedRoot } = resolveProjectRoot(baseCodeDir);
+					if (resolvedRoot) {
+						buildPath = resolvedRoot;
+					}
+				} catch {}
+			}
+		}
 	} else if (sourceType === "git") {
 		buildPath = customGitBuildPath || "";
 	}

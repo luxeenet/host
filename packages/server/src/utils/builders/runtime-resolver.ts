@@ -28,7 +28,22 @@ export interface NodeRuntimeResolution {
 	unavailabilityReason?: string;
 }
 
-export type SupportedPackageManager = "npm" | "pnpm" | "yarn" | "bun";
+export type SupportedPackageManager =
+	| "npm"
+	| "pnpm"
+	| "yarn"
+	| "bun"
+	| "pip"
+	| "poetry"
+	| "pipenv"
+	| "uv"
+	| "composer"
+	| "bundler"
+	| "maven"
+	| "gradle"
+	| "cargo"
+	| "go"
+	| "dotnet";
 
 export interface PackageManagerResolution {
 	packageManager: SupportedPackageManager;
@@ -619,9 +634,20 @@ export const resolvePackageManagerAndCommands = (params: {
 		else if (lowerPm.startsWith("npm")) explicitPm = "npm";
 	}
 
+	// Check if this project is non-JavaScript when package.json and JS lockfiles are absent
+	const hasJsManifest = Boolean(params.packageJsonContent) || hasBunLock || hasPnpmLock || hasYarnLock || hasNpmLock;
+	const isPythonProject = fileNames.has("requirements.txt") || fileNames.has("pyproject.toml") || fileNames.has("pipfile") || fileNames.has("poetry.lock") || fileNames.has("uv.lock") || fileNames.has("app.py") || fileNames.has("main.py");
+	const isGoProject = fileNames.has("go.mod");
+	const isRustProject = fileNames.has("cargo.toml");
+	const isJavaProject = fileNames.has("pom.xml") || fileNames.has("build.gradle") || fileNames.has("build.gradle.kts") || fileNames.has("gradlew");
+	const isPhpProject = fileNames.has("composer.json");
+	const isRubyProject = fileNames.has("gemfile");
+	const isDotnetProject = Array.from(fileNames).some((f) => f.endsWith(".csproj") || f.endsWith(".sln"));
+
 	// Decision precedence:
 	// 1. Explicit packageManager field from manifest
-	// 2. Lockfiles priority: bun > pnpm > yarn > npm
+	// 2. Lockfiles priority: bun > pnpm > yarn > npm (for JS)
+	// 3. Language specific package manager (pip/poetry/uv/composer/cargo/go/etc.)
 	let selectedPm: SupportedPackageManager = "npm";
 	let selectedLockfile: string | undefined;
 
@@ -646,6 +672,36 @@ export const resolvePackageManagerAndCommands = (params: {
 	} else if (hasNpmLock) {
 		selectedPm = "npm";
 		selectedLockfile = "package-lock.json";
+	} else if (!hasJsManifest && isPythonProject) {
+		if (fileNames.has("uv.lock")) {
+			selectedPm = "uv";
+			selectedLockfile = "uv.lock";
+		} else if (fileNames.has("poetry.lock")) {
+			selectedPm = "poetry";
+			selectedLockfile = "poetry.lock";
+		} else if (fileNames.has("pipfile.lock") || fileNames.has("pipfile")) {
+			selectedPm = "pipenv";
+			selectedLockfile = fileNames.has("pipfile.lock") ? "pipfile.lock" : "pipfile";
+		} else {
+			selectedPm = "pip";
+			selectedLockfile = fileNames.has("requirements.txt") ? "requirements.txt" : undefined;
+		}
+	} else if (!hasJsManifest && isGoProject) {
+		selectedPm = "go";
+		selectedLockfile = "go.mod";
+	} else if (!hasJsManifest && isRustProject) {
+		selectedPm = "cargo";
+		selectedLockfile = fileNames.has("cargo.lock") ? "cargo.lock" : "cargo.toml";
+	} else if (!hasJsManifest && isJavaProject) {
+		selectedPm = fileNames.has("pom.xml") ? "maven" : "gradle";
+	} else if (!hasJsManifest && isPhpProject) {
+		selectedPm = "composer";
+		selectedLockfile = fileNames.has("composer.lock") ? "composer.lock" : "composer.json";
+	} else if (!hasJsManifest && isRubyProject) {
+		selectedPm = "bundler";
+		selectedLockfile = fileNames.has("gemfile.lock") ? "gemfile.lock" : "gemfile";
+	} else if (!hasJsManifest && isDotnetProject) {
+		selectedPm = "dotnet";
 	}
 
 	// Generate frozen / reproducible install command
@@ -664,6 +720,30 @@ export const resolvePackageManagerAndCommands = (params: {
 			: "yarn install";
 	} else if (selectedPm === "npm") {
 		installCommand = hasNpmLock ? "npm ci" : "npm install";
+	} else if (selectedPm === "uv") {
+		installCommand = "uv sync";
+	} else if (selectedPm === "poetry") {
+		installCommand = "poetry install --no-interaction";
+	} else if (selectedPm === "pipenv") {
+		installCommand = "pipenv install --deploy";
+	} else if (selectedPm === "pip") {
+		installCommand = fileNames.has("requirements.txt")
+			? "pip install -r requirements.txt"
+			: "pip install .";
+	} else if (selectedPm === "cargo") {
+		installCommand = "cargo build --release";
+	} else if (selectedPm === "go") {
+		installCommand = "go build -o main .";
+	} else if (selectedPm === "composer") {
+		installCommand = "composer install --no-dev --optimize-autoloader";
+	} else if (selectedPm === "maven") {
+		installCommand = "mvn clean package -DskipTests";
+	} else if (selectedPm === "gradle") {
+		installCommand = "./gradlew build -x test";
+	} else if (selectedPm === "bundler") {
+		installCommand = "bundle install";
+	} else if (selectedPm === "dotnet") {
+		installCommand = "dotnet build";
 	}
 
 	// Generate build command using ONLY the selected package manager

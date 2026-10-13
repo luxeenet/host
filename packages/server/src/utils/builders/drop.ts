@@ -80,32 +80,64 @@ export const unzipDrop = async (zipFile: File, application: Application) => {
 			await recreateDirectory(outputPath);
 		}
 
-		const rootEntries = zipEntries.filter(
-			(entry) =>
-				entry.entryName.split("/").length === 1 ||
-				(entry.entryName.split("/").length === 2 &&
-					entry.entryName.endsWith("/")),
+		// Filter out macOS and Windows junk entries
+		const isJunkEntry = (entryName: string) => {
+			const n = entryName.replace(/\\/g, "/");
+			return (
+				n.startsWith("__MACOSX/") ||
+				n === "__MACOSX" ||
+				n.endsWith("/.DS_Store") ||
+				n === ".DS_Store" ||
+				n.endsWith("/Thumbs.db") ||
+				n === "Thumbs.db"
+			);
+		};
+
+		const meaningfulEntries = zipEntries.filter(
+			(entry) => !isJunkEntry(entry.entryName),
 		);
 
-		const hasSingleRootFolder = !!(
-			rootEntries.length === 1 && rootEntries[0]?.isDirectory
-		);
+		// Determine if the archive has a single enclosing top-level directory
+		const topSegments = new Set<string>();
+		for (const entry of meaningfulEntries) {
+			const norm = normalizeArchivePath(entry.entryName);
+			if (!norm) continue;
+			const parts = norm.split("/").filter(Boolean);
+			if (parts.length > 0 && parts[0]) {
+				topSegments.add(parts[0]);
+			}
+		}
+
+		const hasSingleRootFolder =
+			topSegments.size === 1 &&
+			meaningfulEntries.some((e) => {
+				const norm = normalizeArchivePath(e.entryName);
+				const parts = norm.split("/").filter(Boolean);
+				return parts.length > 1 || e.isDirectory;
+			});
+
 		const rootFolderName = hasSingleRootFolder
-			? rootEntries[0]?.entryName.split("/")[0]
+			? Array.from(topSegments)[0] || ""
 			: "";
 
 		if (targetServerId) {
 			sftp = await getSFTPConnection(targetServerId);
 		}
 		for (const entry of zipEntries) {
+			if (isJunkEntry(entry.entryName)) continue;
+
 			let filePath = normalizeArchivePath(entry.entryName);
 
 			if (
 				hasSingleRootFolder &&
 				rootFolderName &&
-				filePath.startsWith(`${rootFolderName}/`)
+				(filePath === rootFolderName || filePath.startsWith(`${rootFolderName}/`))
 			) {
-				filePath = filePath.slice(rootFolderName?.length + 1);
+				if (filePath === rootFolderName) {
+					// Enclosing folder itself, skip creating redundant empty directory
+					continue;
+				}
+				filePath = filePath.slice(rootFolderName.length + 1);
 			}
 
 			if (!filePath) continue;

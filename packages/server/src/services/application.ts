@@ -38,6 +38,7 @@ import type { z } from "zod";
 import { encodeBase64 } from "../utils/docker/utils";
 import { getDokployUrl } from "./admin";
 import { detectFrameworkFromDirectory } from "./app-detector";
+import { getBuildAppDirectory } from "../utils/filesystem/directory";
 import {
 	createDeployment,
 	createDeploymentPreview,
@@ -70,35 +71,41 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 	const application = await findApplicationById(applicationId);
 	if (!application) return;
 
-	let detectedPort = 3000;
+	let explicitPort: number | undefined;
 	// 1. Check if application environment variables explicitly set PORT
 	if (application.env) {
 		try {
 			const parsedEnv = parse(application.env);
 			if (parsedEnv?.PORT && !Number.isNaN(Number(parsedEnv.PORT))) {
-				detectedPort = Number(parsedEnv.PORT);
+				explicitPort = Number(parsedEnv.PORT);
 			}
 		} catch {}
-	} else if (application.buildType === "static") {
-		detectedPort = 80;
-	} else if (
+	}
+	if (
+		!explicitPort &&
 		application.ports &&
 		application.ports.length > 0 &&
 		application.ports[0]?.targetPort
 	) {
-		detectedPort = application.ports[0].targetPort;
-	} else {
-		const { APPLICATIONS_PATH } = paths(!!application.serverId);
-		const codeDir = path.join(APPLICATIONS_PATH, application.appName, "code");
-		if (fs.existsSync(codeDir)) {
+		explicitPort = application.ports[0].targetPort;
+	}
+
+	let detectedPort = explicitPort ?? 3000;
+	if (!explicitPort) {
+		if (application.buildType === "static") {
+			detectedPort = 80;
+		} else {
 			try {
-				const detection = await detectFrameworkFromDirectory(codeDir);
-				if (detection?.suggestedPort) {
-					detectedPort = detection.suggestedPort;
+				const buildDir = getBuildAppDirectory(application);
+				if (fs.existsSync(buildDir)) {
+					const detection = await detectFrameworkFromDirectory(buildDir);
+					if (detection?.suggestedPort) {
+						detectedPort = detection.suggestedPort;
+					}
+				} else if (application.buildType === "dockerfile") {
+					detectedPort = 80;
 				}
 			} catch {}
-		} else if (application.buildType === "dockerfile") {
-			detectedPort = 80;
 		}
 	}
 
@@ -431,10 +438,11 @@ export const deployApplication = async ({
 		}
 
 		try {
-			const { APPLICATIONS_PATH } = paths(!!serverId);
-			const codePath = path.join(APPLICATIONS_PATH, application.appName, "code");
-			if (fs.existsSync(codePath)) {
-				const inspection = await detectFrameworkFromDirectory(codePath);
+			const buildAppDir = getBuildAppDirectory(application);
+			if (fs.existsSync(buildAppDir)) {
+				const inspection = await detectFrameworkFromDirectory(buildAppDir);
+				const packageManager = inspection.packageManager || (inspection.language === "Python" ? "pip" : "npm");
+				const startupCommand = application.command || inspection.startCommand || "default";
 				const stage1Log = `
 ================================================================================
 Stage 1/7: Configuration & Framework Detection
@@ -442,8 +450,8 @@ Stage 1/7: Configuration & Framework Detection
 Selected Builder:      ${application.buildType}
 Detected Framework:    ${inspection.framework} (${inspection.language})
 Runtime Version:       ${inspection.runtimeVersion || "standard"}
-Package Manager:       ${inspection.packageManager || "npm"}
-Startup Command:       ${application.command || inspection.startCommand || "default"}
+Package Manager:       ${packageManager}
+Startup Command:       ${startupCommand}
 Expected Port:         ${inspection.suggestedPort}
 ================================================================================
 `;

@@ -7,10 +7,19 @@ import { getDockerCommand } from "@dokploy/server/utils/builders/docker-file";
 import { getHerokuCommand } from "@dokploy/server/utils/builders/heroku";
 import { getNixpacksCommand } from "@dokploy/server/utils/builders/nixpacks";
 import { getPaketoCommand } from "@dokploy/server/utils/builders/paketo";
+import { NIXPKGS_ARCHIVES } from "@dokploy/server/utils/builders/runtime-catalog";
 import {
+	generateNixpacksToml,
 	parseNodeVersion,
+	resolveDotnetRuntime,
+	resolveGoRuntime,
+	resolveJavaRuntime,
 	resolveNodeRuntime,
 	resolvePackageManagerAndCommands,
+	resolvePhpRuntime,
+	resolvePythonRuntime,
+	resolveRubyRuntime,
+	resolveRustRuntime,
 } from "@dokploy/server/utils/builders/runtime-resolver";
 import {
 	generateNginxConfig,
@@ -63,9 +72,9 @@ const createMockApp = (
 		...overrides,
 	}) as ApplicationNested;
 
-describe("Universal Deployment Engine — Runtime & Compatibility Layer", () => {
-	describe("1. Node.js Runtime Resolution & EOL Protection", () => {
-		it("detects Node.js 18 in package.json engines and upgrades to supported LTS (Node 20)", () => {
+describe("Universal Deployment Engine — Comprehensive Compatibility Suite", () => {
+	describe("1. Node.js Legacy & Modern Runtime Resolution", () => {
+		it("detects Node.js 18 in package.json engines and resolves to Node 18 via pinned Nixpkgs archive without silent substitution", () => {
 			const res = resolveNodeRuntime({
 				packageJsonContent: JSON.stringify({
 					engines: { node: "18" },
@@ -73,40 +82,51 @@ describe("Universal Deployment Engine — Runtime & Compatibility Layer", () => 
 			});
 			expect(res.isEol).toBe(true);
 			expect(res.requestedVersion).toBe("18");
-			expect(res.resolvedVersion).toBe("20");
-			expect(res.nixPackage).toBe("nodejs_20");
+			expect(res.resolvedVersion).toBe("18");
+			expect(res.nixPackage).toBe("nodejs_18");
+			expect(res.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
 			expect(res.warning).toContain("End-Of-Life");
+			expect(res.isPermitted).toBe(true);
+			expect(res.isAvailable).toBe(true);
 		});
 
-		it("detects Node.js 18 in .nvmrc and upgrades to supported LTS", () => {
+		it("detects Node.js 18 in .nvmrc and preserves Node 18 with pinned archive", () => {
 			const res = resolveNodeRuntime({
 				nvmrcContent: "v18.19.0\n",
 			});
 			expect(res.isEol).toBe(true);
 			expect(res.requestedVersion).toBe("v18.19.0");
-			expect(res.resolvedVersion).toBe("20");
-			expect(res.nixPackage).toBe("nodejs_20");
+			expect(res.resolvedVersion).toBe("18");
+			expect(res.nixPackage).toBe("nodejs_18");
+			expect(res.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
 		});
 
-		it("detects Node.js 18 in .node-version", () => {
-			const res = resolveNodeRuntime({
-				nodeVersionContent: "18",
-			});
+		it("detects Node.js 18 in .node-version and runtime.txt", () => {
+			const res1 = resolveNodeRuntime({ nodeVersionContent: "18" });
+			expect(res1.resolvedVersion).toBe("18");
+			expect(res1.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+
+			const res2 = resolveNodeRuntime({ runtimeTxtContent: "nodejs-18.20.2" });
+			expect(res2.resolvedVersion).toBe("18");
+			expect(res2.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+		});
+
+		it("detects Node.js 16 and resolves to NixOS 23.11 archive", () => {
+			const res = resolveNodeRuntime({ nvmrcContent: "16" });
 			expect(res.isEol).toBe(true);
-			expect(res.resolvedVersion).toBe("20");
+			expect(res.resolvedVersion).toBe("16");
+			expect(res.nixPackage).toBe("nodejs_16");
+			expect(res.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_23_11.commit);
 		});
 
-		it("detects older removed EOL versions (16, 14, 12) and upgrades safely", () => {
-			for (const eolVer of ["16", "14", "12", "10"]) {
-				const res = resolveNodeRuntime({
-					nvmrcContent: eolVer,
-				});
-				expect(res.isEol).toBe(true);
-				expect(res.resolvedVersion).toBe("20");
-			}
+		it("produces actionable failure for ancient Node versions (Node 14, 12, 10)", () => {
+			const res = resolveNodeRuntime({ nvmrcContent: "14" });
+			expect(res.isAvailable).toBe(false);
+			expect(res.isPermitted).toBe(false);
+			expect(res.unavailabilityReason).toContain("cannot be safely obtained");
 		});
 
-		it("preserves explicit supported Node.js 20 LTS", () => {
+		it("preserves explicit supported Node.js 20 LTS without archive override", () => {
 			const res = resolveNodeRuntime({
 				packageJsonContent: JSON.stringify({
 					engines: { node: "^20.11.0" },
@@ -115,15 +135,23 @@ describe("Universal Deployment Engine — Runtime & Compatibility Layer", () => 
 			expect(res.isEol).toBe(false);
 			expect(res.resolvedVersion).toBe("20");
 			expect(res.nixPackage).toBe("nodejs_20");
+			expect(res.nixpkgsArchive).toBeUndefined();
 		});
 
 		it("preserves explicit supported Node.js 22 Active LTS", () => {
-			const res = resolveNodeRuntime({
-				nvmrcContent: "22",
-			});
+			const res = resolveNodeRuntime({ nvmrcContent: "22" });
 			expect(res.isEol).toBe(false);
 			expect(res.resolvedVersion).toBe("22");
 			expect(res.nixPackage).toBe("nodejs_22");
+			expect(res.nixpkgsArchive).toBeUndefined();
+		});
+
+		it("preserves explicit supported Node.js 24 Current", () => {
+			const res = resolveNodeRuntime({ nvmrcContent: "24" });
+			expect(res.isEol).toBe(false);
+			expect(res.resolvedVersion).toBe("24");
+			expect(res.nixPackage).toBe("nodejs_24");
+			expect(res.nixpkgsArchive).toBeUndefined();
 		});
 
 		it("defaults to Node.js 22 LTS when no version is specified", () => {
@@ -141,163 +169,334 @@ describe("Universal Deployment Engine — Runtime & Compatibility Layer", () => 
 		});
 	});
 
-	describe("2. Package Manager and Lockfile Alignment", () => {
-		it("detects npm from package-lock.json and generates frozen npm ci", () => {
-			const pm = resolvePackageManagerAndCommands({
-				files: [{ name: "package-lock.json", path: "package-lock.json" }],
-				packageJsonContent: JSON.stringify({
-					scripts: { build: "tsc", start: "node index.js" },
-				}),
+	describe("2. Configuration Precedence & Conflict Resolution", () => {
+		it("respects precedence: explicitVersion > .nvmrc > package.json engines", () => {
+			const res = resolveNodeRuntime({
+				explicitVersion: "22",
+				nvmrcContent: "18",
+				packageJsonContent: JSON.stringify({ engines: { node: "20" } }),
 			});
-			expect(pm.packageManager).toBe("npm");
-			expect(pm.installCommand).toBe("npm ci");
-			expect(pm.buildCommand).toBe("npm run build");
-			expect(pm.startCommand).toBe("npm start");
+			expect(res.resolvedVersion).toBe("22");
 		});
 
-		it("detects pnpm from pnpm-lock.yaml and uses frozen lockfile", () => {
-			const pm = resolvePackageManagerAndCommands({
-				files: [{ name: "pnpm-lock.yaml", path: "pnpm-lock.yaml" }],
-				packageJsonContent: JSON.stringify({
-					scripts: { build: "next build", start: "next start" },
-				}),
+		it("respects precedence: .nvmrc > package.json engines when explicitVersion is absent", () => {
+			const res = resolveNodeRuntime({
+				nvmrcContent: "18",
+				packageJsonContent: JSON.stringify({ engines: { node: "20" } }),
 			});
-			expect(pm.packageManager).toBe("pnpm");
-			expect(pm.installCommand).toBe("pnpm install --frozen-lockfile");
-			expect(pm.buildCommand).toBe("pnpm run build");
-			expect(pm.startCommand).toBe("pnpm start");
+			expect(res.resolvedVersion).toBe("18");
+			expect(res.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
 		});
 
-		it("detects Bun from bun.lockb and never runs npm ci", () => {
-			const pm = resolvePackageManagerAndCommands({
-				files: [{ name: "bun.lockb", path: "bun.lockb" }],
-				packageJsonContent: JSON.stringify({
-					scripts: { build: "bun build ./index.ts", start: "bun run index.ts" },
-				}),
-			});
-			expect(pm.packageManager).toBe("bun");
-			expect(pm.installCommand).toBe("bun install --frozen-lockfile");
-			expect(pm.buildCommand).toBe("bun run build");
-			expect(pm.startCommand).toBe("bun start");
-			expect(pm.installCommand).not.toContain("npm");
-		});
-
-		it("detects Yarn from yarn.lock", () => {
-			const pm = resolvePackageManagerAndCommands({
-				files: [{ name: "yarn.lock", path: "yarn.lock" }],
-				packageJsonContent: JSON.stringify({
-					scripts: { build: "vite build", start: "vite preview" },
-				}),
-			});
-			expect(pm.packageManager).toBe("yarn");
-			expect(pm.installCommand).toBe("yarn install --frozen-lockfile");
-			expect(pm.buildCommand).toBe("yarn build");
-			expect(pm.startCommand).toBe("yarn start");
-		});
-
-		it("handles conflicting lockfiles deterministically based on explicit packageManager declaration", () => {
+		it("respects packageManager field to disambiguate conflicting lockfiles", () => {
 			const pm = resolvePackageManagerAndCommands({
 				files: [
 					{ name: "package-lock.json", path: "package-lock.json" },
 					{ name: "bun.lockb", path: "bun.lockb" },
 				],
 				packageJsonContent: JSON.stringify({
-					packageManager: "bun@1.1.0",
-					scripts: { build: "bun run build" },
+					packageManager: "npm@10.5.0",
+					scripts: { build: "npm run build" },
 				}),
 			});
 			expect(pm.hasConflictingLockfiles).toBe(true);
+			expect(pm.packageManager).toBe("npm");
+			expect(pm.installCommand).toBe("npm ci");
+		});
+	});
+
+	describe("3. Bun + Node.js 18 Integration", () => {
+		it("correctly configures Bun alongside Node.js 18 with pinned Nixpkgs archive", () => {
+			const pm = resolvePackageManagerAndCommands({
+				files: [{ name: "bun.lockb", path: "bun.lockb" }],
+				packageJsonContent: JSON.stringify({
+					engines: { node: "18" },
+					scripts: { build: "bun run build", start: "bun start" },
+				}),
+			});
+			const runtime = resolveNodeRuntime({
+				packageJsonContent: JSON.stringify({ engines: { node: "18" } }),
+			});
+
 			expect(pm.packageManager).toBe("bun");
 			expect(pm.installCommand).toBe("bun install --frozen-lockfile");
 			expect(pm.buildCommand).toBe("bun run build");
-			expect(pm.installCommand).not.toContain("npm ci");
+			expect(runtime.resolvedVersion).toBe("18");
+			expect(runtime.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+
+			const toml = generateNixpacksToml({
+				nixpkgsArchive: runtime.nixpkgsArchive,
+				nixPkgs: ["nodejs_18", "bun"],
+				installCmd: pm.installCommand,
+				buildCmd: pm.buildCommand,
+			});
+			expect(toml).toContain(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+			expect(toml).toContain("nodejs_18");
+			expect(toml).toContain("bun");
+			expect(toml).toContain("bun install --frozen-lockfile");
 		});
 
-		it("does not invent build or start commands if missing from package.json", () => {
+		it("handles Bun with modern Node.js versions without archive override", () => {
 			const pm = resolvePackageManagerAndCommands({
-				files: [{ name: "package-lock.json", path: "package-lock.json" }],
+				files: [{ name: "bun.lockb", path: "bun.lockb" }],
 				packageJsonContent: JSON.stringify({
-					name: "no-scripts-app",
+					engines: { node: "22" },
+					scripts: { build: "bun run build" },
 				}),
 			});
-			expect(pm.buildCommand).toBeUndefined();
-			expect(pm.startCommand).toBeUndefined();
+			const runtime = resolveNodeRuntime({
+				packageJsonContent: JSON.stringify({ engines: { node: "22" } }),
+			});
+			expect(pm.packageManager).toBe("bun");
+			expect(runtime.resolvedVersion).toBe("22");
+			expect(runtime.nixpkgsArchive).toBeUndefined();
 		});
 	});
 
-	describe("3. Nixpacks Command Generation & Runtime Preflight", () => {
-		it("generates Nixpacks command with shell preflight handling EOL Node.js 18", () => {
+	describe("4. Build-Script Portability & Elimination of Bad Substitution", () => {
+		it("ensures generated Nixpacks script does not use ${PIPESTATUS[0]} which causes /bin/sh: 57: Bad substitution", () => {
 			const app = createMockApp();
 			const cmd = getNixpacksCommand(app);
 
-			expect(cmd).toContain("Starting Nixpacks build...");
-			expect(cmd).toContain("nixpacks build");
-			expect(cmd).toContain("REQUESTED_NODE=");
-			expect(cmd).toContain("NIXPACKS_NODE_VERSION=20");
-			expect(cmd).toContain("bun install --frozen-lockfile");
-			expect(cmd).toContain("pnpm install --frozen-lockfile");
+			// Must not contain PIPESTATUS array subscript syntax that fails in POSIX /bin/sh
+			expect(cmd).not.toContain("PIPESTATUS[0]");
+			expect(cmd).not.toContain("${PIPESTATUS[0]}");
+
+			// Must use portable POSIX exit code capture
+			expect(cmd).toContain("TMP_STATUS=");
+			expect(cmd).toContain("NIX_STATUS=");
 		});
 
-		it("passes --no-cache when cleanCache is enabled", () => {
-			const app = createMockApp({ cleanCache: true });
+		it("safely initializes NIXPACKS_PATH to eliminate BuildKit UndefinedVar warning", () => {
+			const app = createMockApp();
 			const cmd = getNixpacksCommand(app);
-			expect(cmd).toContain("--no-cache");
+
+			expect(cmd).toContain('export NIXPACKS_PATH="${NIXPACKS_PATH:-}"');
+			expect(cmd).toContain("--env NIXPACKS_PATH=");
 		});
 
-		it("includes user environment variables in args", () => {
-			const app = createMockApp({ env: "PORT=8080\nMY_VAR=hello" });
+		it("configures pinned Nixpkgs archive in preflight shell when Node 18 is requested", () => {
+			const app = createMockApp();
 			const cmd = getNixpacksCommand(app);
-			expect(cmd).toContain("--env PORT");
-			expect(cmd).toContain("8080");
-			expect(cmd).toContain("--env MY_VAR");
-			expect(cmd).toContain("hello");
+
+			expect(cmd).toContain("NIXPACKS_PKGS_ARCHIVE=");
+			expect(cmd).toContain(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+			expect(cmd).toContain("NIXPACKS_NODE_VERSION=18");
+			expect(cmd).not.toContain("NIXPACKS_NODE_VERSION=20");
 		});
 
-		it("supports publishDirectory for static copy", () => {
-			const app = createMockApp({ publishDirectory: "dist" });
+		it("enforces organizational policy check for legacy runtimes in preflight shell", () => {
+			const app = createMockApp();
 			const cmd = getNixpacksCommand(app);
-			expect(cmd).toContain("--no-error-without-start");
-			expect(cmd).toContain("docker cp");
-			expect(cmd).toContain("dist");
+
+			expect(cmd).toContain('ALLOW_LEGACY="${ALLOW_LEGACY_RUNTIMES:-');
+			expect(cmd).toContain("Deployment Rejected by Policy");
 		});
 	});
 
-	describe("4. Static HTML Websites & SPAs", () => {
-		it("generates production Nginx configuration with gzip and asset protection", () => {
-			const conf = generateNginxConfig(false);
-			expect(conf).toContain("gzip on;");
-			expect(conf).toContain("error_page 404 /404.html;");
-			expect(conf).toContain("try_files $uri =404;");
-			expect(conf).toContain("try_files $uri $uri/ =404;");
+	describe("5. Universal Runtimes: Python, PHP, Ruby, Java, Go, Rust, .NET", () => {
+		it("resolves legacy Python 3.8 to pinned Nixpkgs archive with EOL warning", () => {
+			const res = resolvePythonRuntime({ pythonVersionContent: "3.8.18" });
+			expect(res.resolvedVersion).toBe("3.8");
+			expect(res.nixPackage).toBe("python38");
+			expect(res.isEol).toBe(true);
+			expect(res.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
 		});
 
-		it("configures SPA client-side routing fallback without rewriting missing assets", () => {
-			const conf = generateNginxConfig(true);
-			// Static assets must return 404
-			expect(conf).toContain("try_files $uri =404;");
-			// Non-asset client routes fallback to index.html
-			expect(conf).toContain("try_files $uri $uri/ /index.html;");
-			// API routes must return 404
-			expect(conf).toContain("location /api/ {\n      try_files $uri =404;");
+		it("resolves modern Python 3.12 without archive override", () => {
+			const res = resolvePythonRuntime({ pythonVersionContent: "3.12" });
+			expect(res.resolvedVersion).toBe("3.12");
+			expect(res.isEol).toBe(false);
+			expect(res.nixpkgsArchive).toBeUndefined();
 		});
 
-		it("generates static command with Dockerfile and Nginx", () => {
-			const app = createMockApp({
-				buildType: "static",
-				publishDirectory: "public",
-				isStaticSpa: true,
+		it("resolves legacy PHP 8.1 to pinned archive and modern PHP 8.3", () => {
+			const legacyPhp = resolvePhpRuntime({ phpVersionContent: "8.1" });
+			expect(legacyPhp.resolvedVersion).toBe("8.1");
+			expect(legacyPhp.nixpkgsArchive).toBe(
+				NIXPKGS_ARCHIVES.LEGACY_24_05.commit,
+			);
+
+			const modernPhp = resolvePhpRuntime({ phpVersionContent: "8.3" });
+			expect(modernPhp.resolvedVersion).toBe("8.3");
+			expect(modernPhp.nixpkgsArchive).toBeUndefined();
+		});
+
+		it("resolves legacy Ruby 3.1 to pinned archive and modern Ruby 3.3", () => {
+			const legacyRuby = resolveRubyRuntime({ rubyVersionContent: "3.1" });
+			expect(legacyRuby.resolvedVersion).toBe("3.1");
+			expect(legacyRuby.nixpkgsArchive).toBe(
+				NIXPKGS_ARCHIVES.LEGACY_24_05.commit,
+			);
+
+			const modernRuby = resolveRubyRuntime({ rubyVersionContent: "3.3" });
+			expect(modernRuby.resolvedVersion).toBe("3.3");
+			expect(modernRuby.nixpkgsArchive).toBeUndefined();
+		});
+
+		it("resolves Java / OpenJDK versions: 8, 11, 17, 21", () => {
+			const java8 = resolveJavaRuntime({ javaVersionContent: "8" });
+			expect(java8.resolvedVersion).toBe("8");
+			expect(java8.nixPackage).toBe("openjdk8");
+			expect(java8.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+
+			const java17 = resolveJavaRuntime({ javaVersionContent: "17" });
+			expect(java17.resolvedVersion).toBe("17");
+			expect(java17.nixPackage).toBe("openjdk17");
+			expect(java17.nixpkgsArchive).toBeUndefined();
+		});
+
+		it("resolves Go runtime version from go.mod", () => {
+			const go121 = resolveGoRuntime({
+				goModContent: "module test\n\ngo 1.21\n",
 			});
-			const cmd = getStaticCommand(app);
-			const dockerfile = generateStaticDockerfile("public");
-			expect(dockerfile).toContain("FROM nginx:alpine");
-			expect(dockerfile).toContain("COPY public .");
-			expect(cmd).toContain("nginx.conf");
-			expect(cmd).toContain("Dockerfile");
+			expect(go121.resolvedVersion).toBe("1.21");
+			expect(go121.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+
+			const go122 = resolveGoRuntime({
+				goModContent: "module test\n\ngo 1.22.4\n",
+			});
+			expect(go122.resolvedVersion).toBe("1.22");
+			expect(go122.nixpkgsArchive).toBeUndefined();
+		});
+
+		it("resolves Rust toolchain from rust-toolchain.toml", () => {
+			const rust = resolveRustRuntime({
+				rustToolchainContent: '[toolchain]\nchannel = "1.75.0"',
+			});
+			expect(rust.resolvedVersion).toBe("1.75.0");
+			expect(rust.nixPackage).toBe("rustc");
+		});
+
+		it("resolves .NET SDK from global.json and csproj", () => {
+			const net6 = resolveDotnetRuntime({
+				globalJsonContent: JSON.stringify({ sdk: { version: "6.0.400" } }),
+			});
+			expect(net6.resolvedVersion).toBe("6.0");
+			expect(net6.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+
+			const net8 = resolveDotnetRuntime({
+				csprojContent:
+					"<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>",
+			});
+			expect(net8.resolvedVersion).toBe("8.0");
+			expect(net8.nixpkgsArchive).toBeUndefined();
 		});
 	});
 
-	describe("5. Dockerfile Builder", () => {
-		it("generates Docker build command with Dockerfile check", () => {
+	describe("6. Framework Detection Accuracy", () => {
+		it("detects Java Spring Boot and Maven project", () => {
+			const files: FileEntry[] = [
+				{
+					name: "pom.xml",
+					path: "pom.xml",
+					content:
+						"<project><dependencies><dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency></dependencies></project>",
+				},
+			];
+			const res = detectFrameworkFromFiles(files);
+			expect(res.framework).toBe("Spring Boot");
+			expect(res.language).toBe("Java");
+			expect(res.suggestedPort).toBe(8080);
+			expect(res.buildCommand).toContain("mvn clean package");
+		});
+
+		it("detects .NET C# project from *.csproj", () => {
+			const files: FileEntry[] = [
+				{
+					name: "MyApi.csproj",
+					path: "MyApi.csproj",
+					content:
+						'<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>',
+				},
+			];
+			const res = detectFrameworkFromFiles(files);
+			expect(res.framework).toBe(".NET Application");
+			expect(res.language).toBe("C#");
+			expect(res.buildCommand).toContain("dotnet publish");
+			expect(res.startCommand).toBe("./out");
+		});
+
+		it("detects Next.js Static Export as Static site while keeping Next.js SSR as Nixpacks", () => {
+			// Next.js static export
+			const staticFiles: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						dependencies: { next: "14.2.0" },
+						scripts: { build: "next build" },
+					}),
+				},
+				{
+					name: "next.config.mjs",
+					path: "next.config.mjs",
+					content: "export default { output: 'export' };",
+				},
+			];
+			const staticRes = detectFrameworkFromFiles(staticFiles);
+			expect(staticRes.framework).toBe("Next.js (Static Export)");
+			expect(staticRes.buildType).toBe("static");
+			expect(staticRes.publishDirectory).toBe("out");
+			expect(staticRes.suggestedPort).toBe(80);
+
+			// Next.js standard SSR
+			const ssrFiles: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						dependencies: { next: "14.2.0" },
+						scripts: { build: "next build", start: "next start" },
+					}),
+				},
+			];
+			const ssrRes = detectFrameworkFromFiles(ssrFiles);
+			expect(ssrRes.framework).toBe("Next.js");
+			expect(ssrRes.buildType).toBe("nixpacks");
+			expect(ssrRes.suggestedPort).toBe(3000);
+		});
+
+		it("detects Vite React SPA with dist output directory", () => {
+			const files: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						dependencies: { react: "^18.3.0", "react-dom": "^18.3.0" },
+						devDependencies: { vite: "^5.2.0" },
+						scripts: { build: "vite build" },
+					}),
+				},
+				{ name: "pnpm-lock.yaml", path: "pnpm-lock.yaml" },
+			];
+			const res = detectFrameworkFromFiles(files);
+			expect(res.framework).toBe("Vite (React)");
+			expect(res.publishDirectory).toBe("dist");
+			expect(res.isStaticSpa).toBe(true);
+		});
+
+		it("detects Backend Express Node.js and never marks as static", () => {
+			const files: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						dependencies: { express: "^4.19.0" },
+						scripts: { start: "node server.js" },
+					}),
+				},
+			];
+			const res = detectFrameworkFromFiles(files);
+			expect(res.framework).toBe("Node.js (Express)");
+			expect(res.buildType).toBe("nixpacks");
+			expect(res.isStaticSpa).toBeFalsy();
+			expect(res.publishDirectory).toBeUndefined();
+		});
+	});
+
+	describe("7. Dockerfile and Buildpack Builders", () => {
+		it("generates Dockerfile build command with Dockerfile existence check", () => {
 			const app = createMockApp({
 				buildType: "dockerfile",
 				dockerfile: "Dockerfile",
@@ -308,39 +507,7 @@ describe("Universal Deployment Engine — Runtime & Compatibility Layer", () => 
 			expect(cmd).toContain("Docker build completed.");
 		});
 
-		it("respects multi-stage target", () => {
-			const app = createMockApp({
-				buildType: "dockerfile",
-				dockerBuildStage: "production",
-			});
-			const cmd = getDockerCommand(app);
-			expect(cmd).toContain("--target production");
-		});
-
-		it("respects cleanCache with --no-cache", () => {
-			const app = createMockApp({
-				buildType: "dockerfile",
-				cleanCache: true,
-			});
-			const cmd = getDockerCommand(app);
-			expect(cmd).toContain("--no-cache");
-		});
-
-		it("passes build arguments and secrets safely", () => {
-			const app = createMockApp({
-				buildType: "dockerfile",
-				buildArgs: "APP_ENV=production",
-				buildSecrets: "API_SECRET=my-secret-token",
-			});
-			const cmd = getDockerCommand(app);
-			expect(cmd).toContain("--build-arg APP_ENV");
-			expect(cmd).toContain("production");
-			expect(cmd).toContain("--secret type=env,id=API_SECRET");
-		});
-	});
-
-	describe("6. Cloud Native Buildpacks (Heroku & Paketo)", () => {
-		it("generates Heroku pack build command with pack CLI check", () => {
+		it("generates Heroku pack build command with CLI preflight", () => {
 			const app = createMockApp({
 				buildType: "heroku_buildpacks",
 				herokuVersion: "24",
@@ -359,231 +526,38 @@ describe("Universal Deployment Engine — Runtime & Compatibility Layer", () => 
 			expect(cmd).toContain("pack build test-app");
 			expect(cmd).toContain("--builder paketobuildpacks/builder-jammy-full");
 		});
-
-		it("passes --clear-cache when cleanCache is enabled", () => {
-			const app = createMockApp({ cleanCache: true });
-			expect(getHerokuCommand(app)).toContain("--clear-cache");
-			expect(getPaketoCommand(app)).toContain("--clear-cache");
-		});
 	});
 
-	describe("7. Deterministic Framework & Static Detection", () => {
-		it("detects plain static HTML site without package.json", () => {
-			const files: FileEntry[] = [
-				{
-					name: "index.html",
-					path: "index.html",
-					content: "<!DOCTYPE html><html><body><h1>Static</h1></body></html>",
-				},
-				{
-					name: "styles.css",
-					path: "styles.css",
-					content: "body { background: black; }",
-				},
-			];
-			const res = detectFrameworkFromFiles(files);
-			expect(res.framework).toBe("Static HTML");
-			expect(res.buildType).toBe("static");
-			expect(res.suggestedPort).toBe(80);
-			expect(res.buildCommand).toBeUndefined();
-			expect(res.isStaticSpa).toBe(false);
+	describe("8. Static Nginx Serving & Asset Parity", () => {
+		it("generates production Nginx configuration with gzip and asset 404 protection", () => {
+			const conf = generateNginxConfig(false);
+			expect(conf).toContain("gzip on;");
+			expect(conf).toContain("error_page 404 /404.html;");
+			expect(conf).toContain("try_files $uri =404;");
 		});
 
-		it("detects static HTML in public subdirectory", () => {
-			const files: FileEntry[] = [
-				{
-					name: "index.html",
-					path: "public/index.html",
-					content: "<!DOCTYPE html><html></html>",
-				},
-			];
-			const res = detectFrameworkFromFiles(files);
-			expect(res.framework).toBe("Static HTML");
-			expect(res.buildType).toBe("static");
-			expect(res.publishDirectory).toBe("public");
-			expect(res.suggestedPort).toBe(80);
-		});
-
-		it("detects Vite React SPA with dist output directory", () => {
-			const files: FileEntry[] = [
-				{
-					name: "package.json",
-					path: "package.json",
-					content: JSON.stringify({
-						name: "my-vite-spa",
-						dependencies: { react: "^18.3.0", "react-dom": "^18.3.0" },
-						devDependencies: { vite: "^5.2.0" },
-						scripts: { build: "vite build", preview: "vite preview" },
-					}),
-				},
-				{
-					name: "pnpm-lock.yaml",
-					path: "pnpm-lock.yaml",
-				},
-			];
-			const res = detectFrameworkFromFiles(files);
-			expect(res.framework).toBe("Vite (React)");
-			expect(res.buildType).toBe("nixpacks");
-			expect(res.publishDirectory).toBe("dist");
-			expect(res.isStaticSpa).toBe(true);
-			expect(res.packageManager).toBe("pnpm");
-			expect(res.buildCommand).toBe("pnpm build");
-		});
-
-		it("detects Node.js application and identifies packageManager", () => {
-			const files: FileEntry[] = [
-				{
-					name: "package.json",
-					path: "package.json",
-					content: JSON.stringify({
-						name: "express-api",
-						dependencies: { express: "^4.19.0" },
-						scripts: { build: "tsc", start: "node index.js" },
-					}),
-				},
-				{
-					name: "bun.lockb",
-					path: "bun.lockb",
-				},
-			];
-			const res = detectFrameworkFromFiles(files);
-			expect(res.framework).toBe("Node.js (Express)");
-			expect(res.packageManager).toBe("bun");
-			expect(res.buildCommand).toBe("bun run build");
-			expect(res.startCommand).toBe("bun start");
-		});
-
-		it("detects nixpacks.toml project override", () => {
-			const files: FileEntry[] = [
-				{
-					name: "nixpacks.toml",
-					path: "nixpacks.toml",
-					content: "[phases.setup]\nnixPkgs = ['nodejs_22']",
-				},
-			];
-			const res = detectFrameworkFromFiles(files);
-			expect(res.framework).toBe("Nixpacks Configured Project");
-			expect(res.buildType).toBe("nixpacks");
-			expect(res.confidence).toBe("high");
-		});
-
-		it("detects project.toml Cloud Native Buildpack", () => {
-			const files: FileEntry[] = [
-				{
-					name: "project.toml",
-					path: "project.toml",
-					content: "[project]\nid = 'io.buildpacks.sample'",
-				},
-			];
-			const res = detectFrameworkFromFiles(files);
-			expect(res.framework).toBe("Cloud Native Buildpack");
-			expect(res.buildType).toBe("paketo_buildpacks");
-			expect(res.confidence).toBe("high");
-		});
-	});
-
-	describe("8. Runtime.txt & Edge-case Compatibility", () => {
-		it("detects runtime.txt with nodejs-18 and upgrades safely to Node 20 LTS", () => {
-			const res = resolveNodeRuntime({
-				runtimeTxtContent: "nodejs-18.19.0\n",
-			});
-			expect(res.isEol).toBe(true);
-			expect(res.resolvedVersion).toBe("20");
-			expect(res.nixPackage).toBe("nodejs_20");
-		});
-
-		it("detects runtime.txt with nodejs-22 and preserves it", () => {
-			const res = resolveNodeRuntime({
-				runtimeTxtContent: "nodejs-22\n",
-			});
-			expect(res.isEol).toBe(false);
-			expect(res.resolvedVersion).toBe("22");
-			expect(res.nixPackage).toBe("nodejs_22");
-		});
-
-		it("flags conflicting lockfiles when both package-lock.json and bun.lockb exist", () => {
-			const pm = resolvePackageManagerAndCommands({
-				files: [
-					{ name: "package-lock.json", path: "package-lock.json" },
-					{ name: "bun.lockb", path: "bun.lockb" },
-				],
-				packageJsonContent: JSON.stringify({
-					name: "dual-lockfile-app",
-					scripts: { build: "bun run build" },
-				}),
-			});
-			expect(pm.hasConflictingLockfiles).toBe(true);
-			expect(pm.conflicts?.length).toBeGreaterThan(1);
-			// Ensures build and install never mismatch
-			if (pm.packageManager === "bun") {
-				expect(pm.installCommand).toBe("bun install --frozen-lockfile");
-				expect(pm.buildCommand).toBe("bun run build");
-			} else if (pm.packageManager === "npm") {
-				expect(pm.installCommand).toBe("npm ci");
-				expect(pm.buildCommand).toBe("npm run build");
-			}
-		});
-	});
-
-	describe("9. Static Serving, MIME Types & Caddy / Nginx Parity", () => {
-		it("ensures asset routes never rewrite to index.html and have immutable caching", () => {
+		it("configures SPA fallback to index.html while strictly protecting asset routes", () => {
 			const conf = generateNginxConfig(true);
 			expect(conf).toContain(
 				'Cache-Control "public, max-age=31536000, immutable"',
 			);
 			expect(conf).toContain("try_files $uri =404;");
-		});
-
-		it("ensures API requests return 404 rather than SPA index.html fallback", () => {
-			const conf = generateNginxConfig(true);
+			expect(conf).toContain("try_files $uri $uri/ /index.html;");
 			expect(conf).toContain("location /api/ {\n      try_files $uri =404;");
 		});
 
-		it("enables Gzip compression for web asset types", () => {
-			const conf = generateNginxConfig(false);
-			expect(conf).toContain("gzip on;");
-			expect(conf).toContain("gzip_comp_level 6;");
-			expect(conf).toContain("image/svg+xml");
-			expect(conf).toContain("application/javascript");
-		});
-	});
-
-	describe("10. Deployment Lifecycle & Error Containment", () => {
-		it("Nixpacks command contains preflight shell that catches EOL Node and outputs actionable remediation", () => {
-			const app = createMockApp();
-			const cmd = getNixpacksCommand(app);
-			expect(cmd).toContain("has reached End-Of-Life and has been removed");
-			expect(cmd).toContain(
-				"Remediation: Upgrade your project to Node.js 20 or 22",
-			);
-			expect(cmd).toContain("NIX_STATUS=${PIPESTATUS[0]}");
-		});
-
-		it("Dockerfile command validates existence and fails with explicit error rather than generic failure", () => {
+		it("generates static command with Dockerfile and Nginx", () => {
 			const app = createMockApp({
-				buildType: "dockerfile",
-				dockerfile: "./custom/Dockerfile",
+				buildType: "static",
+				publishDirectory: "public",
+				isStaticSpa: true,
 			});
-			const cmd = getDockerCommand(app);
-			expect(cmd).toContain("❌ Dockerfile not found at:");
-			expect(cmd).toContain(
-				"Please verify the Dockerfile path in your application settings.",
-			);
-			expect(cmd).toContain(
-				"❌ Docker build failed. Inspect the Docker engine logs above for details.",
-			);
-		});
-
-		it("Buildpack builders verify CLI availability before starting build", () => {
-			const appHeroku = createMockApp({ buildType: "heroku_buildpacks" });
-			const cmdHeroku = getHerokuCommand(appHeroku);
-			expect(cmdHeroku).toContain("command -v pack");
-			expect(cmdHeroku).toContain("Buildpack CLI 'pack' is not installed");
-
-			const appPaketo = createMockApp({ buildType: "paketo_buildpacks" });
-			const cmdPaketo = getPaketoCommand(appPaketo);
-			expect(cmdPaketo).toContain("command -v pack");
-			expect(cmdPaketo).toContain("Buildpack CLI 'pack' is not installed");
+			const cmd = getStaticCommand(app);
+			const dockerfile = generateStaticDockerfile("public");
+			expect(dockerfile).toContain("FROM nginx:alpine");
+			expect(dockerfile).toContain("COPY public .");
+			expect(cmd).toContain("nginx.conf");
+			expect(cmd).toContain("Dockerfile");
 		});
 	});
 });

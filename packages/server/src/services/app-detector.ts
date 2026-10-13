@@ -1,8 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+	resolveDotnetRuntime,
+	resolveGoRuntime,
+	resolveJavaRuntime,
 	resolveNodeRuntime,
 	resolvePackageManagerAndCommands,
+	resolvePhpRuntime,
+	resolvePythonRuntime,
+	resolveRubyRuntime,
+	resolveRustRuntime,
 } from "../utils/builders/runtime-resolver";
 import { findApplicationById } from "./application";
 
@@ -30,7 +37,22 @@ export interface DetectionResult {
 	startCommand?: string;
 	publishDirectory?: string;
 	dockerfilePath?: string;
-	packageManager?: "npm" | "pnpm" | "yarn" | "bun";
+	packageManager?:
+		| "npm"
+		| "pnpm"
+		| "yarn"
+		| "bun"
+		| "pip"
+		| "poetry"
+		| "pipenv"
+		| "uv"
+		| "composer"
+		| "bundler"
+		| "maven"
+		| "gradle"
+		| "cargo"
+		| "go"
+		| "dotnet";
 	runtimeVersion?: string;
 	isStaticSpa?: boolean;
 	confidence: "high" | "medium" | "low";
@@ -52,7 +74,7 @@ export interface ApplicationInspection {
 
 /**
  * Deterministically inspect a virtual or physical list of files to detect framework,
- * builder, start/build commands, and default container ports without requiring AI.
+ * builder, start/build commands, runtime versions, and default container ports.
  */
 export const detectFrameworkFromFiles = (
 	files: FileEntry[],
@@ -150,7 +172,7 @@ export const detectFrameworkFromFiles = (
 		};
 	}
 
-	// Package Manager and Runtime detection via runtime-resolver
+	// File items for JS package manager resolution
 	const fileItems = Array.from(fileMap.values()).map((f) => ({
 		name: f.name || path.basename(f.path),
 		path: f.path,
@@ -184,7 +206,7 @@ export const detectFrameworkFromFiles = (
 					? "bun run"
 					: "npm run";
 
-	// 3. Node.js / JavaScript / TypeScript projects (package.json)
+	// 5. Node.js / JavaScript / TypeScript projects (package.json)
 	if (pkgFile?.content) {
 		try {
 			const pkg = JSON.parse(pkgFile.content);
@@ -194,8 +216,35 @@ export const detectFrameworkFromFiles = (
 			};
 			const scripts = pkg.scripts || {};
 
+			// Check for static export config in Next.js
+			const nextConfigFile =
+				getFile("next.config.js") ||
+				getFile("next.config.mjs") ||
+				getFile("next.config.ts");
+			const isNextStaticExport =
+				Boolean(
+					nextConfigFile?.content &&
+						/output\s*:\s*["']export["']/.test(nextConfigFile.content),
+				) || Boolean(scripts.build?.includes("next export"));
+
 			// Next.js
 			if (allDeps.next) {
+				if (isNextStaticExport) {
+					return {
+						framework: "Next.js (Static Export)",
+						language: allDeps.typescript ? "TypeScript" : "JavaScript",
+						buildType: "static",
+						suggestedPort: 80,
+						publishDirectory: "out",
+						isStaticSpa: false,
+						runtimeVersion: nodeRuntime.resolvedVersion,
+						packageManager,
+						confidence: "high",
+						reason:
+							"Detected Next.js with static HTML export (output: 'export')",
+					};
+				}
+
 				return {
 					framework: "Next.js",
 					language: allDeps.typescript ? "TypeScript" : "JavaScript",
@@ -207,6 +256,7 @@ export const detectFrameworkFromFiles = (
 							? "bun start"
 							: `${packageManager} start`
 						: undefined,
+					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
 					reason: "Detected Next.js in package.json dependencies",
@@ -234,6 +284,7 @@ export const detectFrameworkFromFiles = (
 					suggestedPort: 3000,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
 					startCommand: "node .output/server/index.mjs",
+					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
 					reason: "Detected Nuxt in package.json dependencies",
@@ -249,6 +300,7 @@ export const detectFrameworkFromFiles = (
 					suggestedPort: 3000,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
 					startCommand: scripts.start ? `${runPrefix} start` : undefined,
+					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
 					reason: "Detected Remix in package.json dependencies",
@@ -264,6 +316,7 @@ export const detectFrameworkFromFiles = (
 					suggestedPort: 4321,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
 					startCommand: scripts.start ? `${runPrefix} start` : undefined,
+					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
 					reason: "Detected Astro in package.json dependencies",
@@ -279,6 +332,7 @@ export const detectFrameworkFromFiles = (
 					suggestedPort: 3000,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
 					startCommand: "node build",
+					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
 					reason: "Detected SvelteKit in package.json dependencies",
@@ -298,13 +352,14 @@ export const detectFrameworkFromFiles = (
 						: scripts.start
 							? `${runPrefix} start`
 							: undefined,
+					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
 					reason: "Detected NestJS in package.json dependencies",
 				};
 			}
 
-			// Vite (React / Vue / Svelte SPA or preview)
+			// Vite (React / Vue / Svelte SPA)
 			if (allDeps.vite) {
 				const spaType = allDeps.react
 					? "React"
@@ -331,7 +386,7 @@ export const detectFrameworkFromFiles = (
 				};
 			}
 
-			// Express / Fastify / Koa / Hono
+			// Backend Node.js: Express / Fastify / Koa / Hono
 			if (allDeps.express || allDeps.fastify || allDeps.koa || allDeps.hono) {
 				const fwName = allDeps.express
 					? "Express"
@@ -353,6 +408,7 @@ export const detectFrameworkFromFiles = (
 						: pkg.main
 							? `node ${pkg.main}`
 							: "node index.js",
+					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
 					reason: `Detected ${fwName} backend in package.json`,
@@ -377,20 +433,35 @@ export const detectFrameworkFromFiles = (
 					startCommand: scripts.start
 						? `${runPrefix} start`
 						: `node ${pkg.main || "index.js"}`,
+					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "medium",
 					reason: "Detected Node.js project with start script",
 				};
 			}
-		} catch {
-			// fallback if package.json cannot be parsed
-		}
+		} catch {}
 	}
 
-	// 4. Python Projects
-	const reqs = getFile("requirements.txt") || getFile("pyproject.toml");
-	if (reqs?.content) {
-		const lower = reqs.content.toLowerCase();
+	// 6. Python Projects
+	const reqs =
+		getFile("requirements.txt") ||
+		getFile("pyproject.toml") ||
+		getFile("pipfile") ||
+		getFile("pipfile.lock") ||
+		getFile("poetry.lock") ||
+		getFile("uv.lock") ||
+		getFile("pdm.lock");
+
+	if (reqs?.content || getFile("main.py") || getFile(".python-version")) {
+		const pythonVerFile = getFile(".python-version");
+		const pyRuntime = resolvePythonRuntime({
+			pythonVersionContent: pythonVerFile?.content,
+			runtimeTxtContent: runtimeTxtFile?.content,
+			pyprojectContent: getFile("pyproject.toml")?.content,
+			pipfileContent: getFile("pipfile")?.content,
+		});
+
+		const lower = (reqs?.content || "").toLowerCase();
 		if (lower.includes("fastapi") || lower.includes("uvicorn")) {
 			return {
 				framework: "FastAPI",
@@ -398,6 +469,7 @@ export const detectFrameworkFromFiles = (
 				buildType: "nixpacks",
 				suggestedPort: 8000,
 				startCommand: "uvicorn main:app --host 0.0.0.0 --port 8000",
+				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
 				reason: "Detected FastAPI dependencies in requirements/pyproject",
 			};
@@ -409,6 +481,7 @@ export const detectFrameworkFromFiles = (
 				buildType: "nixpacks",
 				suggestedPort: 8000,
 				startCommand: "python manage.py runserver 0.0.0.0:8000",
+				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
 				reason: "Detected Django dependencies in requirements/pyproject",
 			};
@@ -420,6 +493,7 @@ export const detectFrameworkFromFiles = (
 				buildType: "nixpacks",
 				suggestedPort: 5000,
 				startCommand: "flask run --host=0.0.0.0 --port=5000",
+				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
 				reason: "Detected Flask dependencies in requirements/pyproject",
 			};
@@ -432,6 +506,7 @@ export const detectFrameworkFromFiles = (
 				suggestedPort: 8501,
 				startCommand:
 					"streamlit run app.py --server.port=8501 --server.address=0.0.0.0",
+				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
 				reason: "Detected Streamlit dependencies",
 			};
@@ -442,63 +517,175 @@ export const detectFrameworkFromFiles = (
 			language: "Python",
 			buildType: "nixpacks",
 			suggestedPort: 8000,
+			runtimeVersion: pyRuntime.resolvedVersion,
 			confidence: "medium",
-			reason: "Detected Python requirements configuration",
+			reason: "Detected Python project configuration",
 		};
 	}
 
-	// 5. Go Projects
+	// 7. Java Projects (Maven, Gradle, Spring Boot)
+	const pomXml = getFile("pom.xml");
+	const buildGradle = getFile("build.gradle") || getFile("build.gradle.kts");
+	const gradlew = getFile("gradlew");
+
+	if (pomXml || buildGradle || gradlew) {
+		const javaRuntime = resolveJavaRuntime({
+			javaVersionContent: getFile(".java-version")?.content,
+			pomXmlContent: pomXml?.content,
+			gradleContent: buildGradle?.content,
+		});
+
+		const isMaven = Boolean(pomXml);
+		const isGradle = Boolean(buildGradle || gradlew);
+		const isSpringBoot =
+			Boolean(pomXml?.content?.toLowerCase().includes("spring-boot")) ||
+			Boolean(buildGradle?.content?.toLowerCase().includes("spring-boot"));
+
+		return {
+			framework: isSpringBoot
+				? "Spring Boot"
+				: isMaven
+					? "Java (Maven)"
+					: "Java (Gradle)",
+			language: "Java",
+			buildType: "nixpacks",
+			suggestedPort: 8080,
+			buildCommand: isMaven
+				? "mvn clean package -DskipTests"
+				: "./gradlew build -x test",
+			runtimeVersion: `JDK ${javaRuntime.resolvedVersion}`,
+			packageManager: isMaven ? "maven" : "gradle",
+			confidence: "high",
+			reason: isSpringBoot
+				? "Detected Spring Boot application"
+				: `Detected Java build configuration (${isMaven ? "pom.xml" : "Gradle"})`,
+		};
+	}
+
+	// 8. .NET / C# Projects
+	const csproj = Array.from(fileMap.values()).find(
+		(f) =>
+			f.name.toLowerCase().endsWith(".csproj") ||
+			f.path.toLowerCase().endsWith(".csproj"),
+	);
+	const globalJson = getFile("global.json");
+	const slnFile = Array.from(fileMap.values()).find((f) =>
+		f.name.toLowerCase().endsWith(".sln"),
+	);
+
+	if (csproj || globalJson || slnFile) {
+		const dotnetRuntime = resolveDotnetRuntime({
+			globalJsonContent: globalJson?.content,
+			csprojContent: csproj?.content,
+		});
+
+		return {
+			framework: ".NET Application",
+			language: "C#",
+			buildType: "nixpacks",
+			suggestedPort: 5000,
+			buildCommand: "dotnet publish -c Release -o out",
+			startCommand: "./out",
+			runtimeVersion: `.NET SDK ${dotnetRuntime.resolvedVersion}`,
+			packageManager: "dotnet",
+			confidence: "high",
+			reason: `Detected .NET project (${csproj?.name || slnFile?.name || "global.json"})`,
+		};
+	}
+
+	// 9. Go Projects
 	const goMod = getFile("go.mod");
 	if (goMod) {
+		const goRuntime = resolveGoRuntime({
+			goVersionContent: getFile(".go-version")?.content,
+			goModContent: goMod.content,
+		});
+
 		return {
 			framework: "Go Application",
 			language: "Go",
 			buildType: "nixpacks",
 			suggestedPort: 8080,
+			buildCommand: "go build -o main .",
+			startCommand: "./main",
+			runtimeVersion: `Go ${goRuntime.resolvedVersion}`,
+			packageManager: "go",
 			confidence: "high",
-			reason: "Detected Go module (go.mod)",
+			reason: `Detected Go module (go.mod: ${goRuntime.resolvedVersion})`,
 		};
 	}
 
-	// 6. Rust Projects
+	// 10. Rust Projects
 	const cargoToml = getFile("cargo.toml");
 	if (cargoToml) {
+		const rustRuntime = resolveRustRuntime({
+			rustToolchainContent:
+				getFile("rust-toolchain.toml")?.content ||
+				getFile("rust-toolchain")?.content,
+			cargoTomlContent: cargoToml.content,
+		});
+
 		return {
 			framework: "Rust Application",
 			language: "Rust",
 			buildType: "nixpacks",
 			suggestedPort: 8080,
+			buildCommand: "cargo build --release",
+			runtimeVersion: `Rust ${rustRuntime.resolvedVersion}`,
+			packageManager: "cargo",
 			confidence: "high",
 			reason: "Detected Rust Cargo project (Cargo.toml)",
 		};
 	}
 
-	// 7. PHP Projects
+	// 11. PHP Projects
 	const composer = getFile("composer.json");
 	const indexPhp = getFile("index.php");
 	if (composer?.content || indexPhp) {
+		const phpRuntime = resolvePhpRuntime({
+			phpVersionContent: getFile(".php-version")?.content,
+			composerJsonContent: composer?.content,
+		});
+
 		const isLaravel = composer?.content?.toLowerCase().includes("laravel");
+		const isSymfony = composer?.content?.toLowerCase().includes("symfony");
+
 		return {
-			framework: isLaravel ? "Laravel" : "PHP Application",
+			framework: isLaravel
+				? "Laravel"
+				: isSymfony
+					? "Symfony"
+					: "PHP Application",
 			language: "PHP",
 			buildType: "nixpacks",
 			suggestedPort: 80,
+			runtimeVersion: `PHP ${phpRuntime.resolvedVersion}`,
+			packageManager: "composer",
 			confidence: "high",
 			reason: isLaravel
 				? "Detected Laravel framework in composer.json"
-				: "Detected PHP application",
+				: isSymfony
+					? "Detected Symfony framework in composer.json"
+					: "Detected PHP application",
 		};
 	}
 
-	// 8. Ruby Projects
+	// 12. Ruby Projects
 	const gemfile = getFile("gemfile");
 	if (gemfile?.content) {
+		const rubyRuntime = resolveRubyRuntime({
+			rubyVersionContent: getFile(".ruby-version")?.content,
+			gemfileContent: gemfile.content,
+		});
+
 		const isRails = gemfile.content.toLowerCase().includes("rails");
 		return {
 			framework: isRails ? "Ruby on Rails" : "Ruby Application",
 			language: "Ruby",
 			buildType: "nixpacks",
 			suggestedPort: 3000,
+			runtimeVersion: `Ruby ${rubyRuntime.resolvedVersion}`,
+			packageManager: "bundler",
 			confidence: "high",
 			reason: isRails
 				? "Detected Ruby on Rails in Gemfile"
@@ -506,7 +693,7 @@ export const detectFrameworkFromFiles = (
 		};
 	}
 
-	// 9. Static HTML site (root or subfolder without requiring Node.js)
+	// 13. Static HTML site (root or subfolder without requiring Node.js)
 	const indexHtml =
 		getFile("index.html") ||
 		getFile("public/index.html") ||
@@ -571,7 +758,9 @@ export const detectFrameworkFromDirectory = async (
 			if (entry.isFile()) {
 				const filePath = path.join(dirPath, entry.name);
 				let content: string | undefined;
-				// Read small configuration files for inspection
+				const lowerName = entry.name.toLowerCase();
+
+				// Read configuration files for inspection
 				if (
 					[
 						"package.json",
@@ -582,10 +771,19 @@ export const detectFrameworkFromDirectory = async (
 						"compose.yaml",
 						"requirements.txt",
 						"pyproject.toml",
+						"pipfile",
+						"pipfile.lock",
+						"poetry.lock",
+						"uv.lock",
+						"pdm.lock",
 						"gemfile",
 						"composer.json",
 						"go.mod",
 						"cargo.toml",
+						"pom.xml",
+						"build.gradle",
+						"build.gradle.kts",
+						"global.json",
 						"pnpm-lock.yaml",
 						"yarn.lock",
 						"bun.lockb",
@@ -593,18 +791,25 @@ export const detectFrameworkFromDirectory = async (
 						"package-lock.json",
 						".nvmrc",
 						".node-version",
+						".python-version",
+						".php-version",
+						".ruby-version",
+						".java-version",
+						"next.config.js",
+						"next.config.mjs",
+						"next.config.ts",
 						"index.html",
 						"index.php",
-					].includes(entry.name.toLowerCase())
+					].includes(lowerName) ||
+					lowerName.endsWith(".csproj") ||
+					lowerName.endsWith(".sln")
 				) {
 					try {
 						const stat = await fs.promises.stat(filePath);
 						if (stat.size < 512 * 1024) {
 							content = await fs.promises.readFile(filePath, "utf-8");
 						}
-					} catch {
-						// ignore unreadable files
-					}
+					} catch {}
 				}
 
 				files.push({
@@ -640,7 +845,6 @@ export const inspectApplication = async (
 	const app = await findApplicationById(applicationId);
 	let detected: DetectionResult;
 
-	// In dokploy, cloned code is placed in APPLICATIONS_PATH/appName/code or custom paths
 	const appPath =
 		process.env.APPLICATIONS_PATH ||
 		(process.platform === "win32"
@@ -689,10 +893,14 @@ export const inspectApplication = async (
 						"compose.yaml",
 						"requirements.txt",
 						"pyproject.toml",
+						"pipfile",
 						"gemfile",
 						"composer.json",
 						"go.mod",
 						"cargo.toml",
+						"pom.xml",
+						"build.gradle",
+						"global.json",
 						"index.html",
 						"pnpm-lock.yaml",
 						"yarn.lock",
@@ -701,13 +909,15 @@ export const inspectApplication = async (
 						"package-lock.json",
 						".nvmrc",
 						".node-version",
+						".python-version",
 					];
 
 					for (const item of contents) {
 						if (item.type === "file") {
 							let content: string | undefined;
 							if (
-								checkFileNames.includes(item.name.toLowerCase()) &&
+								(checkFileNames.includes(item.name.toLowerCase()) ||
+									item.name.toLowerCase().endsWith(".csproj")) &&
 								item.size < 100 * 1024
 							) {
 								try {

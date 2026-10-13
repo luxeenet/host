@@ -6,7 +6,9 @@ import { quote } from "shell-quote";
 import { prepareEnvironmentVariablesForShell } from "../docker/utils";
 import { getBuildAppDirectory } from "../filesystem/directory";
 import type { ApplicationNested } from ".";
+import { NIXPKGS_ARCHIVES } from "./runtime-catalog";
 import {
+	generateNixpacksToml,
 	resolveNodeRuntime,
 	resolvePackageManagerAndCommands,
 } from "./runtime-resolver";
@@ -32,10 +34,19 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		args.push("--env", env);
 	}
 
-	// Static inspection if the directory already exists on host
+	// Always ensure NIXPACKS_PATH is initialized to avoid BuildKit UndefinedVar warnings
+	const hasNixpacksPath = envVariables.some((e) =>
+		e.startsWith("NIXPACKS_PATH="),
+	);
+	if (!hasNixpacksPath) {
+		args.push("--env", "NIXPACKS_PATH=");
+	}
+
+	// Static host inspection if the directory already exists on host
 	let preResolvedNodeEnv: string | undefined;
 	let preResolvedInstallCmd: string | undefined;
 	let preResolvedBuildCmd: string | undefined;
+	let preResolvedArchive: string | undefined;
 
 	if (fs.existsSync(buildAppDirectory)) {
 		try {
@@ -69,8 +80,9 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 				runtimeTxtContent,
 			});
 
-			if (runtime.isEol) {
-				preResolvedNodeEnv = runtime.resolvedVersion;
+			preResolvedNodeEnv = runtime.resolvedVersion;
+			if (runtime.nixpkgsArchive) {
+				preResolvedArchive = runtime.nixpkgsArchive;
 			}
 
 			const files = fs.readdirSync(buildAppDirectory).map((name) => ({
@@ -85,6 +97,20 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 
 			preResolvedInstallCmd = pm.installCommand;
 			preResolvedBuildCmd = pm.buildCommand;
+
+			// Write or augment nixpacks.toml if pinned archive is required
+			if (runtime.nixpkgsArchive) {
+				const nixpacksTomlPath = path.join(buildAppDirectory, "nixpacks.toml");
+				if (!fs.existsSync(nixpacksTomlPath)) {
+					fs.writeFileSync(
+						nixpacksTomlPath,
+						generateNixpacksToml({
+							nixpkgsArchive: runtime.nixpkgsArchive,
+						}),
+						"utf-8",
+					);
+				}
+			}
 		} catch {}
 	}
 
@@ -98,9 +124,19 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	const hasCustomerBuildCmd = envVariables.some((e) =>
 		e.startsWith("NIXPACKS_BUILD_CMD="),
 	);
+	const hasCustomerArchive = envVariables.some(
+		(e) =>
+			e.startsWith("NIXPACKS_PKGS_ARCHIVE=") ||
+			e.startsWith("NIXPACKS_NIXPKGS_ARCHIVE="),
+	);
 
 	if (preResolvedNodeEnv && !hasCustomerNodeVersion) {
 		args.push("--env", `NIXPACKS_NODE_VERSION=${preResolvedNodeEnv}`);
+	}
+
+	if (preResolvedArchive && !hasCustomerArchive) {
+		args.push("--env", `NIXPACKS_PKGS_ARCHIVE=${preResolvedArchive}`);
+		args.push("--env", `NIXPACKS_NIXPKGS_ARCHIVE=${preResolvedArchive}`);
 	}
 
 	if (preResolvedInstallCmd && !hasCustomerInstallCmd) {
@@ -121,9 +157,16 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 
 	const command = `nixpacks ${args.join(" ")}`;
 
+	// Pinned Nixpkgs archive hashes
+	const archive2405 = NIXPKGS_ARCHIVES.LEGACY_24_05.commit;
+	const archive2311 = NIXPKGS_ARCHIVES.LEGACY_23_11.commit;
+
 	// Shell preflight ensures runtime compatibility even if repository was cloned inside the deploy bash script
 	const preflightShell = `
 # HatDot Runtime Compatibility & Nixpacks Preflight
+# Safe environment variable initialization
+export NIXPACKS_PATH="\${NIXPACKS_PATH:-}"
+
 if [ -d ${quote([buildAppDirectory])} ]; then
   REQUESTED_NODE=""
   if [ -f "${buildAppDirectory}/.nvmrc" ]; then
@@ -136,10 +179,47 @@ if [ -d ${quote([buildAppDirectory])} ]; then
     REQUESTED_NODE=$(node -e "try { const p = require('${buildAppDirectory}/package.json'); const n = (p.engines && p.engines.node) ? p.engines.node.replace(/^[v^~>=<\\\\s]+/, '').split('.')[0] : ''; console.log(n); } catch(e){}" 2>/dev/null || true)
   fi
 
-  if [ "$REQUESTED_NODE" = "18" ] || [ "$REQUESTED_NODE" = "16" ] || [ "$REQUESTED_NODE" = "14" ] || [ "$REQUESTED_NODE" = "12" ]; then
-    echo "⚠️ Notice: Project specifies Node.js $REQUESTED_NODE which reached End-Of-Life and has been removed from Nixpkgs." ;
-    echo "✓ HatDot automatically configuring Nixpacks to use supported LTS: Node.js 20." ;
-    export NIXPACKS_NODE_VERSION=20 ;
+  # Check policy for End-Of-Life runtimes
+  ALLOW_LEGACY="\${ALLOW_LEGACY_RUNTIMES:-\${HATDOT_ALLOW_EOL_RUNTIMES:-true}}"
+
+  if [ "$REQUESTED_NODE" = "18" ]; then
+    if [ "$ALLOW_LEGACY" = "false" ]; then
+      echo "❌ Deployment Rejected by Policy: Node.js 18 reached End-Of-Life on 2025-04-30 and organizational policy forbids unmaintained runtimes." ;
+      echo "💡 Remediation: Upgrade your project to Node.js 20 or 22 in package.json / .nvmrc, or contact your administrator." ;
+      exit 1;
+    fi
+    echo "⚠️ Notice: Project specifies Node.js 18.x which reached End-Of-Life upstream on 2025-04-30." ;
+    echo "✓ HatDot applying verified pinned package source (NixOS 24.05 LTS: ${archive2405}) for Node.js 18.x compatibility." ;
+    export NIXPACKS_NODE_VERSION=18 ;
+    export NIXPACKS_PKGS_ARCHIVE="${archive2405}" ;
+    export NIXPACKS_NIXPKGS_ARCHIVE="${archive2405}" ;
+
+    # Write / configure nixpacks.toml with pinned archive if not already present
+    if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
+      printf '# Generated by HatDot for Node.js 18 compatibility\n[phases.setup]\nnixpkgsArchive = "%s"\n' "${archive2405}" > "${buildAppDirectory}/nixpacks.toml" ;
+    elif ! grep -q "nixpkgsArchive" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
+      printf '\n[phases.setup]\nnixpkgsArchive = "%s"\n' "${archive2405}" >> "${buildAppDirectory}/nixpacks.toml" ;
+    fi
+  elif [ "$REQUESTED_NODE" = "16" ]; then
+    if [ "$ALLOW_LEGACY" = "false" ]; then
+      echo "❌ Deployment Rejected by Policy: Node.js 16 reached End-Of-Life on 2023-09-11 and organizational policy forbids unmaintained runtimes." ;
+      echo "💡 Remediation: Upgrade your project to Node.js 20 or 22 in package.json / .nvmrc." ;
+      exit 1;
+    fi
+    echo "⚠️ Notice: Project specifies Node.js 16.x which reached End-Of-Life upstream." ;
+    echo "✓ HatDot applying verified pinned package source (NixOS 23.11 LTS: ${archive2311}) for Node.js 16.x compatibility." ;
+    export NIXPACKS_NODE_VERSION=16 ;
+    export NIXPACKS_PKGS_ARCHIVE="${archive2311}" ;
+    export NIXPACKS_NIXPKGS_ARCHIVE="${archive2311}" ;
+    if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
+      printf '# Generated by HatDot for Node.js 16 compatibility\n[phases.setup]\nnixpkgsArchive = "%s"\n' "${archive2311}" > "${buildAppDirectory}/nixpacks.toml" ;
+    elif ! grep -q "nixpkgsArchive" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
+      printf '\n[phases.setup]\nnixpkgsArchive = "%s"\n' "${archive2311}" >> "${buildAppDirectory}/nixpacks.toml" ;
+    fi
+  elif [ "$REQUESTED_NODE" = "14" ] || [ "$REQUESTED_NODE" = "12" ] || [ "$REQUESTED_NODE" = "10" ]; then
+    echo "❌ Deployment Error: Node.js $REQUESTED_NODE reached End-Of-Life and cannot be safely obtained from verified package sources." ;
+    echo "💡 Remediation: Upgrade your project to Node.js 18, 20, or 22 in package.json / .nvmrc, or deploy using a custom Dockerfile." ;
+    exit 1;
   fi
 
   # Align lockfiles and prevent conflicting package manager executions (e.g. npm ci with bun)
@@ -150,6 +230,7 @@ if [ -d ${quote([buildAppDirectory])} ]; then
     fi
 
     if [ -f "${buildAppDirectory}/bun.lockb" ] || [ -f "${buildAppDirectory}/bun.lock" ]; then
+      echo "✓ Detected Bun package manager. Applying frozen install." ;
       export NIXPACKS_INSTALL_CMD="bun install --frozen-lockfile" ;
       if [ "$HAS_BUILD_SCRIPT" = "true" ] && [ -z "$NIXPACKS_BUILD_CMD" ]; then
         export NIXPACKS_BUILD_CMD="bun run build" ;
@@ -174,20 +255,24 @@ if [ -d ${quote([buildAppDirectory])} ]; then
 fi
 `;
 
+	// Portable POSIX shell status capture replacing Bash-specific PIPESTATUS[0] to prevent Bad substitution
 	let bashCommand = `
 echo "Starting Nixpacks build..." ;
 ${preflightShell}
 
 TMP_LOG=$(mktemp 2>/dev/null || echo "/tmp/nixpacks-$$.log")
-(${command}) 2>&1 | tee "$TMP_LOG"
-NIX_STATUS=\${PIPESTATUS[0]}
+TMP_STATUS=$(mktemp 2>/dev/null || echo "/tmp/nixpacks-status-$$.log")
 
-if [ $NIX_STATUS -ne 0 ]; then
+(${command}; echo "$?" > "$TMP_STATUS") 2>&1 | tee "$TMP_LOG"
+NIX_STATUS=$(cat "$TMP_STATUS" 2>/dev/null || echo 1)
+rm -f "$TMP_STATUS" 2>/dev/null || true
+
+if [ "$NIX_STATUS" -ne 0 ]; then
   if grep -qi "has reached End-Of-Life and has been removed" "$TMP_LOG" 2>/dev/null; then
     echo "❌ Deployment Error: The requested runtime has reached End-Of-Life and was removed from the package repository." ;
-    echo "💡 Remediation: Upgrade your project to Node.js 20 or 22 in package.json / .nvmrc, or select Dockerfile builder in settings." ;
+    echo "💡 Remediation: Specify a compatible package archive or upgrade to a modern supported runtime in settings." ;
   else
-    echo "❌ Nixpacks build failed" ;
+    echo "❌ Nixpacks build failed with exit code $NIX_STATUS" ;
   fi
   rm -f "$TMP_LOG" 2>/dev/null || true
   exit 1;

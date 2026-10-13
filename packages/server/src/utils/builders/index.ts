@@ -179,7 +179,7 @@ export const mechanizeDockerContainer = async (
 		const inspect = await service.inspect();
 
 		await service.update({
-			version: Number.parseInt(inspect.Version.Index),
+			version: Number.parseInt(inspect.Version.Index, 10),
 			...settings,
 			TaskTemplate: {
 				...settings.TaskTemplate,
@@ -254,5 +254,6 @@ export * from "./heroku";
 export * from "./nixpacks";
 export * from "./paketo";
 export * from "./railpack";
+export * from "./runtime-catalog";
 export * from "./runtime-resolver";
 export * from "./static";

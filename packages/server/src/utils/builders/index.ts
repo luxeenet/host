@@ -21,6 +21,7 @@ import { getNixpacksCommand } from "./nixpacks";
 import { getPaketoCommand } from "./paketo";
 import { getRailpackCommand } from "./railpack";
 import { getStaticCommand } from "./static";
+import { extractPortFromCommand } from "./runtime-resolver";
 
 // NIXPACKS codeDirectory = where is the path of the code directory
 // HEROKU codeDirectory = where is the path of the code directory
@@ -142,17 +143,31 @@ export const mechanizeDockerContainer = async (
 			if (application.buildType === "static") {
 				targetPort = 80;
 			} else {
-				try {
-					const buildDir = getBuildAppDirectory(application);
-					if (fs.existsSync(buildDir)) {
-						const { detectFrameworkFromDirectorySync } = require("@dokploy/server/services/app-detector");
-						const det = detectFrameworkFromDirectorySync(buildDir);
-						if (det?.suggestedPort) {
-							targetPort = det.suggestedPort;
+				const cmdPort = extractPortFromCommand(application.command);
+				if (cmdPort) {
+					targetPort = cmdPort;
+				} else {
+					try {
+						const buildDir = getBuildAppDirectory(application);
+						if (fs.existsSync(buildDir)) {
+							let detectFrameworkFromDirectorySync: any;
+							try {
+								detectFrameworkFromDirectorySync = require("../../services/app-detector").detectFrameworkFromDirectorySync;
+							} catch {
+								try {
+									detectFrameworkFromDirectorySync = require("@dokploy/server/services/app-detector").detectFrameworkFromDirectorySync;
+								} catch {}
+							}
+							if (detectFrameworkFromDirectorySync) {
+								const det = detectFrameworkFromDirectorySync(buildDir);
+								if (det?.suggestedPort && (application.buildType !== "nixpacks" || det.suggestedPort !== 80)) {
+									targetPort = det.suggestedPort;
+								}
+							}
 						}
-					}
-				} catch {}
-				targetPort = targetPort ?? 3000;
+					} catch {}
+					targetPort = targetPort ?? 3000;
+				}
 			}
 		}
 		envVariables.push(`PORT=${targetPort}`);

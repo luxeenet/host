@@ -143,6 +143,8 @@ export const isRecognizedProjectManifest = (fileName: string): boolean => {
 	);
 };
 
+export { extractPortFromCommand } from "../utils/builders/runtime-resolver";
+
 export const resolveProjectRoot = (
 	baseDir: string,
 	explicitSubPath?: string,

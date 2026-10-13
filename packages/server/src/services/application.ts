@@ -37,7 +37,10 @@ import { eq } from "drizzle-orm";
 import type { z } from "zod";
 import { encodeBase64 } from "../utils/docker/utils";
 import { getDokployUrl } from "./admin";
-import { detectFrameworkFromDirectory } from "./app-detector";
+import {
+	detectFrameworkFromDirectory,
+	extractPortFromCommand,
+} from "./app-detector";
 import { getBuildAppDirectory } from "../utils/filesystem/directory";
 import {
 	createDeployment,
@@ -92,7 +95,10 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 
 	let detectedPort = explicitPort ?? 3000;
 	if (!explicitPort) {
-		if (application.buildType === "static") {
+		const cmdPort = extractPortFromCommand(application.command);
+		if (cmdPort) {
+			detectedPort = cmdPort;
+		} else if (application.buildType === "static") {
 			detectedPort = 80;
 		} else {
 			try {
@@ -100,7 +106,11 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 				if (fs.existsSync(buildDir)) {
 					const detection = await detectFrameworkFromDirectory(buildDir);
 					if (detection?.suggestedPort) {
-						detectedPort = detection.suggestedPort;
+						if (application.buildType === "nixpacks" && detection.suggestedPort === 80) {
+							detectedPort = 3000;
+						} else {
+							detectedPort = detection.suggestedPort;
+						}
 					}
 				} else if (application.buildType === "dockerfile") {
 					detectedPort = 80;
@@ -443,6 +453,13 @@ export const deployApplication = async ({
 				const inspection = await detectFrameworkFromDirectory(buildAppDir);
 				const packageManager = inspection.packageManager || (inspection.language === "Python" ? "pip" : "npm");
 				const startupCommand = application.command || inspection.startCommand || "default";
+				let expectedPort = inspection.suggestedPort;
+				const cmdPort = extractPortFromCommand(startupCommand);
+				if (cmdPort) {
+					expectedPort = cmdPort;
+				} else if (application.buildType === "nixpacks" && expectedPort === 80) {
+					expectedPort = 3000;
+				}
 				const stage1Log = `
 ================================================================================
 Stage 1/7: Configuration & Framework Detection
@@ -452,7 +469,7 @@ Detected Framework:    ${inspection.framework} (${inspection.language})
 Runtime Version:       ${inspection.runtimeVersion || "standard"}
 Package Manager:       ${packageManager}
 Startup Command:       ${startupCommand}
-Expected Port:         ${inspection.suggestedPort}
+Expected Port:         ${expectedPort}
 ================================================================================
 `;
 				await appendDeploymentLog(deployment.logPath, stage1Log, serverId);

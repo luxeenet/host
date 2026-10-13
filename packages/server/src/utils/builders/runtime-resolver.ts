@@ -821,7 +821,7 @@ export const resolvePackageManagerAndCommands = (params: {
 		startCommand = "node main.js";
 		startCommandSource = "file: main.js";
 	} else if (scripts.preview) {
-		startCommand = `${runCmd} preview -- --port 3000 --host 0.0.0.0`;
+		startCommand = `${runCmd} preview -- --port 4173 --host 0.0.0.0`;
 		startCommandSource = "package.json scripts.preview";
 	}
 
@@ -1022,4 +1022,56 @@ export const inspectDirectoryRuntime = async (dirPath: string) => {
 			packageManager: resolvePackageManagerAndCommands({ files: [] }),
 		};
 	}
+};
+
+/**
+ * Extract target listening port from startup command (e.g. --port 4173, --server.port=8501, 0.0.0.0:8000)
+ */
+export const extractPortFromCommand = (
+	command?: string | null,
+): number | undefined => {
+	if (!command || typeof command !== "string") return undefined;
+
+	// 1. Explicit --server.port=8501 or --server.port 8501
+	const serverPortMatch = command.match(/--server\.port[=\s](\d+)/i);
+	if (serverPortMatch?.[1]) {
+		const port = Number.parseInt(serverPortMatch[1], 10);
+		if (!Number.isNaN(port) && port > 0) return port;
+	}
+
+	// 2. Explicit --port=4173 or --port 4173
+	const portMatch = command.match(/--port[=\s](\d+)/i);
+	if (portMatch?.[1]) {
+		const port = Number.parseInt(portMatch[1], 10);
+		if (!Number.isNaN(port) && port > 0) return port;
+	}
+
+	// 3. Short flag -p 8080 or -p=8080
+	const shortPortMatch = command.match(/(?:^|\s)-p[=\s](\d+)(?:\s|$)/i);
+	if (shortPortMatch?.[1]) {
+		const port = Number.parseInt(shortPortMatch[1], 10);
+		if (!Number.isNaN(port) && port > 0) return port;
+	}
+
+	// 4. Bind address like 0.0.0.0:8000 or 127.0.0.1:8000 or :8000
+	const hostPortMatch = command.match(
+		/(?:(?:0\.0\.0\.0|127\.0\.0\.1|localhost):|:)(\d{2,5})(?:\s|$)/i,
+	);
+	if (hostPortMatch?.[1]) {
+		const port = Number.parseInt(hostPortMatch[1], 10);
+		if (!Number.isNaN(port) && port > 0) return port;
+	}
+
+	// 5. Framework-specific preview or default server patterns
+	if (/\b(?:vite\s+preview|run\s+preview)\b/i.test(command)) {
+		return 4173;
+	}
+	if (/\bstreamlit\b/i.test(command)) {
+		return 8501;
+	}
+	if (/\bgradio\b/i.test(command)) {
+		return 7860;
+	}
+
+	return undefined;
 };

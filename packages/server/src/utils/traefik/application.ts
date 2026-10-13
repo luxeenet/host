@@ -11,6 +11,7 @@ import {
 	writeFileRemote,
 } from "../process/execAsync";
 import type { FileConfig, HttpLoadBalancerService } from "./file-types";
+import { extractPortFromCommand } from "../builders/runtime-resolver";
 
 export const createTraefikConfig = (appName: string, port?: number) => {
 	const defaultPort = port && port > 0 ? port : 80;
@@ -309,6 +310,7 @@ export const resolveDomainUpstreamPort = (
 	domain: Domain,
 	app?: {
 		buildType?: string | null;
+		command?: string | null;
 		ports?: Array<{ targetPort?: number | null }> | null;
 		env?: string | null;
 		environment?: {
@@ -343,7 +345,13 @@ export const resolveDomainUpstreamPort = (
 		}
 	}
 
-	// 3. If the application has explicit container target ports configured
+	// 3. Check if application startup command declares a port (e.g. --port 4173, --server.port=8501)
+	const cmdPort = extractPortFromCommand(app?.command);
+	if (cmdPort) {
+		return cmdPort;
+	}
+
+	// 4. If the application has explicit container target ports configured
 	if (
 		app &&
 		"ports" in app &&
@@ -354,13 +362,13 @@ export const resolveDomainUpstreamPort = (
 		return app.ports[0].targetPort;
 	}
 
-	// 4. If domain has an explicit valid port (customer configured override)
-	if (domain.port && domain.port > 0) {
+	// 5. If domain has an explicit customer-configured port that is not default 3000
+	if (domain.port && domain.port > 0 && domain.port !== 3000 && domain.port !== 80) {
 		return domain.port;
 	}
 
-	// 5. Default port: 3000 (standard for Node.js, Next.js, Rails, Nixpacks)
-	return 3000;
+	// 6. Default port: 3000 (standard for Node.js, Next.js, Rails, Nixpacks)
+	return domain.port && domain.port > 0 ? domain.port : 3000;
 };
 
 export const createServiceConfig = (

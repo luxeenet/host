@@ -132,10 +132,19 @@ export const getBuildAppDirectory = (application: Application) => {
 			const baseCodeDir = path.join(APPLICATIONS_PATH, appName, "code");
 			if (fs.existsSync(baseCodeDir)) {
 				try {
-					const { resolveProjectRoot } = require("@dokploy/server/services/app-detector");
-					const { resolvedRoot } = resolveProjectRoot(baseCodeDir);
-					if (resolvedRoot) {
-						buildPath = resolvedRoot;
+					let resolveProjectRoot: any;
+					try {
+						resolveProjectRoot = require("../../services/app-detector").resolveProjectRoot;
+					} catch {
+						try {
+							resolveProjectRoot = require("@dokploy/server/services/app-detector").resolveProjectRoot;
+						} catch {}
+					}
+					if (resolveProjectRoot) {
+						const { resolvedRoot } = resolveProjectRoot(baseCodeDir);
+						if (resolvedRoot) {
+							buildPath = resolvedRoot;
+						}
 					}
 				} catch {}
 			}

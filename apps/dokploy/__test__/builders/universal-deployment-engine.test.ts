@@ -2,6 +2,7 @@ import {
 	detectFrameworkFromFiles,
 	resolveProjectRoot,
 	isRecognizedProjectManifest,
+	extractPortFromCommand,
 	type FileEntry,
 } from "@dokploy/server/services/app-detector";
 import {
@@ -931,6 +932,7 @@ describe("Universal Deployment Engine — Comprehensive Compatibility Suite", ()
 			expect(nixpacksCmd).toContain("NIXPACKS_INSTALL_CMD='pip install -r requirements.txt'");
 			expect(nixpacksCmd).not.toMatch(/(?<!p)npm install/);
 			expect(nixpacksCmd).not.toContain("NIXPACKS_INSTALL_CMD='npm install'");
+			expect(nixpacksCmd).not.toContain("--provider");
 		});
 
 		it("detects Streamlit configured with pyproject.toml without package.json", () => {
@@ -1245,4 +1247,127 @@ dependencies = [
 			expect(isRecognizedProjectManifest("random.txt")).toBe(false);
 		});
 	});
+
+	describe("14. Nixpacks CLI Compatibility & Vite React Preview Suite", () => {
+		it("demonstrated failure regression: Vite + React deployment never passes unsupported --provider flag", () => {
+			const viteFiles: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						name: "vite-react-app",
+						scripts: {
+							dev: "vite",
+							build: "vite build",
+							preview: "vite preview",
+						},
+						dependencies: {
+							react: "^18.3.1",
+							"react-dom": "^18.3.1",
+						},
+						devDependencies: {
+							vite: "^5.4.2",
+						},
+					}),
+				},
+			];
+
+			const detected = detectFrameworkFromFiles(viteFiles);
+			expect(detected.framework).toBe("Vite (React)");
+			expect(detected.language).toBe("JavaScript");
+			expect(detected.buildType).toBe("nixpacks");
+			expect(detected.suggestedPort).toBe(4173);
+			expect(detected.startCommand).toBe(
+				"npm run preview -- --port 4173 --host 0.0.0.0",
+			);
+
+			const app = createMockApp({
+				appName: "vite-app",
+				command: detected.startCommand,
+				buildType: "nixpacks",
+			});
+
+			const nixpacksCmd = getNixpacksCommand(app);
+			// CRITICAL: The CLI argument --provider MUST NEVER be present!
+			expect(nixpacksCmd).not.toContain("--provider");
+			expect(nixpacksCmd).toContain(
+				"--start-cmd 'npm run preview -- --port 4173 --host 0.0.0.0'",
+			);
+			expect(nixpacksCmd).toContain("PORT=4173");
+			expect(nixpacksCmd).toContain("NIXPACKS_PORT=4173");
+		});
+
+		it("Vite React preview routing resolves Traefik upstream port to 4173 and never confuses with port 80", () => {
+			const app = createMockApp({
+				appName: "vite-preview-app",
+				buildType: "nixpacks",
+				command: "npm run preview -- --port 4173 --host 0.0.0.0",
+			});
+
+			const domain = { port: 3000, host: "vite.example.com" } as any;
+			const upstreamPort = resolveDomainUpstreamPort(domain, app);
+			expect(upstreamPort).toBe(4173);
+			expect(upstreamPort).not.toBe(80);
+			expect(upstreamPort).not.toBe(3000);
+		});
+
+		it("extractPortFromCommand accurately extracts port from various CLI formats", () => {
+			expect(
+				extractPortFromCommand(
+					"npm run preview -- --port 4173 --host 0.0.0.0",
+				),
+			).toBe(4173);
+			expect(
+				extractPortFromCommand(
+					"streamlit run app.py --server.port=8501 --server.address=0.0.0.0",
+				),
+			).toBe(8501);
+			expect(
+				extractPortFromCommand("python manage.py runserver 0.0.0.0:8000"),
+			).toBe(8000);
+			expect(
+				extractPortFromCommand("uvicorn main:app --host 0.0.0.0 --port 8080"),
+			).toBe(8080);
+			expect(extractPortFromCommand("flask run -p 5000")).toBe(5000);
+			expect(extractPortFromCommand("npm run preview")).toBe(4173);
+			expect(extractPortFromCommand("npm start")).toBeUndefined();
+		});
+
+		it("Node.js 18, 20, 22, and 24 Nixpacks invocations never contain unsupported --provider argument", () => {
+			for (const version of ["18", "20", "22", "24"]) {
+				const app = createMockApp({
+					appName: `node-${version}-app`,
+					buildType: "nixpacks",
+					command: "npm start",
+				});
+				const nixpacksCmd = getNixpacksCommand(app);
+				expect(nixpacksCmd).not.toContain("--provider");
+				expect(nixpacksCmd).toContain("--start-cmd 'npm start'");
+			}
+		});
+
+		it("Python Streamlit Nixpacks invocation never contains unsupported --provider argument", () => {
+			const app = createMockApp({
+				appName: "py-streamlit-app",
+				buildType: "nixpacks",
+				command: "streamlit run app.py --server.port=8501 --server.address=0.0.0.0",
+			});
+			const nixpacksCmd = getNixpacksCommand(app);
+			expect(nixpacksCmd).not.toContain("--provider");
+			expect(nixpacksCmd).toContain("PORT=8501");
+			expect(nixpacksCmd).toContain("NIXPACKS_PROVIDER=\"python\"");
+		});
+
+		it("other builders (Dockerfile, Static, Railpack, Heroku, Paketo) remain unaffected and isolated", () => {
+			const app = createMockApp({
+				appName: "multi-builder-app",
+			});
+			expect(getDockerCommand(app)).not.toContain("--provider");
+			expect(getStaticCommand(app)).not.toContain("--provider");
+			expect(getRailpackCommand(app)).not.toContain("--provider");
+			expect(getHerokuCommand(app)).not.toContain("--provider");
+			expect(getPaketoCommand(app)).not.toContain("--provider");
+		});
+	});
 });
+

@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { detectFrameworkFromDirectorySync } from "@dokploy/server/services/app-detector";
+import {
+	detectFrameworkFromDirectorySync,
+	extractPortFromCommand,
+} from "@dokploy/server/services/app-detector";
 import { getStaticCommand } from "@dokploy/server/utils/builders/static";
 import { nanoid } from "nanoid";
 import { quote } from "shell-quote";
@@ -170,6 +173,17 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 					}),
 					"utf-8",
 				);
+			} else if (preResolvedProvider) {
+				try {
+					const existingToml = fs.readFileSync(nixpacksTomlPath, "utf-8");
+					if (!existingToml.includes("providers")) {
+						fs.writeFileSync(
+							nixpacksTomlPath,
+							`providers = ["${preResolvedProvider}"]\n\n${existingToml}`,
+							"utf-8",
+						);
+					}
+				} catch {}
 			}
 		} catch {}
 	}
@@ -209,17 +223,18 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		}
 	}
 
-	let effectivePort = preResolvedPort;
-	if (!effectivePort && activeStartCommand) {
-		const portMatch =
-			activeStartCommand.match(/--server\.port[=\s](\d+)/) ||
-			activeStartCommand.match(/--port[=\s](\d+)/) ||
-			activeStartCommand.match(/-p[=\s](\d+)/);
-		if (portMatch) {
-			effectivePort = Number(portMatch[1]);
-		} else if (activeStartCommand.includes("streamlit")) {
-			effectivePort = 8501;
-		}
+	let effectivePort: number | undefined;
+	const cmdPort = extractPortFromCommand(activeStartCommand);
+	if (cmdPort) {
+		effectivePort = cmdPort;
+	} else if (preResolvedPort && preResolvedPort !== 80) {
+		effectivePort = preResolvedPort;
+	} else if (effectiveProvider === "python") {
+		effectivePort = 8501;
+	} else if (activeStartCommand && /\bpreview\b/i.test(activeStartCommand)) {
+		effectivePort = 4173;
+	} else {
+		effectivePort = 3000;
 	}
 
 	let effectiveInstallCmd = preResolvedInstallCmd;
@@ -260,9 +275,9 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		args.push("--env", `NIXPACKS_START_CMD=${quote([activeStartCommand])}`);
 	}
 
-	// Isolate provider to avoid spurious cross-language provider detection (e.g. Node detected as Python)
+	// Note: We DO NOT pass '--provider' to the Nixpacks CLI, because nixpacks build does not support --provider flag.
+	// Provider selection in Nixpacks is supported solely via nixpacks.toml or automatic detection.
 	if (effectiveProvider) {
-		args.push("--provider", effectiveProvider);
 		args.push("--env", `NIXPACKS_PROVIDER=${quote([effectiveProvider])}`);
 	}
 
@@ -291,6 +306,11 @@ if [ -d ${quote([buildAppDirectory])} ]; then
     if [ ! -f "${buildAppDirectory}/package.json" ]; then
       export NIXPACKS_PROVIDER="python"
       echo "✓ HatDot detected pure Python application. Enforcing Python provider (disabling Node/npm)." ;
+      if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
+        printf 'providers = ["python"]\n' > "${buildAppDirectory}/nixpacks.toml" ;
+      elif ! grep -q "providers" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
+        printf '\nproviders = ["python"]\n' >> "${buildAppDirectory}/nixpacks.toml" ;
+      fi
       if [ -z "$NIXPACKS_INSTALL_CMD" ]; then
         if [ -f "${buildAppDirectory}/uv.lock" ]; then
           export NIXPACKS_INSTALL_CMD="uv sync" ;

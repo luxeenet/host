@@ -35,13 +35,13 @@ export const createRestartSafeBackupCommand = ({
 	)
 	DOKPLOY_VOLUME_RESTART_STATUS=$?
 	set -e
-	if [ "$DOKPLOY_VOLUME_BACKUP_STATUS" -ne 0 ]; then
-		if [ "$DOKPLOY_VOLUME_RESTART_STATUS" -ne 0 ]; then
+	if [ "$DOKPLOY_VOLUME_BACKUP_STATUS" != "0" ]; then
+		if [ "$DOKPLOY_VOLUME_RESTART_STATUS" != "0" ]; then
 			echo "Service restart also failed with exit code $DOKPLOY_VOLUME_RESTART_STATUS"
 		fi
 		exit "$DOKPLOY_VOLUME_BACKUP_STATUS"
 	fi
-	if [ "$DOKPLOY_VOLUME_RESTART_STATUS" -ne 0 ]; then
+	if [ "$DOKPLOY_VOLUME_RESTART_STATUS" != "0" ]; then
 		exit "$DOKPLOY_VOLUME_RESTART_STATUS"
 	fi
 	${uploadCommand || ""}

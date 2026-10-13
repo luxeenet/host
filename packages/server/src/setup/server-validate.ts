@@ -80,7 +80,7 @@ export const validateDokployNetwork = () => `
 `;
 
 export const validateSudoAccess = () => `
-  if [ "$(id -u)" -eq 0 ]; then
+  if [ "$(id -u 2>/dev/null)" = "0" ]; then
     echo "root true"
   elif sudo -n true 2>/dev/null; then
     echo "sudo true"

@@ -310,9 +310,14 @@ export const resolveDomainUpstreamPort = (
 	app?: {
 		buildType?: string | null;
 		ports?: Array<{ targetPort?: number | null }> | null;
+		env?: string | null;
+		environment?: {
+			env?: string | null;
+			project?: { env?: string | null } | null;
+		} | null;
 	} | null,
 ): number => {
-	// If application is static (e.g. Nginx container), container listens on port 80
+	// 1. If application is static (e.g. Nginx container), container listens on port 80
 	if (app?.buildType === "static") {
 		if (domain.port && domain.port !== 3000) {
 			return domain.port;
@@ -320,7 +325,25 @@ export const resolveDomainUpstreamPort = (
 		return 80;
 	}
 
-	// If the application has explicit container target ports configured
+	// 2. Check if customer explicitly set PORT in application environment variables
+	const allEnvs = [
+		app?.env,
+		app?.environment?.env,
+		app?.environment?.project?.env,
+	];
+	for (const envStr of allEnvs) {
+		if (envStr) {
+			const envMatch = envStr.match(/^\s*PORT\s*=\s*["']?(\d+)["']?/m);
+			if (envMatch && envMatch[1]) {
+				const portNum = Number(envMatch[1]);
+				if (!Number.isNaN(portNum) && portNum > 0) {
+					return portNum;
+				}
+			}
+		}
+	}
+
+	// 3. If the application has explicit container target ports configured
 	if (
 		app &&
 		"ports" in app &&
@@ -331,12 +354,13 @@ export const resolveDomainUpstreamPort = (
 		return app.ports[0].targetPort;
 	}
 
-	// If domain has an explicit valid port
+	// 4. If domain has an explicit valid port (customer configured override)
 	if (domain.port && domain.port > 0) {
 		return domain.port;
 	}
 
-	return 80;
+	// 5. Default port: 3000 (standard for Node.js, Next.js, Rails, Nixpacks)
+	return 3000;
 };
 
 export const createServiceConfig = (

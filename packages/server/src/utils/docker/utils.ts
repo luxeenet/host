@@ -166,6 +166,8 @@ while true; do
         break
     fi
 
+    case "$WAITED" in ""|*[!0-9]*) WAITED=0 ;; esac
+    case "$MAX_WAIT" in ""|*[!0-9]*) MAX_WAIT=300 ;; esac
     if [ "$WAITED" -ge "$MAX_WAIT" ]; then
         echo "Docker still busy after \${MAX_WAIT}s, proceeding anyway." >&2
         break

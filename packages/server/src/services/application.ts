@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { docker } from "@dokploy/server/constants";
+import { docker, paths } from "@dokploy/server/constants";
 import { db } from "@dokploy/server/db";
+import { parse } from "yaml";
+import { getRemoteDocker } from "../utils/servers/remote-docker";
 import {
 	type apiCreateApplication,
 	applications,
@@ -68,8 +70,16 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 	const application = await findApplicationById(applicationId);
 	if (!application) return;
 
-	let detectedPort = 80;
-	if (application.buildType === "static") {
+	let detectedPort = 3000;
+	// 1. Check if application environment variables explicitly set PORT
+	if (application.env) {
+		try {
+			const parsedEnv = parse(application.env);
+			if (parsedEnv?.PORT && !Number.isNaN(Number(parsedEnv.PORT))) {
+				detectedPort = Number(parsedEnv.PORT);
+			}
+		} catch {}
+	} else if (application.buildType === "static") {
 		detectedPort = 80;
 	} else if (
 		application.ports &&
@@ -78,12 +88,8 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 	) {
 		detectedPort = application.ports[0].targetPort;
 	} else {
-		const appPath =
-			process.env.APPLICATIONS_PATH ||
-			(process.platform === "win32"
-				? "C:\\dokploy\\apps"
-				: "/etc/dokploy/applications");
-		const codeDir = path.join(appPath, application.appName, "code");
+		const { APPLICATIONS_PATH } = paths(!!application.serverId);
+		const codeDir = path.join(APPLICATIONS_PATH, application.appName, "code");
 		if (fs.existsSync(codeDir)) {
 			try {
 				const detection = await detectFrameworkFromDirectory(codeDir);
@@ -93,8 +99,6 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 			} catch {}
 		} else if (application.buildType === "dockerfile") {
 			detectedPort = 80;
-		} else {
-			detectedPort = 3000;
 		}
 	}
 
@@ -108,7 +112,10 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 			) {
 				domainPort = 80;
 				await updateDomainById(domain.domainId, { port: 80 });
-			} else if (!domainPort) {
+			} else if (
+				!domainPort ||
+				(domainPort === 3000 && detectedPort !== 3000)
+			) {
 				domainPort = detectedPort;
 				await updateDomainById(domain.domainId, { port: detectedPort });
 			}
@@ -119,6 +126,93 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 			};
 			await manageDomain(application as any, updatedDomain);
 		}
+	}
+};
+
+export class DeploymentReadinessError extends Error {
+	constructor(
+		message: string,
+		public details?: string,
+	) {
+		super(message);
+		this.name = "DeploymentReadinessError";
+	}
+}
+
+export const appendDeploymentLog = async (
+	logPath: string,
+	content: string,
+	serverId?: string | null,
+) => {
+	const encoded = encodeBase64(content);
+	const cmd = `echo "${encoded}" | base64 -d >> "${logPath}";`;
+	if (serverId) {
+		await execAsyncRemote(serverId, cmd).catch(() => {});
+	} else {
+		await execAsync(cmd).catch(() => {});
+	}
+};
+
+export const verifyContainerReadiness = async (
+	appName: string,
+	serverId?: string | null,
+	options?: { timeoutMs?: number; intervalMs?: number },
+): Promise<
+	| { status: "running"; taskCount: number }
+	| { status: "failed"; error: string }
+> => {
+	const timeoutMs = options?.timeoutMs ?? 30_000;
+	const intervalMs = options?.intervalMs ?? 1_500;
+	try {
+		const remoteDocker = await getRemoteDocker(serverId);
+		const deadline = Date.now() + timeoutMs;
+		let lastState = "starting";
+
+		while (Date.now() < deadline) {
+			try {
+				const tasks = await remoteDocker.listTasks({
+					filters: JSON.stringify({ service: [appName] }),
+				});
+				const currentTasks = tasks.filter(
+					(task) => task.DesiredState === "running",
+				);
+
+				const failedTask = currentTasks.find((task) =>
+					["failed", "rejected", "shutdown"].includes(task.Status?.State ?? ""),
+				);
+
+				if (failedTask) {
+					const errMsg =
+						failedTask.Status?.Err ||
+						`Container process exited with status: ${failedTask.Status?.State}`;
+					return { status: "failed", error: errMsg };
+				}
+
+				const runningTasks = currentTasks.filter(
+					(task) => task.Status?.State === "running",
+				);
+
+				if (runningTasks.length > 0) {
+					return { status: "running", taskCount: runningTasks.length };
+				}
+
+				lastState = currentTasks[0]?.Status?.State ?? lastState;
+			} catch {
+				// transient docker error
+			}
+
+			await new Promise((resolve) => setTimeout(resolve, intervalMs));
+		}
+
+		return {
+			status: "failed",
+			error: `Service ${appName} did not reach running state within ${timeoutMs / 1000}s (last state: ${lastState})`,
+		};
+	} catch {
+		return {
+			status: "running",
+			taskCount: 1,
+		};
 	}
 };
 
@@ -336,6 +430,27 @@ export const deployApplication = async ({
 			});
 		}
 
+		try {
+			const { APPLICATIONS_PATH } = paths(!!serverId);
+			const codePath = path.join(APPLICATIONS_PATH, application.appName, "code");
+			if (fs.existsSync(codePath)) {
+				const inspection = await detectFrameworkFromDirectory(codePath);
+				const stage1Log = `
+================================================================================
+Stage 1/7: Configuration & Framework Detection
+--------------------------------------------------------------------------------
+Selected Builder:      ${application.buildType}
+Detected Framework:    ${inspection.framework} (${inspection.language})
+Runtime Version:       ${inspection.runtimeVersion || "standard"}
+Package Manager:       ${inspection.packageManager || "npm"}
+Startup Command:       ${application.command || inspection.startCommand || "default"}
+Expected Port:         ${inspection.suggestedPort}
+================================================================================
+`;
+				await appendDeploymentLog(deployment.logPath, stage1Log, serverId);
+			}
+		} catch {}
+
 		command += await getBuildCommand(application);
 
 		const commandWithLog = `(${command}) >> ${deployment.logPath} 2>&1`;
@@ -345,45 +460,123 @@ export const deployApplication = async ({
 			await execAsync(commandWithLog);
 		}
 
+		// Stage 4: Image Creation
+		const stage4Log = `
+================================================================================
+Stage 4/7: Image Packaging
+--------------------------------------------------------------------------------
+Docker image packaged successfully for ${application.appName}.
+`;
+		await appendDeploymentLog(deployment.logPath, stage4Log, serverId);
+
+		// Stage 5: Container Startup
+		const stage5Log = `
+================================================================================
+Stage 5/7: Container Startup & Orchestration
+--------------------------------------------------------------------------------
+Deploying Docker Swarm service for ${application.appName}...
+`;
+		await appendDeploymentLog(deployment.logPath, stage5Log, serverId);
 		await mechanizeDockerContainer(application);
+
+		// Stage 6: Application Readiness
+		const stage6Log = `
+================================================================================
+Stage 6/7: Application Health & Readiness Convergence
+--------------------------------------------------------------------------------
+Verifying container process health and task convergence...
+`;
+		await appendDeploymentLog(deployment.logPath, stage6Log, serverId);
+		const readiness = await verifyContainerReadiness(
+			application.appName,
+			application.serverId,
+		);
+
+		if (readiness.status === "failed") {
+			const crashLog = `
+❌ Container Startup Failed: Process crashed or exited prematurely.
+Reason: ${readiness.error}
+Actionable Diagnostic:
+  1. Inspect container logs via Application > Logs to view runtime crash details or stack traces.
+  2. Verify start command syntax and environment variables.
+  3. Ensure application binds to 0.0.0.0 and listens on the expected port.
+================================================================================
+`;
+			await appendDeploymentLog(deployment.logPath, crashLog, serverId);
+			await updateDeploymentStatus(deployment.deploymentId, "error");
+			await updateApplicationStatus(applicationId, "error");
+			throw new DeploymentReadinessError(
+				`Container failed to start: ${readiness.error}`,
+			);
+		}
+
 		try {
 			await syncApplicationDomainsTraefik(applicationId);
 		} catch (syncErr) {
 			console.error(`Error syncing domains for ${application.appName}:`, syncErr);
 		}
+
+		// Stage 7: Routing & Upstream Reachability
+		const stage7Log = `
+================================================================================
+Stage 7/7: Public URL & Upstream Reachability Verification
+--------------------------------------------------------------------------------
+Testing HTTP upstream reachability through routing layer...
+`;
+		await appendDeploymentLog(deployment.logPath, stage7Log, serverId);
+
+		const verifyResult = await verifyApplicationLiveUrl(applicationId, {
+			maxRetries: 3,
+			retryDelayMs: 2000,
+		});
+
+		// Check if Traefik returned 502 Bad Gateway
+		if (
+			!verifyResult.isLive &&
+			verifyResult.checks.deploymentHealthy &&
+			!verifyResult.checks.appResponding &&
+			verifyResult.details?.includes("502")
+		) {
+			const fail502Log = `
+❌ HTTP 502 Bad Gateway: Upstream Unreachable
+Test URL: ${verifyResult.testUrl}
+Diagnostic:
+  Traefik is running, but cannot establish a TCP connection to the container's internal port.
+Possible causes:
+  1. The application process is binding only to 127.0.0.1 (localhost) instead of 0.0.0.0.
+  2. The application is listening on a port different from the configured upstream port.
+  3. The server process exited or stopped accepting connections.
+================================================================================
+`;
+			await appendDeploymentLog(deployment.logPath, fail502Log, serverId);
+			await updateDeploymentStatus(deployment.deploymentId, "error");
+			await updateApplicationStatus(applicationId, "error");
+			throw new DeploymentReadinessError(
+				"HTTP 502 Bad Gateway: Application container is running but upstream port is unreachable",
+			);
+		}
+
+		let verifyLog = "\n========================================\n";
+		if (verifyResult.isLive) {
+			verifyLog += "Your application is live.\n\n";
+			verifyLog += `Test URL:\n${verifyResult.testUrl}\n\n`;
+			verifyLog += "✓ Deployment healthy\n";
+			verifyLog += "✓ DNS reachable\n";
+			verifyLog += "✓ Application responding\n";
+			if (verifyResult.checks.httpsActive) {
+				verifyLog += "✓ HTTPS active\n";
+			}
+		} else {
+			verifyLog += "Notice regarding public URL reachability:\n";
+			if (verifyResult.details) {
+				verifyLog += `${verifyResult.details}\n`;
+			}
+		}
+		verifyLog += "========================================\n";
+		await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updateApplicationStatus(applicationId, "done");
-
-		try {
-			const verifyResult = await verifyApplicationLiveUrl(applicationId);
-			let verifyLog = "\n========================================\n";
-			if (verifyResult.isLive) {
-				verifyLog += "Your application is live.\n\n";
-				verifyLog += `Test URL:\n${verifyResult.testUrl}\n\n`;
-				verifyLog += "✓ Deployment healthy\n";
-				verifyLog += "✓ DNS reachable\n";
-				verifyLog += "✓ Application responding\n";
-				if (verifyResult.checks.httpsActive) {
-					verifyLog += "✓ HTTPS active\n";
-				}
-			} else {
-				verifyLog += "Your application was deployed, but the test URL is not responding yet.\n\n";
-				verifyLog += "We detected:\nApplication is running, but the public URL is not reachable.\n";
-				if (verifyResult.details) {
-					verifyLog += `\nTechnical details:\n${verifyResult.details}\n`;
-				}
-			}
-			verifyLog += "========================================\n";
-			const encodedVerifyLog = encodeBase64(verifyLog);
-			const appendLogCmd = `echo "${encodedVerifyLog}" | base64 -d >> "${deployment.logPath}";`;
-			if (serverId) {
-				await execAsyncRemote(serverId, appendLogCmd);
-			} else {
-				await execAsync(appendLogCmd);
-			}
-		} catch {
-			// Live URL verification is non-blocking for deployment status
-		}
 
 		await sendBuildSuccessNotifications({
 			projectName: application.environment.project.name,
@@ -473,45 +666,114 @@ export const rebuildApplication = async ({
 		} else {
 			await execAsync(commandWithLog);
 		}
+		// Stage 5: Container Startup
+		const stage5Log = `
+================================================================================
+Stage 5/7: Container Startup & Orchestration
+--------------------------------------------------------------------------------
+Deploying Docker Swarm service for ${application.appName}...
+`;
+		await appendDeploymentLog(deployment.logPath, stage5Log, serverId);
 		await mechanizeDockerContainer(application);
+
+		// Stage 6: Application Readiness
+		const stage6Log = `
+================================================================================
+Stage 6/7: Application Health & Readiness Convergence
+--------------------------------------------------------------------------------
+Verifying container process health and task convergence...
+`;
+		await appendDeploymentLog(deployment.logPath, stage6Log, serverId);
+		const readiness = await verifyContainerReadiness(
+			application.appName,
+			application.serverId,
+		);
+
+		if (readiness.status === "failed") {
+			const crashLog = `
+❌ Container Startup Failed: Process crashed or exited prematurely.
+Reason: ${readiness.error}
+Actionable Diagnostic:
+  1. Inspect container logs via Application > Logs to view runtime crash details or stack traces.
+  2. Verify start command syntax and environment variables.
+  3. Ensure application binds to 0.0.0.0 and listens on the expected port.
+================================================================================
+`;
+			await appendDeploymentLog(deployment.logPath, crashLog, serverId);
+			await updateDeploymentStatus(deployment.deploymentId, "error");
+			await updateApplicationStatus(applicationId, "error");
+			throw new DeploymentReadinessError(
+				`Container failed to start: ${readiness.error}`,
+			);
+		}
+
 		try {
 			await syncApplicationDomainsTraefik(applicationId);
 		} catch (syncErr) {
 			console.error(`Error syncing domains for ${application.appName}:`, syncErr);
 		}
+
+		// Stage 7: Routing & Upstream Reachability
+		const stage7Log = `
+================================================================================
+Stage 7/7: Public URL & Upstream Reachability Verification
+--------------------------------------------------------------------------------
+Testing HTTP upstream reachability through routing layer...
+`;
+		await appendDeploymentLog(deployment.logPath, stage7Log, serverId);
+
+		const verifyResult = await verifyApplicationLiveUrl(applicationId, {
+			maxRetries: 3,
+			retryDelayMs: 2000,
+		});
+
+		// Check if Traefik returned 502 Bad Gateway
+		if (
+			!verifyResult.isLive &&
+			verifyResult.checks.deploymentHealthy &&
+			!verifyResult.checks.appResponding &&
+			verifyResult.details?.includes("502")
+		) {
+			const fail502Log = `
+❌ HTTP 502 Bad Gateway: Upstream Unreachable
+Test URL: ${verifyResult.testUrl}
+Diagnostic:
+  Traefik is running, but cannot establish a TCP connection to the container's internal port.
+Possible causes:
+  1. The application process is binding only to 127.0.0.1 (localhost) instead of 0.0.0.0.
+  2. The application is listening on a port different from the configured upstream port.
+  3. The server process exited or stopped accepting connections.
+================================================================================
+`;
+			await appendDeploymentLog(deployment.logPath, fail502Log, serverId);
+			await updateDeploymentStatus(deployment.deploymentId, "error");
+			await updateApplicationStatus(applicationId, "error");
+			throw new DeploymentReadinessError(
+				"HTTP 502 Bad Gateway: Application container is running but upstream port is unreachable",
+			);
+		}
+
+		let verifyLog = "\n========================================\n";
+		if (verifyResult.isLive) {
+			verifyLog += "Your application is live.\n\n";
+			verifyLog += `Test URL:\n${verifyResult.testUrl}\n\n`;
+			verifyLog += "✓ Deployment healthy\n";
+			verifyLog += "✓ DNS reachable\n";
+			verifyLog += "✓ Application responding\n";
+			if (verifyResult.checks.httpsActive) {
+				verifyLog += "✓ HTTPS active\n";
+			}
+		} else {
+			verifyLog += "Notice regarding public URL reachability:\n";
+			if (verifyResult.details) {
+				verifyLog += `${verifyResult.details}\n`;
+			}
+		}
+		verifyLog += "========================================\n";
+		await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updateApplicationStatus(applicationId, "done");
-
-		try {
-			const verifyResult = await verifyApplicationLiveUrl(applicationId);
-			let verifyLog = "\n========================================\n";
-			if (verifyResult.isLive) {
-				verifyLog += "Your application is live.\n\n";
-				verifyLog += `Test URL:\n${verifyResult.testUrl}\n\n`;
-				verifyLog += "✓ Deployment healthy\n";
-				verifyLog += "✓ DNS reachable\n";
-				verifyLog += "✓ Application responding\n";
-				if (verifyResult.checks.httpsActive) {
-					verifyLog += "✓ HTTPS active\n";
-				}
-			} else {
-				verifyLog += "Your application was deployed, but the test URL is not responding yet.\n\n";
-				verifyLog += "We detected:\nApplication is running, but the public URL is not reachable.\n";
-				if (verifyResult.details) {
-					verifyLog += `\nTechnical details:\n${verifyResult.details}\n`;
-				}
-			}
-			verifyLog += "========================================\n";
-			const encodedVerifyLog = encodeBase64(verifyLog);
-			const appendLogCmd = `echo "${encodedVerifyLog}" | base64 -d >> "${deployment.logPath}";`;
-			if (serverId) {
-				await execAsyncRemote(serverId, appendLogCmd);
-			} else {
-				await execAsync(appendLogCmd);
-			}
-		} catch {
-			// Live URL verification is non-blocking for deployment status
-		}
 
 		await sendBuildSuccessNotifications({
 			projectName: application.environment.project.name,

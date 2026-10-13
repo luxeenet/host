@@ -14,7 +14,7 @@ import {
 } from "./runtime-resolver";
 
 export const getNixpacksCommand = (application: ApplicationNested) => {
-	const { env, appName, publishDirectory, cleanCache } = application;
+	const { env, appName, publishDirectory, cleanCache, command: customerCommand } = application;
 
 	const buildAppDirectory = getBuildAppDirectory(application);
 	const buildContainerId = `${appName}-${nanoid(10)}`;
@@ -34,7 +34,7 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		args.push("--env", env);
 	}
 
-	// Always ensure NIXPACKS_PATH is initialized to avoid BuildKit UndefinedVar warnings
+	// Always ensure NIXPACKS_PATH and HOST are initialized to avoid BuildKit UndefinedVar warnings and binding issues
 	const hasNixpacksPath = envVariables.some((e) =>
 		e.startsWith("NIXPACKS_PATH="),
 	);
@@ -42,11 +42,19 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		args.push("--env", "NIXPACKS_PATH=");
 	}
 
+	const hasHostEnv = envVariables.some((e) => e.startsWith("HOST="));
+	if (!hasHostEnv) {
+		args.push("--env", "HOST=0.0.0.0");
+		args.push("--env", "NIXPACKS_HOST=0.0.0.0");
+	}
+
 	// Static host inspection if the directory already exists on host
 	let preResolvedNodeEnv: string | undefined;
 	let preResolvedInstallCmd: string | undefined;
 	let preResolvedBuildCmd: string | undefined;
+	let preResolvedStartCmd: string | undefined;
 	let preResolvedArchive: string | undefined;
+	let preResolvedProvider: string | undefined;
 
 	if (fs.existsSync(buildAppDirectory)) {
 		try {
@@ -62,6 +70,7 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 
 			if (fs.existsSync(pkgPath)) {
 				pkgContent = fs.readFileSync(pkgPath, "utf-8");
+				preResolvedProvider = "node";
 			}
 			if (fs.existsSync(nvmrcPath)) {
 				nvmrcContent = fs.readFileSync(nvmrcPath, "utf-8");
@@ -97,19 +106,21 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 
 			preResolvedInstallCmd = pm.installCommand;
 			preResolvedBuildCmd = pm.buildCommand;
+			preResolvedStartCmd = pm.startCommand;
 
-			// Write or augment nixpacks.toml if pinned archive is required
-			if (runtime.nixpkgsArchive) {
-				const nixpacksTomlPath = path.join(buildAppDirectory, "nixpacks.toml");
-				if (!fs.existsSync(nixpacksTomlPath)) {
-					fs.writeFileSync(
-						nixpacksTomlPath,
-						generateNixpacksToml({
-							nixpkgsArchive: runtime.nixpkgsArchive,
-						}),
-						"utf-8",
-					);
-				}
+			// Write or augment nixpacks.toml with pinned archive, isolated provider, and start command
+			const effectiveStart = customerCommand?.trim() || preResolvedStartCmd;
+			const nixpacksTomlPath = path.join(buildAppDirectory, "nixpacks.toml");
+			if (!fs.existsSync(nixpacksTomlPath)) {
+				fs.writeFileSync(
+					nixpacksTomlPath,
+					generateNixpacksToml({
+						nixpkgsArchive: runtime.nixpkgsArchive,
+						providers: preResolvedProvider ? [preResolvedProvider] : undefined,
+						startCmd: effectiveStart,
+					}),
+					"utf-8",
+				);
 			}
 		} catch {}
 	}
@@ -123,6 +134,9 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	);
 	const hasCustomerBuildCmd = envVariables.some((e) =>
 		e.startsWith("NIXPACKS_BUILD_CMD="),
+	);
+	const hasCustomerStartCmd = envVariables.some((e) =>
+		e.startsWith("NIXPACKS_START_CMD="),
 	);
 	const hasCustomerArchive = envVariables.some(
 		(e) =>
@@ -150,6 +164,18 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		args.push("--env", `NIXPACKS_BUILD_CMD=${quote([preResolvedBuildCmd])}`);
 	}
 
+	// Explicit customer-provided start command takes precedence over inferred commands
+	const activeStartCommand = customerCommand?.trim() || preResolvedStartCmd;
+	if (activeStartCommand && !hasCustomerStartCmd) {
+		args.push("--start-cmd", quote([activeStartCommand]));
+		args.push("--env", `NIXPACKS_START_CMD=${quote([activeStartCommand])}`);
+	}
+
+	// Isolate provider to avoid spurious cross-language provider detection (e.g. Node detected as Python)
+	if (preResolvedProvider) {
+		args.push("--provider", preResolvedProvider);
+	}
+
 	if (publishDirectory) {
 		/* No need for any start command, since we'll use nginx later on */
 		args.push("--no-error-without-start");
@@ -166,6 +192,8 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 # HatDot Runtime Compatibility & Nixpacks Preflight
 # Safe environment variable initialization
 export NIXPACKS_PATH="\${NIXPACKS_PATH:-}"
+export HOST="\${HOST:-0.0.0.0}"
+export NIXPACKS_HOST="\${NIXPACKS_HOST:-0.0.0.0}"
 
 if [ -d ${quote([buildAppDirectory])} ]; then
   REQUESTED_NODE=""
@@ -252,6 +280,43 @@ if [ -d ${quote([buildAppDirectory])} ]; then
       fi
     fi
   fi
+
+  # Resolve dynamic startup command if not explicitly supplied
+  if [ -z "$NIXPACKS_START_CMD" ] && [ -f "${buildAppDirectory}/package.json" ]; then
+    DETECTED_START=$(node -e "
+      try {
+        const p = require('${buildAppDirectory}/package.json');
+        const s = p.scripts || {};
+        if (s.start) {
+          console.log('npm start');
+        } else if (s['start:prod']) {
+          console.log('npm run start:prod');
+        } else if (s.serve) {
+          console.log('npm run serve');
+        } else if (s.server) {
+          console.log('npm run server');
+        } else if (s.prod) {
+          console.log('npm run prod');
+        } else if (p.main) {
+          console.log('node ' + p.main);
+        }
+      } catch(e) {}
+    " 2>/dev/null || true)
+
+    if [ -n "$DETECTED_START" ]; then
+      export NIXPACKS_START_CMD="$DETECTED_START"
+      echo "✓ HatDot resolved application startup command: $DETECTED_START" ;
+    elif [ -f "${buildAppDirectory}/server.js" ]; then
+      export NIXPACKS_START_CMD="node server.js"
+      echo "✓ HatDot detected entrypoint: node server.js" ;
+    elif [ -f "${buildAppDirectory}/app.js" ]; then
+      export NIXPACKS_START_CMD="node app.js"
+      echo "✓ HatDot detected entrypoint: node app.js" ;
+    elif [ -f "${buildAppDirectory}/index.js" ]; then
+      export NIXPACKS_START_CMD="node index.js"
+      echo "✓ HatDot detected entrypoint: node index.js" ;
+    fi
+  fi
 fi
 `;
 
@@ -264,13 +329,19 @@ TMP_LOG=$(mktemp 2>/dev/null || echo "/tmp/nixpacks-$$.log")
 TMP_STATUS=$(mktemp 2>/dev/null || echo "/tmp/nixpacks-status-$$.log")
 
 (${command}; echo "$?" > "$TMP_STATUS") 2>&1 | tee "$TMP_LOG"
-NIX_STATUS=$(cat "$TMP_STATUS" 2>/dev/null || echo 1)
+NIX_STATUS=$(cat "$TMP_STATUS" 2>/dev/null)
 rm -f "$TMP_STATUS" 2>/dev/null || true
+case "$NIX_STATUS" in
+  ""|*[!0-9]*) NIX_STATUS=1 ;;
+esac
 
-if [ "$NIX_STATUS" -ne 0 ]; then
+if [ "$NIX_STATUS" != "0" ]; then
   if grep -qi "has reached End-Of-Life and has been removed" "$TMP_LOG" 2>/dev/null; then
     echo "❌ Deployment Error: The requested runtime has reached End-Of-Life and was removed from the package repository." ;
     echo "💡 Remediation: Specify a compatible package archive or upgrade to a modern supported runtime in settings." ;
+  elif grep -qi "no start command could be found" "$TMP_LOG" 2>/dev/null; then
+    echo "❌ Start Command Error: No start command could be found for this application." ;
+    echo "💡 Remediation: Add a 'start' script to your package.json (e.g. 'node server.js' or 'next start'), configure a Custom Start Command in Application Settings, or configure a Publish Directory if deploying a static web app." ;
   else
     echo "❌ Nixpacks build failed with exit code $NIX_STATUS" ;
   fi

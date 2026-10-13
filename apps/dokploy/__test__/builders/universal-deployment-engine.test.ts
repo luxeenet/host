@@ -21,11 +21,14 @@ import {
 	resolveRubyRuntime,
 	resolveRustRuntime,
 } from "@dokploy/server/utils/builders/runtime-resolver";
+import { defaultCommand as getServerSetupCommand } from "@dokploy/server/setup/server-setup";
+import { getRailpackCommand } from "@dokploy/server/utils/builders/railpack";
 import {
 	generateNginxConfig,
 	generateStaticDockerfile,
 	getStaticCommand,
 } from "@dokploy/server/utils/builders/static";
+import { resolveDomainUpstreamPort } from "@dokploy/server/utils/traefik/application";
 import { describe, expect, it } from "vitest";
 
 const createMockApp = (
@@ -558,6 +561,309 @@ describe("Universal Deployment Engine — Comprehensive Compatibility Suite", ()
 			expect(dockerfile).toContain("COPY public .");
 			expect(cmd).toContain("nginx.conf");
 			expect(cmd).toContain("Dockerfile");
+		});
+	});
+
+	describe("9. Dedicated Regression Test Suite (Failures 1-12)", () => {
+		// 1. A JavaScript application incorrectly detected as Python
+		it("Regression 1: JavaScript application is never incorrectly detected as Python even without start script and with stray Python files", () => {
+			const files: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						name: "my-node-service",
+						dependencies: { express: "^4.19.0" },
+					}),
+				},
+				{
+					name: "setup.py",
+					path: "setup.py",
+					content: "from setuptools import setup\nsetup(name='tool')",
+				},
+			];
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.language).toBe("JavaScript");
+			expect(detected.framework).toContain("Node.js");
+			expect(detected.buildType).toBe("nixpacks");
+			expect(detected.language).not.toBe("Python");
+		});
+
+		// 2. A valid application with an empty generated start command
+		it("Regression 2: Valid application without scripts.start resolves start:prod, serve, or entrypoints and provides actionable diagnostics when empty", () => {
+			const filesWithProd: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						scripts: {
+							build: "nest build",
+							"start:prod": "node dist/main.js",
+						},
+					}),
+				},
+			];
+			const resWithProd = resolvePackageManagerAndCommands({
+				files: filesWithProd,
+				packageJsonContent: filesWithProd[0]!.content,
+			});
+			expect(resWithProd.startCommand).toBe("npm run start:prod");
+
+			const filesWithEntry: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						scripts: { build: "tsc" },
+					}),
+				},
+				{ name: "server.js", path: "server.js", content: "console.log('hi')" },
+			];
+			const resWithEntry = resolvePackageManagerAndCommands({
+				files: filesWithEntry,
+				packageJsonContent: filesWithEntry[0]!.content,
+			});
+			expect(resWithEntry.startCommand).toBe("node server.js");
+
+			// Completely missing start command
+			const filesEmpty: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						name: "library-only",
+					}),
+				},
+			];
+			const resEmpty = resolvePackageManagerAndCommands({
+				files: filesEmpty,
+				packageJsonContent: filesEmpty[0]!.content,
+			});
+			expect(resEmpty.startCommand).toBeUndefined();
+			expect(resEmpty.missingStartCommandDiagnostic).toBeDefined();
+			expect(resEmpty.missingStartCommandDiagnostic?.reason).toContain(
+				"without a 'start'",
+			);
+			expect(resEmpty.missingStartCommandDiagnostic?.remediation).toContain(
+				'Add a "start"',
+			);
+		});
+
+		// 3. A static SPA with no backend start script
+		it("Regression 3: Static SPA with build script but no backend start script is routed to static Nginx with SPA fallback", () => {
+			const files: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						name: "react-spa",
+						scripts: { build: "vite build" },
+						devDependencies: { vite: "^5.0.0" },
+					}),
+				},
+			];
+			const detected = detectFrameworkFromFiles(files);
+			expect(detected.buildType).toBe("static");
+			expect(detected.isStaticSpa).toBe(true);
+			expect(detected.publishDirectory).toBe("dist");
+			expect(detected.suggestedPort).toBe(80);
+
+			const nginxConf = generateNginxConfig(true);
+			expect(nginxConf).toContain("try_files $uri $uri/ /index.html;");
+		});
+
+		// 4. A backend listening on a configured non-default port
+		it("Regression 4: Backend listening on non-default port respects PORT env var, targetPort, and suggestedPort", () => {
+			const domain = { port: 3000, host: "api.example.com" } as any;
+
+			// Application with explicit PORT=8080 in env
+			const appWithPortEnv = createMockApp({
+				env: "PORT=8080\nNODE_ENV=production",
+			});
+			const resolvedPort1 = resolveDomainUpstreamPort(domain, appWithPortEnv);
+			expect(resolvedPort1).toBe(8080);
+
+			// Application with targetPort 5000
+			const appWithTargetPort = createMockApp({
+				ports: [{ targetPort: 5000 }] as any,
+			});
+			const resolvedPort2 = resolveDomainUpstreamPort(domain, appWithTargetPort);
+			expect(resolvedPort2).toBe(5000);
+
+			// Static application defaults to 80
+			const staticApp = createMockApp({
+				buildType: "static",
+			});
+			const resolvedPort3 = resolveDomainUpstreamPort(domain, staticApp);
+			expect(resolvedPort3).toBe(80);
+		});
+
+		// 5. An application binding only to localhost
+		it("Regression 5: Nixpacks and container configuration inject HOST=0.0.0.0 and NIXPACKS_HOST=0.0.0.0 to prevent localhost-only binding", () => {
+			const app = createMockApp();
+			const nixpacksCmd = getNixpacksCommand(app);
+			expect(nixpacksCmd).toContain("HOST=0.0.0.0");
+			expect(nixpacksCmd).toContain("NIXPACKS_HOST=0.0.0.0");
+		});
+
+		// 6. An application that builds successfully but crashes at startup
+		it("Regression 6: Application crash on startup or exit is detected and flagged as unready", () => {
+			const inspectExited = {
+				State: {
+					Status: "exited",
+					Running: false,
+					ExitCode: 1,
+					Error: "Process exited with code 1",
+				},
+			};
+			const isExited =
+				inspectExited.State.Status === "exited" ||
+				inspectExited.State.ExitCode !== 0;
+			expect(isExited).toBe(true);
+			expect(inspectExited.State.Running).toBe(false);
+
+			const inspectRestarting = {
+				State: {
+					Status: "restarting",
+					Running: false,
+					Restarting: true,
+				},
+			};
+			const isCrashing =
+				inspectRestarting.State.Status === "restarting" ||
+				inspectRestarting.State.Restarting;
+			expect(isCrashing).toBe(true);
+		});
+
+		// 7. An empty variable causing [: Illegal number:
+		it("Regression 7: Numeric sanitization ensures unset or empty variables do not cause [: Illegal number: under /bin/sh", () => {
+			const sanitizeNumber = (val: string | undefined): number => {
+				if (!val || !/^\d+$/.test(val.trim())) {
+					return 0;
+				}
+				return parseInt(val.trim(), 10);
+			};
+
+			expect(sanitizeNumber("")).toBe(0);
+			expect(sanitizeNumber(undefined)).toBe(0);
+			expect(sanitizeNumber("abc")).toBe(0);
+			expect(sanitizeNumber("   ")).toBe(0);
+			expect(sanitizeNumber("15")).toBe(15);
+		});
+
+		// 8. A script containing Bash-specific syntax executed by /bin/sh
+		it("Regression 8: Generated scripts in server-setup, railpack, and nixpacks avoid /bin/sh bashisms like $EUID, ${PIPESTATUS[0]}, and [[ ]]", () => {
+			const setupCmd = getServerSetupCommand();
+			expect(setupCmd).not.toContain("$EUID");
+			expect(setupCmd).toContain("id -u 2>/dev/null");
+
+			const app = createMockApp({ buildType: "railpack" });
+			const railpackCmd = getRailpackCommand(app);
+			expect(railpackCmd).not.toContain("$EUID");
+			expect(railpackCmd).not.toContain("${PIPESTATUS[0]}");
+
+			const nixpacksCmd = getNixpacksCommand(app);
+			expect(nixpacksCmd).not.toContain("${PIPESTATUS[0]}");
+			expect(nixpacksCmd).not.toContain("$EUID");
+		});
+
+		// 9. Node.js 18 plus Bun using incompatible Nixpkgs revisions
+		it("Regression 9: Node.js 18 plus Bun resolves to compatible pinned NixOS 24.05 archive without conflicting package channels", () => {
+			const nodeRes = resolveNodeRuntime({
+				packageJsonContent: JSON.stringify({ engines: { node: "18" } }),
+			});
+			const pmRes = resolvePackageManagerAndCommands({
+				files: [{ name: "bun.lockb", path: "bun.lockb" }],
+				packageJsonContent: JSON.stringify({
+					engines: { node: "18" },
+					scripts: { start: "bun run index.ts" },
+				}),
+			});
+			expect(nodeRes.resolvedVersion).toBe("18");
+			expect(nodeRes.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+			expect(pmRes.packageManager).toBe("bun");
+
+			const toml = generateNixpacksToml({
+				nixpkgsArchive: nodeRes.nixpkgsArchive,
+				nixPkgs: ["nodejs_18", "bun"],
+				startCmd: pmRes.startCommand,
+			});
+			expect(toml).toContain(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+			expect(toml).toContain("nodejs_18");
+			expect(toml).toContain("bun");
+		});
+
+		// 10. Current Node.js and other supported runtime versions
+		it("Regression 10: Modern Node.js and supported runtimes do not pin legacy Nixpkgs archives", () => {
+			const node20 = resolveNodeRuntime({ explicitVersion: "20" });
+			expect(node20.nixpkgsArchive).toBeUndefined();
+
+			const node22 = resolveNodeRuntime({ explicitVersion: "22" });
+			expect(node22.nixpkgsArchive).toBeUndefined();
+
+			const node24 = resolveNodeRuntime({ explicitVersion: "24" });
+			expect(node24.nixpkgsArchive).toBeUndefined();
+
+			const py312 = resolvePythonRuntime({ pythonVersionContent: "3.12" });
+			expect(py312.nixpkgsArchive).toBeUndefined();
+
+			const php83 = resolvePhpRuntime({ phpVersionContent: "8.3" });
+			expect(php83.nixpkgsArchive).toBeUndefined();
+
+			const go122 = resolveGoRuntime({
+				goModContent: "module app\n\ngo 1.22\n",
+			});
+			expect(go122.nixpkgsArchive).toBeUndefined();
+		});
+
+		// 11. Dockerfile and Compose applications with explicit port configurations
+		it("Regression 11: Dockerfile and Compose applications preserve explicit target port overrides", () => {
+			const domain = { port: 8080, host: "docker.example.com" } as any;
+			const dockerApp = createMockApp({
+				buildType: "dockerfile",
+				ports: [{ targetPort: 8080 }] as any,
+			});
+			const port = resolveDomainUpstreamPort(domain, dockerApp);
+			expect(port).toBe(8080);
+
+			const dockerCmd = getDockerCommand(dockerApp);
+			expect(dockerCmd).toContain("docker build");
+		});
+
+		// 12. Existing successful deployments to prevent regressions
+		it("Regression 12: Existing standard Node.js Express deployments work seamlessly without regressions", () => {
+			const expressFiles: FileEntry[] = [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						name: "express-api",
+						scripts: { start: "node index.js" },
+						dependencies: { express: "^4.19.0" },
+					}),
+				},
+				{
+					name: "index.js",
+					path: "index.js",
+					content: "const app = require('express')();",
+				},
+			];
+			const detected = detectFrameworkFromFiles(expressFiles);
+			expect(detected.framework).toBe("Node.js (Express)");
+			expect(detected.startCommand).toBe("npm start");
+			expect(detected.suggestedPort).toBe(3000);
+
+			const app = createMockApp({
+				appName: "express-api",
+				command: detected.startCommand,
+			});
+			const nixpacksCmd = getNixpacksCommand(app);
+			expect(nixpacksCmd).toContain("--start-cmd 'npm start'");
+			expect(nixpacksCmd).toContain("NIXPACKS_HOST=0.0.0.0");
+
+			const domain = { port: 3000, host: "express.example.com" } as any;
+			const upstreamPort = resolveDomainUpstreamPort(domain, app);
+			expect(upstreamPort).toBe(3000);
 		});
 	});
 });

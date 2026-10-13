@@ -132,8 +132,8 @@ CURRENT_USER=$USER
 
 echo "Installing requirements for: OS: $OS_TYPE"
 
-# Auto-detect sudo requirement
-if [ "$EUID" -eq 0 ]; then
+# Auto-detect sudo requirement using POSIX-compliant syntax
+if [ "$(id -u 2>/dev/null)" = "0" ]; then
 	SUDO_CMD=""
 	echo "Running as root"
 else

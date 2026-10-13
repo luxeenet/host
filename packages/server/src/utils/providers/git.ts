@@ -112,10 +112,8 @@ const addHostToKnownHostsCommand = (repositoryURL: string) => {
 	const { domain, port } = sanitizeRepoPathSSH(repositoryURL);
 	const knownHostsPath = path.join(SSH_PATH, "known_hosts");
 
-	// ssh-keyscan is best-effort: some Git hosts (e.g. Hugging Face) never answer
-	// it, and its exit code must not abort the clone under `set -e`. The clone's
-	// own host-key check (StrictHostKeyChecking=accept-new) is the real boundary.
-	return `ssh-keyscan -p ${Number(port)} ${quote([String(domain ?? "")])} >> ${knownHostsPath} || true;`;
+	const portFlag = port && !Number.isNaN(Number(port)) ? `-p ${Number(port)} ` : "";
+	return `ssh-keyscan ${portFlag}${quote([String(domain ?? "")])} >> ${knownHostsPath} || true;`;
 };
 const sanitizeRepoPathSSH = (input: string) => {
 	const SSH_PATH_RE = new RegExp(

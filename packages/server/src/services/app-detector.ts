@@ -368,15 +368,18 @@ export const detectFrameworkFromFiles = (
 						: allDeps.svelte
 							? "Svelte"
 							: "Web";
+				const hasStartScript = Boolean(scripts.start);
 				return {
 					framework: `Vite (${spaType})`,
 					language: allDeps.typescript ? "TypeScript" : "JavaScript",
-					buildType: "nixpacks",
-					suggestedPort: 4173,
+					buildType: hasStartScript ? "nixpacks" : "static",
+					suggestedPort: hasStartScript ? 3000 : 80,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
-					startCommand: scripts.preview
-						? `${runPrefix} preview -- --port 4173 --host 0.0.0.0`
-						: undefined,
+					startCommand: hasStartScript
+						? `${runPrefix} start`
+						: scripts.preview
+							? `${runPrefix} preview -- --port 4173 --host 0.0.0.0`
+							: undefined,
 					publishDirectory: "dist",
 					isStaticSpa: true,
 					runtimeVersion: nodeRuntime.resolvedVersion,
@@ -422,23 +425,66 @@ export const detectFrameworkFromFiles = (
 				};
 			}
 
-			// Generic Node.js with start script
-			if (scripts.start || pkg.main) {
+			// Node.js Application with detected start command or entry point
+			if (pmRes.startCommand) {
 				return {
 					framework: "Node.js Application",
 					language: allDeps.typescript ? "TypeScript" : "JavaScript",
 					buildType: "nixpacks",
 					suggestedPort: 3000,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
-					startCommand: scripts.start
-						? `${runPrefix} start`
-						: `node ${pkg.main || "index.js"}`,
+					startCommand: pmRes.startCommand,
 					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "medium",
-					reason: "Detected Node.js project with start script",
+					reason: `Detected Node.js application (${pmRes.startCommandSource || "start script"})`,
 				};
 			}
+
+			// Frontend SPA with build script but no backend start script
+			if (pmRes.isStaticSpa) {
+				return {
+					framework: "Frontend SPA",
+					language: allDeps.typescript ? "TypeScript" : "JavaScript",
+					buildType: "static",
+					suggestedPort: 80,
+					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
+					publishDirectory: pmRes.suggestedPublishDirectory || "dist",
+					isStaticSpa: true,
+					runtimeVersion: nodeRuntime.resolvedVersion,
+					packageManager,
+					confidence: "medium",
+					reason:
+						"Detected frontend SPA with build script and static asset output (no backend server)",
+				};
+			}
+
+			// Node.js project without start script - do NOT fall through to Python
+			return {
+				framework: "Node.js Application",
+				language: allDeps.typescript ? "TypeScript" : "JavaScript",
+				buildType: "nixpacks",
+				suggestedPort: 3000,
+				buildCommand: scripts.build ? `${runPrefix} build` : undefined,
+				runtimeVersion: nodeRuntime.resolvedVersion,
+				packageManager,
+				confidence: "low",
+				reason:
+					pmRes.missingStartCommandDiagnostic?.reason ||
+					"Detected Node.js package.json, but no production start script was found",
+				suggestedEnv: [
+					{
+						key: "PORT",
+						description: "Server listening port (default: 3000)",
+						required: false,
+					},
+					{
+						key: "HOST",
+						description: "Server bind host (default: 0.0.0.0)",
+						required: false,
+					},
+				],
+			};
 		} catch {}
 	}
 
@@ -512,14 +558,28 @@ export const detectFrameworkFromFiles = (
 			};
 		}
 
+		let pythonStart: string | undefined;
+		if (getFile("main.py")) {
+			pythonStart = "python main.py";
+		} else if (getFile("app.py")) {
+			pythonStart = "python app.py";
+		} else if (getFile("server.py")) {
+			pythonStart = "python server.py";
+		} else if (getFile("wsgi.py")) {
+			pythonStart = "gunicorn wsgi:application --bind 0.0.0.0:8000";
+		}
+
 		return {
 			framework: "Python Application",
 			language: "Python",
 			buildType: "nixpacks",
 			suggestedPort: 8000,
+			startCommand: pythonStart,
 			runtimeVersion: pyRuntime.resolvedVersion,
 			confidence: "medium",
-			reason: "Detected Python project configuration",
+			reason: pythonStart
+				? `Detected Python application with entrypoint (${pythonStart})`
+				: "Detected Python project configuration",
 		};
 	}
 
@@ -541,6 +601,12 @@ export const detectFrameworkFromFiles = (
 			Boolean(pomXml?.content?.toLowerCase().includes("spring-boot")) ||
 			Boolean(buildGradle?.content?.toLowerCase().includes("spring-boot"));
 
+		const startCmd = isSpringBoot
+			? isMaven
+				? "java -jar target/*.jar"
+				: "java -jar build/libs/*.jar"
+			: undefined;
+
 		return {
 			framework: isSpringBoot
 				? "Spring Boot"
@@ -553,6 +619,7 @@ export const detectFrameworkFromFiles = (
 			buildCommand: isMaven
 				? "mvn clean package -DskipTests"
 				: "./gradlew build -x test",
+			startCommand: startCmd,
 			runtimeVersion: `JDK ${javaRuntime.resolvedVersion}`,
 			packageManager: isMaven ? "maven" : "gradle",
 			confidence: "high",
@@ -631,6 +698,7 @@ export const detectFrameworkFromFiles = (
 			buildType: "nixpacks",
 			suggestedPort: 8080,
 			buildCommand: "cargo build --release",
+			startCommand: "cargo run --release",
 			runtimeVersion: `Rust ${rustRuntime.resolvedVersion}`,
 			packageManager: "cargo",
 			confidence: "high",
@@ -658,7 +726,10 @@ export const detectFrameworkFromFiles = (
 					: "PHP Application",
 			language: "PHP",
 			buildType: "nixpacks",
-			suggestedPort: 80,
+			suggestedPort: isLaravel ? 8000 : 80,
+			startCommand: isLaravel
+				? "php artisan serve --host=0.0.0.0 --port=8000"
+				: "php -S 0.0.0.0:80",
 			runtimeVersion: `PHP ${phpRuntime.resolvedVersion}`,
 			packageManager: "composer",
 			confidence: "high",
@@ -684,6 +755,9 @@ export const detectFrameworkFromFiles = (
 			language: "Ruby",
 			buildType: "nixpacks",
 			suggestedPort: 3000,
+			startCommand: isRails
+				? "bin/rails server -b 0.0.0.0 -p 3000"
+				: "bundle exec rackup -o 0.0.0.0 -p 3000",
 			runtimeVersion: `Ruby ${rubyRuntime.resolvedVersion}`,
 			packageManager: "bundler",
 			confidence: "high",

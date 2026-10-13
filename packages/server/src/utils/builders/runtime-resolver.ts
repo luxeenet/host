@@ -36,6 +36,16 @@ export interface PackageManagerResolution {
 	installCommand: string;
 	buildCommand?: string;
 	startCommand?: string;
+	startCommandSource?: string;
+	isStaticSpa?: boolean;
+	suggestedPublishDirectory?: string;
+	missingStartCommandDiagnostic?: {
+		framework?: string;
+		availableScripts: string[];
+		hasBuildScript: boolean;
+		reason: string;
+		remediation: string;
+	};
 	hasConflictingLockfiles: boolean;
 	conflicts?: string[];
 }
@@ -675,25 +685,113 @@ export const resolvePackageManagerAndCommands = (params: {
 		}
 	}
 
-	// Generate start command using ONLY the selected package manager
+	// Generate start command using ONLY the selected package manager and detected project structure
 	let startCommand: string | undefined;
+	let startCommandSource: string | undefined;
+	const runCmd =
+		selectedPm === "bun"
+			? "bun run"
+			: selectedPm === "npm"
+				? "npm run"
+				: selectedPm;
+
 	if (hasStartScript) {
-		switch (selectedPm) {
-			case "pnpm":
-				startCommand = "pnpm start";
-				break;
-			case "bun":
-				startCommand = "bun start";
-				break;
-			case "yarn":
-				startCommand = "yarn start";
-				break;
-			default:
-				startCommand = "npm start";
-				break;
-		}
-	} else if (pkgJson.main) {
+		startCommand = selectedPm === "bun" ? "bun start" : `${selectedPm} start`;
+		startCommandSource = "package.json scripts.start";
+	} else if (scripts["start:prod"]) {
+		startCommand = `${runCmd} start:prod`;
+		startCommandSource = "package.json scripts.start:prod";
+	} else if (scripts.serve) {
+		startCommand = `${runCmd} serve`;
+		startCommandSource = "package.json scripts.serve";
+	} else if (scripts.server) {
+		startCommand = `${runCmd} server`;
+		startCommandSource = "package.json scripts.server";
+	} else if (scripts.prod) {
+		startCommand = `${runCmd} prod`;
+		startCommandSource = "package.json scripts.prod";
+	} else if (scripts.run) {
+		startCommand = `${runCmd} run`;
+		startCommandSource = "package.json scripts.run";
+	} else if (pkgJson.main && typeof pkgJson.main === "string") {
 		startCommand = `node ${pkgJson.main}`;
+		startCommandSource = `package.json main (${pkgJson.main})`;
+	} else if (fileNames.has("server.js")) {
+		startCommand = "node server.js";
+		startCommandSource = "file: server.js";
+	} else if (fileNames.has("server.mjs")) {
+		startCommand = "node server.mjs";
+		startCommandSource = "file: server.mjs";
+	} else if (fileNames.has("server.cjs")) {
+		startCommand = "node server.cjs";
+		startCommandSource = "file: server.cjs";
+	} else if (fileNames.has("app.js")) {
+		startCommand = "node app.js";
+		startCommandSource = "file: app.js";
+	} else if (fileNames.has("app.mjs")) {
+		startCommand = "node app.mjs";
+		startCommandSource = "file: app.mjs";
+	} else if (fileNames.has("index.js")) {
+		startCommand = "node index.js";
+		startCommandSource = "file: index.js";
+	} else if (fileNames.has("index.mjs")) {
+		startCommand = "node index.mjs";
+		startCommandSource = "file: index.mjs";
+	} else if (fileNames.has("main.js")) {
+		startCommand = "node main.js";
+		startCommandSource = "file: main.js";
+	} else if (scripts.preview) {
+		startCommand = `${runCmd} preview -- --port 3000 --host 0.0.0.0`;
+		startCommandSource = "package.json scripts.preview";
+	}
+
+	// Check if this is a frontend SPA
+	const allDeps = {
+		...(pkgJson.dependencies || {}),
+		...(pkgJson.devDependencies || {}),
+	};
+	const isViteSpa = Boolean(allDeps.vite);
+	const isReactCra = Boolean(allDeps["react-scripts"]);
+	const isVueCli = Boolean(allDeps["@vue/cli-service"]);
+	const isAngular = Boolean(allDeps["@angular/core"] || allDeps["@angular/cli"]);
+	const isSvelteSpa = Boolean(allDeps.svelte && !allDeps["@sveltejs/kit"]);
+
+	const isFrontendSpa =
+		isViteSpa || isReactCra || isVueCli || isAngular || isSvelteSpa;
+	const suggestedPublishDirectory = isFrontendSpa
+		? isReactCra
+			? "build"
+			: "dist"
+		: undefined;
+
+	let missingStartCommandDiagnostic:
+		| PackageManagerResolution["missingStartCommandDiagnostic"]
+		| undefined;
+	if (!startCommand) {
+		const availableScripts = Object.keys(scripts);
+		if (isFrontendSpa) {
+			missingStartCommandDiagnostic = {
+				framework: isViteSpa
+					? "Vite SPA"
+					: isReactCra
+						? "Create React App"
+						: "Frontend SPA",
+				availableScripts,
+				hasBuildScript,
+				reason:
+					"Frontend SPA detected with build step but no backend production start script.",
+				remediation: `Configure Publish Directory as "${suggestedPublishDirectory}" to deploy with static Nginx, or add a "start" script in package.json.`,
+			};
+		} else if (params.packageJsonContent) {
+			missingStartCommandDiagnostic = {
+				availableScripts,
+				hasBuildScript,
+				reason:
+					"Node.js application detected without a 'start', 'start:prod', 'serve', or main entrypoint script.",
+				remediation:
+					'Add a "start" script to package.json (e.g. "start": "node server.js" or "node index.js"), or configure a Custom Start Command in application settings.',
+			};
+		}
 	}
 
 	return {
@@ -702,6 +800,10 @@ export const resolvePackageManagerAndCommands = (params: {
 		installCommand,
 		buildCommand,
 		startCommand,
+		startCommandSource,
+		isStaticSpa: isFrontendSpa,
+		suggestedPublishDirectory,
+		missingStartCommandDiagnostic,
 		hasConflictingLockfiles,
 		conflicts: hasConflictingLockfiles ? presentLockfiles : undefined,
 	};
@@ -713,6 +815,7 @@ export const resolvePackageManagerAndCommands = (params: {
 export const generateNixpacksToml = (options: {
 	nixpkgsArchive?: string;
 	nixPkgs?: string[];
+	providers?: string[];
 	installCmd?: string;
 	buildCmd?: string;
 	startCmd?: string;
@@ -720,10 +823,17 @@ export const generateNixpacksToml = (options: {
 	const lines: string[] = [];
 	lines.push("# Generated by HatDot Universal Deployment Engine");
 
+	if (options.providers && options.providers.length > 0) {
+		lines.push(
+			`providers = [${options.providers.map((p) => `"${p}"`).join(", ")}]`,
+		);
+	}
+
 	if (
 		options.nixpkgsArchive ||
 		(options.nixPkgs && options.nixPkgs.length > 0)
 	) {
+		lines.push("");
 		lines.push("[phases.setup]");
 		if (options.nixpkgsArchive) {
 			lines.push(`nixpkgsArchive = "${options.nixpkgsArchive}"`);

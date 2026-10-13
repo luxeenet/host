@@ -127,6 +127,21 @@ export const mechanizeDockerContainer = async (
 		application.environment.env,
 	);
 
+	// Ensure container binds to 0.0.0.0 and listens on the expected port
+	const hasHost = envVariables.some((e) => e.startsWith("HOST="));
+	const hasPort = envVariables.some((e) => e.startsWith("PORT="));
+	if (!hasHost) {
+		envVariables.push("HOST=0.0.0.0");
+		envVariables.push("NIXPACKS_HOST=0.0.0.0");
+	}
+	if (!hasPort) {
+		const targetPort =
+			application.ports?.[0]?.targetPort ??
+			(application.buildType === "static" ? 80 : 3000);
+		envVariables.push(`PORT=${targetPort}`);
+		envVariables.push(`NIXPACKS_PORT=${targetPort}`);
+	}
+
 	const image = await getImageName(application);
 	const authConfig = await getAuthConfig(application);
 	const docker = await getRemoteDocker(application.serverId);

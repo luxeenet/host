@@ -88,7 +88,7 @@ export const getRailpackCommand = (application: ApplicationNested) => {
 
 export RAILPACK_VERSION=${application.railpackVersion}
 # use sudo for non-root so the install can write to /usr/local/bin
-if [ "$(id -u)" -eq 0 ]; then
+if [ "$(id -u 2>/dev/null)" = "0" ]; then
 	SUDO_CMD=""
 elif sudo -n true 2>/dev/null; then
 	SUDO_CMD="sudo"

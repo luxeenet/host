@@ -34,6 +34,16 @@ export const NIXPKGS_ARCHIVES = {
 		tarballUrl:
 			"https://github.com/NixOS/nixpkgs/archive/51ad838b03a05b1de6f9f2a0fffecee64a9788ee.tar.gz",
 	},
+	/**
+	 * Nixpkgs snapshot providing Node.js 24.11.0 (nodejs_24)
+	 * Resolves dependencies requiring >=24.11.0 on Node 24 runtime
+	 */
+	MODERN_24_11: {
+		commit: "1d4c88323ac36805d09657d13a5273aea1b34f0c",
+		label: "Nixpkgs (Node.js 24.11.0)",
+		tarballUrl:
+			"https://github.com/NixOS/nixpkgs/archive/1d4c88323ac36805d09657d13a5273aea1b34f0c.tar.gz",
+	},
 } as const;
 
 export interface RuntimeVersionInfo {
@@ -100,6 +110,15 @@ export const NODE_CATALOG: Record<string, RuntimeVersionInfo> = {
 		major: "24",
 		isEol: false,
 		nixPackage: "nodejs_24",
+		isAvailable: true,
+	},
+	"24.11": {
+		major: "24",
+		full: "24.11.0",
+		isEol: false,
+		nixPackage: "nodejs_24",
+		archiveCommit: NIXPKGS_ARCHIVES.MODERN_24_11.commit,
+		archiveLabel: NIXPKGS_ARCHIVES.MODERN_24_11.label,
 		isAvailable: true,
 	},
 };

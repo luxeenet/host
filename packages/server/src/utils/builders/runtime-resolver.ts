@@ -252,6 +252,7 @@ export const resolveNodeRuntime = (params: {
 
 	// Inspect dependency engine constraints and modern build tooling requirements
 	let requiresNode22Modern = false;
+	let requiresNode24Modern = false;
 
 	if (params.packageJsonContent) {
 		try {
@@ -267,6 +268,15 @@ export const resolveNodeRuntime = (params: {
 				/22\.1[2-9]|22\.[2-9]|\^22\.1[3-9]|>=22\.1[2-9]/.test(engineNode)
 			) {
 				requiresNode22Modern = true;
+			}
+
+			// Explicit engines.node requires >=24.11.0 or ^24.11.0 or 24.11+
+			if (
+				/24\.1[1-9]|24\.[2-9]|\^24\.1[1-9]|>=24\.1[1-9]|\^22\.18\.0\s*\|\|\s*>=24\.11\.0/.test(
+					engineNode,
+				)
+			) {
+				requiresNode24Modern = true;
 			}
 
 			// Dependencies known to require Node >=20.19.0 || >=22.12.0
@@ -290,6 +300,13 @@ export const resolveNodeRuntime = (params: {
 		/22\.1[2-9]|22\.[2-9]|\^22\.1[3-9]|>=22\.1[2-9]/.test(rawVersion)
 	) {
 		requiresNode22Modern = true;
+	}
+
+	if (
+		rawVersion &&
+		/24\.1[1-9]|24\.[2-9]|\^24\.1[1-9]|>=24\.1[1-9]/.test(rawVersion)
+	) {
+		requiresNode24Modern = true;
 	}
 
 	if (rawVersion) {
@@ -325,6 +342,20 @@ export const resolveNodeRuntime = (params: {
 				};
 			}
 
+			// If Node 24 is selected and modern patch >=24.11.0 is required
+			if (major === 24 && requiresNode24Modern) {
+				return {
+					requestedVersion: rawVersion,
+					isEol: false,
+					resolvedVersion: "24.11.0",
+					nixPackage: "nodejs_24",
+					nixpkgsArchive: NIXPKGS_ARCHIVES.MODERN_24_11.commit,
+					archiveLabel: NIXPKGS_ARCHIVES.MODERN_24_11.label,
+					isPermitted: true,
+					isAvailable: true,
+				};
+			}
+
 			const entry = NODE_CATALOG[majorStr];
 
 			if (entry) {
@@ -348,7 +379,7 @@ export const resolveNodeRuntime = (params: {
 					requestedVersion: rawVersion,
 					isEol: entry.isEol,
 					eolReason: entry.eolReason,
-					resolvedVersion: majorStr,
+					resolvedVersion: entry.full || majorStr,
 					nixPackage: entry.nixPackage,
 					nixpkgsArchive: entry.archiveCommit,
 					archiveLabel: entry.archiveLabel,
@@ -964,6 +995,25 @@ export const resolvePackageManagerAndCommands = (params: {
 		}
 	}
 
+	// Check if this is a frontend SPA
+	const allDeps = {
+		...(pkgJson.dependencies || {}),
+		...(pkgJson.devDependencies || {}),
+	};
+	const isViteSpa = Boolean(allDeps.vite);
+	const isReactCra = Boolean(allDeps["react-scripts"]);
+	const isVueCli = Boolean(allDeps["@vue/cli-service"]);
+	const isAngular = Boolean(allDeps["@angular/core"] || allDeps["@angular/cli"]);
+	const isSvelteSpa = Boolean(allDeps.svelte && !allDeps["@sveltejs/kit"]);
+
+	const isFrontendSpa =
+		isViteSpa || isReactCra || isVueCli || isAngular || isSvelteSpa;
+	const suggestedPublishDirectory = isFrontendSpa
+		? isReactCra
+			? "build"
+			: "dist"
+		: undefined;
+
 	// Generate start command using ONLY the selected package manager and detected project structure
 	let startCommand: string | undefined;
 	let startCommandSource: string | undefined;
@@ -974,9 +1024,27 @@ export const resolvePackageManagerAndCommands = (params: {
 				? "npm run"
 				: selectedPm;
 
-	if (hasStartScript) {
-		startCommand = selectedPm === "bun" ? "bun start" : `${selectedPm} start`;
-		startCommandSource = "package.json scripts.start";
+	const rawStart = scripts.start ? String(scripts.start).trim() : "";
+	const isViteDevServerStart =
+		isViteSpa &&
+		(rawStart === "vite" || /^vite(?:\s+(?:dev|serve))?\b/i.test(rawStart));
+	const isVitePreviewStart =
+		isViteSpa &&
+		(/\bpreview\b/i.test(rawStart) || rawStart.startsWith("vite preview"));
+
+	if (hasStartScript && !isViteDevServerStart) {
+		if (isVitePreviewStart) {
+			startCommand = rawStart.includes("--host")
+				? (selectedPm === "bun" ? "bun start" : `${selectedPm} start`)
+				: (selectedPm === "bun" ? "bun start -- --port 4173 --host 0.0.0.0" : `${selectedPm} start -- --port 4173 --host 0.0.0.0`);
+			startCommandSource = "package.json scripts.start (vite preview)";
+		} else {
+			startCommand = selectedPm === "bun" ? "bun start" : `${selectedPm} start`;
+			startCommandSource = "package.json scripts.start";
+		}
+	} else if (hasStartScript && isViteDevServerStart && scripts.preview) {
+		startCommand = `${runCmd} preview -- --port 4173 --host 0.0.0.0`;
+		startCommandSource = "package.json scripts.preview (replacing dev server start)";
 	} else if (scripts["start:prod"]) {
 		startCommand = `${runCmd} start:prod`;
 		startCommandSource = "package.json scripts.start:prod";
@@ -1023,25 +1091,6 @@ export const resolvePackageManagerAndCommands = (params: {
 		startCommand = `${runCmd} preview -- --port 4173 --host 0.0.0.0`;
 		startCommandSource = "package.json scripts.preview";
 	}
-
-	// Check if this is a frontend SPA
-	const allDeps = {
-		...(pkgJson.dependencies || {}),
-		...(pkgJson.devDependencies || {}),
-	};
-	const isViteSpa = Boolean(allDeps.vite);
-	const isReactCra = Boolean(allDeps["react-scripts"]);
-	const isVueCli = Boolean(allDeps["@vue/cli-service"]);
-	const isAngular = Boolean(allDeps["@angular/core"] || allDeps["@angular/cli"]);
-	const isSvelteSpa = Boolean(allDeps.svelte && !allDeps["@sveltejs/kit"]);
-
-	const isFrontendSpa =
-		isViteSpa || isReactCra || isVueCli || isAngular || isSvelteSpa;
-	const suggestedPublishDirectory = isFrontendSpa
-		? isReactCra
-			? "build"
-			: "dist"
-		: undefined;
 
 	let missingStartCommandDiagnostic:
 		| PackageManagerResolution["missingStartCommandDiagnostic"]

@@ -1563,5 +1563,179 @@ dependencies = [
 			expect(res24.resolvedVersion).toBe("24");
 		});
 	});
+
+	describe("14. Production Bug Fix: Vite Static/Preview, Port Routing, Node 24 Pinned Runtime, Native Binding Arch & Isolation", () => {
+		it("detects Vite (React) (TypeScript) static application and distinguishes it from dev server", () => {
+			const files: FileEntry[] = [
+				{
+					path: "package.json",
+					content: JSON.stringify({
+						name: "vite-react-ts-app",
+						scripts: {
+							dev: "vite",
+							build: "tsc -b && vite build",
+							start: "vite",
+						},
+						dependencies: {
+							react: "^19.0.0",
+							"react-dom": "^19.0.0",
+						},
+						devDependencies: {
+							typescript: "~5.7.2",
+							vite: "^6.2.0",
+						},
+					}),
+				},
+				{ path: "tsconfig.json", content: "{}" },
+				{ path: "vite.config.ts", content: "export default {}" },
+				{ path: "index.html", content: "<html></html>" },
+				{ path: "src/App.tsx", content: "export default () => <h1>App</h1>" },
+			];
+
+			const detection = detectFrameworkFromFiles(files);
+			expect(detection.framework).toBe("Vite (React)");
+			expect(detection.language).toBe("TypeScript");
+			// Since start script is `vite` (dev server), suggestedPort must be 80 for production static serving
+			expect(detection.suggestedPort).toBe(80);
+			expect(detection.startCommand).toBeUndefined();
+
+			// resolvePackageManagerAndCommands must not select `vite` dev server as production start command
+			const pm = resolvePackageManagerAndCommands({
+				packageJsonContent: files[0]?.content,
+				files,
+			});
+			expect(pm.startCommand).toBeUndefined();
+		});
+
+		it("detects Vite application with preview script and binds to port 4173 with 0.0.0.0", () => {
+			const files: FileEntry[] = [
+				{
+					path: "package.json",
+					content: JSON.stringify({
+						name: "vite-preview-app",
+						scripts: {
+							dev: "vite",
+							build: "vite build",
+							preview: "vite preview",
+						},
+						dependencies: {
+							react: "^19.0.0",
+						},
+						devDependencies: {
+							vite: "^6.2.0",
+						},
+					}),
+				},
+			];
+
+			const detection = detectFrameworkFromFiles(files);
+			expect(detection.suggestedPort).toBe(4173);
+			expect(detection.startCommand).toBe("npm run preview -- --port 4173 --host 0.0.0.0");
+
+			const pm = resolvePackageManagerAndCommands({
+				packageJsonContent: files[0]?.content,
+				files,
+			});
+			expect(pm.startCommand).toContain("--port 4173");
+			expect(pm.startCommand).toContain("--host 0.0.0.0");
+		});
+
+		it("resolves Node.js 24 to 24.11.0 via MODERN_24_11 archive when engines require ^22.18.0 || >=24.11.0", () => {
+			const res = resolveNodeRuntime({
+				packageJsonContent: JSON.stringify({
+					name: "modern-app",
+					engines: {
+						node: "^22.18.0 || >=24.11.0",
+					},
+				}),
+				explicitVersion: "24",
+			});
+
+			expect(res.resolvedVersion).toBe("24.11.0");
+			expect(res.nixPackage).toBe("nodejs_24");
+			expect(res.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.MODERN_24_11.commit);
+			expect(res.archiveLabel).toBe(NIXPKGS_ARCHIVES.MODERN_24_11.label);
+			expect(res.isPermitted).toBe(true);
+			expect(res.isAvailable).toBe(true);
+		});
+
+		it("preserves standard Node.js 24 without archive pinning when no strict patch constraints are declared", () => {
+			const res = resolveNodeRuntime({
+				explicitVersion: "24",
+			});
+			expect(res.resolvedVersion).toBe("24");
+			expect(res.nixpkgsArchive).toBeUndefined();
+		});
+
+		it("preserves Node 18, 20, and 22 compatibility according to declared engines", () => {
+			const res18 = resolveNodeRuntime({ explicitVersion: "18" });
+			expect(res18.resolvedVersion).toBe("18");
+			expect(res18.nixpkgsArchive).toBe(NIXPKGS_ARCHIVES.LEGACY_24_05.commit);
+
+			const res20 = resolveNodeRuntime({ explicitVersion: "20" });
+			expect(res20.resolvedVersion).toBe("20");
+			expect(res20.nixpkgsArchive).toBeUndefined();
+
+			const res22 = resolveNodeRuntime({ explicitVersion: "22" });
+			expect(res22.resolvedVersion).toBe("22");
+			expect(res22.nixpkgsArchive).toBeUndefined();
+		});
+
+		it("Nixpacks preflight script checks architecture and extracts exact Rolldown version without ignoring failures", () => {
+			const app = createMockApp({
+				appName: "vite-rolldown-app",
+				buildType: "nixpacks",
+			});
+
+			const cmd = getNixpacksCommand(app);
+			// Verify architecture handling (x86_64 and arm64/aarch64)
+			expect(cmd).toContain('case "$ARCH" in x86_64) PKG="@rolldown/binding-linux-x64-gnu" ;; aarch64|arm64) PKG="@rolldown/binding-linux-arm64-gnu"');
+			// Verify exact version extraction from package.json
+			expect(cmd).toContain("node_modules/rolldown/package.json");
+			expect(cmd).toContain(".version");
+			// Verify failure causes non-zero exit (no || true swallowing errors)
+			expect(cmd).toContain("Failed to install required Rolldown native binding");
+			expect(cmd).toContain("exit 1");
+			expect(cmd).not.toContain("npm i @rolldown/binding-linux-x64-gnu --no-save || true");
+		});
+
+		it("Traefik upstream port resolution preserves port 80 for static SPAs and custom ports", () => {
+			// Port 80 for static SPA domain
+			const domain80: any = { domainId: "d-1", port: 80, enabled: true, host: "app.example.com" };
+			const port80 = resolveDomainUpstreamPort(domain80, { buildType: "nixpacks" });
+			expect(port80).toBe(80);
+
+			// Port 4173 for Vite preview command
+			const domainDefault: any = { domainId: "d-2", port: 3000, enabled: true, host: "app.example.com" };
+			const previewPort = resolveDomainUpstreamPort(domainDefault, {
+				buildType: "nixpacks",
+				command: "npm run preview -- --port 4173 --host 0.0.0.0",
+			});
+			expect(previewPort).toBe(4173);
+
+			// Custom port from --server.port=8501
+			const streamlitPort = resolveDomainUpstreamPort(domainDefault, {
+				buildType: "nixpacks",
+				command: "streamlit run app.py --server.port=8501 --server.address=0.0.0.0",
+			});
+			expect(streamlitPort).toBe(8501);
+
+			// Explicit target port in ports configuration
+			const targetPort = resolveDomainUpstreamPort(domainDefault, {
+				buildType: "nixpacks",
+				ports: [{ targetPort: 8080 }],
+			});
+			expect(targetPort).toBe(8080);
+		});
+
+		it("preserves isolation across all builders (Dockerfile, Static, Railpack, Heroku, Paketo)", () => {
+			const app = createMockApp({ appName: "test-isolation" });
+			expect(getDockerCommand(app)).toBeTruthy();
+			expect(getStaticCommand(app)).toBeTruthy();
+			expect(getRailpackCommand(app)).toBeTruthy();
+			expect(getHerokuCommand(app)).toBeTruthy();
+			expect(getPaketoCommand(app)).toBeTruthy();
+		});
+	});
 });
 

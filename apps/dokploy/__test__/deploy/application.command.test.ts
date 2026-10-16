@@ -52,6 +52,10 @@ vi.mock("@dokploy/server/services/application", async () => {
 		...actual,
 		findApplicationById: vi.fn(),
 		updateApplicationStatus: vi.fn(),
+		verifyContainerReadiness: vi.fn().mockResolvedValue({
+			status: "running",
+			taskCount: 1,
+		}),
 	};
 });
 
@@ -65,6 +69,7 @@ vi.mock("@dokploy/server/services/domain", () => ({
 		testUrl: "http://localhost:3000",
 		checks: { httpsActive: false },
 	}),
+	findDomainsByApplicationId: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@dokploy/server/services/deployment", () => ({

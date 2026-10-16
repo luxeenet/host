@@ -568,21 +568,54 @@ export const detectFrameworkFromFiles = (
 						: allDeps.svelte
 							? "Svelte"
 							: "Web";
-				const hasStartScript = Boolean(scripts.start);
+				const rawStartScript = scripts.start ? String(scripts.start).trim() : "";
+				const isDevServerStart =
+					rawStartScript === "vite" ||
+					/^vite(?:\s+(?:dev|serve))?\b/i.test(rawStartScript);
+				const isPreviewStart = /\bpreview\b/i.test(rawStartScript);
 				const hasPreviewScript = Boolean(scripts.preview);
+
+				let buildType: "nixpacks" | "static" = "static";
+				let suggestedPort = 80;
+				let startCommand: string | undefined;
+				let isStaticSpa = false;
+
+				if (isPreviewStart) {
+					// "start" script runs Vite preview server
+					buildType = "nixpacks";
+					const extracted = extractPortFromCommand(rawStartScript);
+					suggestedPort = extracted || 4173;
+					startCommand = rawStartScript.includes("--host")
+						? `${runPrefix} start`
+						: `${runPrefix} start -- --port ${suggestedPort} --host 0.0.0.0`;
+				} else if (rawStartScript && !isDevServerStart) {
+					// Production custom server script (e.g. node server.js, serve dist, etc.)
+					buildType = "nixpacks";
+					const extracted = extractPortFromCommand(rawStartScript);
+					suggestedPort = extracted || 3000;
+					startCommand = `${runPrefix} start`;
+				} else if (hasPreviewScript) {
+					// Vite preview server available in scripts.preview
+					buildType = "nixpacks";
+					suggestedPort = 4173;
+					startCommand = `${runPrefix} preview -- --port 4173 --host 0.0.0.0`;
+				} else {
+					// Static Vite SPA -> serve dist directory
+					buildType = "static";
+					suggestedPort = 80;
+					startCommand = undefined;
+					isStaticSpa = true;
+				}
+
 				return {
 					framework: `Vite (${spaType})`,
 					language: allDeps.typescript ? "TypeScript" : "JavaScript",
-					buildType: hasStartScript || hasPreviewScript ? "nixpacks" : "static",
-					suggestedPort: hasStartScript ? 3000 : hasPreviewScript ? 4173 : 80,
+					buildType,
+					suggestedPort,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
-					startCommand: hasStartScript
-						? `${runPrefix} start`
-						: hasPreviewScript
-							? `${runPrefix} preview -- --port 4173 --host 0.0.0.0`
-							: undefined,
+					startCommand,
 					publishDirectory: "dist",
-					isStaticSpa: !hasStartScript && !hasPreviewScript,
+					isStaticSpa,
 					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",

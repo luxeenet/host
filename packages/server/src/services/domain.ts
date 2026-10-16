@@ -1095,16 +1095,72 @@ export const verifyApplicationLiveUrl = async (
 			} else if (response.status >= 500 && attempt < maxRetries) {
 				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
 			}
-		} catch (err) {
-			lastError = err instanceof Error ? err.message : String(err);
+		} catch (err: any) {
+			const cause = err?.cause;
+			const causeCode = cause?.code || "";
+			const causeMsg = cause?.message || "";
+			const rawErr = err instanceof Error ? err.message : String(err);
+			const fullErr = `${rawErr} ${causeCode} ${causeMsg}`;
+
 			if (
-				lastError.includes("CERT_") ||
-				lastError.includes("certificate") ||
-				lastError.includes("SSL") ||
-				lastError.includes("TLS")
+				causeCode === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+				causeCode === "ERR_TLS_CERT_ALTNAME_INVALID" ||
+				causeCode === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+				causeCode === "CERT_HAS_EXPIRED" ||
+				fullErr.includes("DEPTH_ZERO_SELF_SIGNED_CERT") ||
+				fullErr.includes("SELF_SIGNED") ||
+				fullErr.includes("certificate") ||
+				fullErr.includes("SSL") ||
+				fullErr.includes("TLS")
 			) {
-				sslError = lastError;
+				sslError = causeMsg || causeCode || "TLS certificate validation pending";
 			}
+
+			if (causeCode === "ECONNREFUSED" || fullErr.includes("ECONNREFUSED")) {
+				lastError = `Connection refused (ECONNREFUSED) on ${testUrl}. Routing layer or host port is not accepting connections.`;
+			} else if (causeCode === "ENOTFOUND" || fullErr.includes("ENOTFOUND")) {
+				lastError = `DNS lookup failed (ENOTFOUND) for ${host}. Ensure domain DNS records point to this server.`;
+			} else if (
+				causeCode === "ETIMEDOUT" ||
+				err?.name === "AbortError" ||
+				causeCode === "UND_ERR_CONNECT_TIMEOUT" ||
+				fullErr.includes("timeout") ||
+				fullErr.includes("ETIMEDOUT")
+			) {
+				lastError = `Connection timed out connecting to ${testUrl}. Network or firewall may be dropping traffic or DNS is slow to propagate.`;
+			} else if (sslError) {
+				lastError = `SSL/TLS handshake failed: ${sslError}. HTTPS certificate provisioning may still be in progress.`;
+			} else {
+				lastError = causeMsg
+					? `${rawErr}: ${causeMsg} (${causeCode || "NETWORK_ERROR"})`
+					: rawErr;
+			}
+
+			// If HTTPS failed due to SSL certificate error, attempt HTTP fallback check
+			// to see if Traefik routing and upstream application are alive
+			if (testUrl.startsWith("https://") && sslError && !appResponding) {
+				try {
+					const httpFallbackUrl = `http://${host}${activeDomain?.path || "/"}`;
+					const httpRes = await fetch(httpFallbackUrl, {
+						method: "GET",
+						headers: { "User-Agent": "HatDot-HealthCheck/1.0", Accept: "*/*" },
+						redirect: "follow",
+						signal: AbortSignal.timeout(4000),
+					});
+					if (
+						(httpRes.status >= 200 && httpRes.status < 400) ||
+						httpRes.status === 401 ||
+						httpRes.status === 403
+					) {
+						appResponding = true;
+						lastStatusCode = httpRes.status;
+						break;
+					}
+				} catch {
+					// Fallback check also failed
+				}
+			}
+
 			if (attempt < maxRetries) {
 				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
 			}

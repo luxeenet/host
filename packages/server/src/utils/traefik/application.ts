@@ -363,11 +363,11 @@ export const resolveDomainUpstreamPort = (
 	}
 
 	// 5. If domain has an explicit customer-configured port that is not default 3000
-	if (domain.port && domain.port > 0 && domain.port !== 3000 && domain.port !== 80) {
+	if (domain.port && domain.port > 0 && domain.port !== 3000) {
 		return domain.port;
 	}
 
-	// 6. Default port: 3000 (standard for Node.js, Next.js, Rails, Nixpacks)
+	// 6. Default port: 3000 (standard for Node.js, Next.js, Rails)
 	return domain.port && domain.port > 0 ? domain.port : 3000;
 };
 

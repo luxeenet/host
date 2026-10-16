@@ -1088,7 +1088,17 @@ export const resolvePackageManagerAndCommands = (params: {
 		startCommand = "node main.js";
 		startCommandSource = "file: main.js";
 	} else if (scripts.preview) {
-		startCommand = `${runCmd} preview -- --port 4173 --host 0.0.0.0`;
+		const previewStr = String(scripts.preview);
+		const customPreviewPort = extractPortFromCommand(previewStr);
+		const targetPreviewPort = customPreviewPort || 4173;
+		const hasHostFlag = previewStr.includes("--host");
+		const hasPortFlag = /--port|-p\b/i.test(previewStr);
+
+		let flags = "";
+		if (!hasPortFlag) flags += ` --port ${targetPreviewPort}`;
+		if (!hasHostFlag) flags += " --host 0.0.0.0";
+
+		startCommand = flags ? `${runCmd} preview --${flags}` : `${runCmd} preview`;
 		startCommandSource = "package.json scripts.preview";
 	}
 

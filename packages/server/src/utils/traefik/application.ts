@@ -317,6 +317,8 @@ export const resolveDomainUpstreamPort = (
 			env?: string | null;
 			project?: { env?: string | null } | null;
 		} | null;
+		suggestedPort?: number | null;
+		appName?: string | null;
 	} | null,
 ): number => {
 	// 1. If application is static (e.g. Nginx container), container listens on port 80
@@ -351,7 +353,16 @@ export const resolveDomainUpstreamPort = (
 		return cmdPort;
 	}
 
-	// 4. If the application has explicit container target ports configured
+	// 4. Check if app has suggestedPort from framework detection (e.g. 4173 for Vite preview)
+	if (
+		app?.suggestedPort &&
+		app.suggestedPort > 0 &&
+		(app.buildType !== "nixpacks" || app.suggestedPort !== 80)
+	) {
+		return app.suggestedPort;
+	}
+
+	// 5. If the application has explicit container target ports configured
 	if (
 		app &&
 		"ports" in app &&
@@ -362,22 +373,19 @@ export const resolveDomainUpstreamPort = (
 		return app.ports[0].targetPort;
 	}
 
-	// 5. If domain has an explicit customer-configured port that is not default 3000
+	// 6. If domain has an explicit customer-configured port that is not default 3000
 	if (domain.port && domain.port > 0 && domain.port !== 3000) {
 		return domain.port;
 	}
 
-	// 6. Default port: 3000 (standard for Node.js, Next.js, Rails)
+	// 7. Default port: 3000 (standard for Node.js, Next.js, Rails)
 	return domain.port && domain.port > 0 ? domain.port : 3000;
 };
 
 export const createServiceConfig = (
 	appName: string,
 	domain: Domain,
-	app?: {
-		buildType?: string | null;
-		ports?: Array<{ targetPort?: number | null }> | null;
-	} | null,
+	app?: Parameters<typeof resolveDomainUpstreamPort>[1],
 ): {
 	loadBalancer: HttpLoadBalancerService;
 } => {

@@ -598,8 +598,12 @@ export const detectFrameworkFromFiles = (
 				} else if (hasPreviewScript) {
 					// Vite preview server available in scripts.preview
 					buildType = "nixpacks";
-					suggestedPort = 4173;
-					startCommand = `${runPrefix} preview -- --port 4173 --host 0.0.0.0`;
+					const extracted = extractPortFromCommand(scripts.preview);
+					suggestedPort = extracted || 4173;
+					const hasHost = String(scripts.preview).includes("--host");
+					startCommand = hasHost
+						? `${runPrefix} preview`
+						: `${runPrefix} preview -- --port ${suggestedPort} --host 0.0.0.0`;
 				} else {
 					// Static Vite SPA -> serve dist directory
 					buildType = "static";
@@ -633,11 +637,12 @@ export const detectFrameworkFromFiles = (
 						: allDeps.koa
 							? "Koa"
 							: "Hono";
+				const extractedPort = extractPortFromCommand(scripts.start);
 				return {
 					framework: `Node.js (${fwName})`,
 					language: allDeps.typescript ? "TypeScript" : "JavaScript",
 					buildType: "nixpacks",
-					suggestedPort: 3000,
+					suggestedPort: extractedPort || 3000,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
 					startCommand: scripts.start
 						? packageManager === "bun"

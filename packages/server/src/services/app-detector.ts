@@ -309,17 +309,41 @@ export const detectFrameworkFromFiles = (
 		};
 	}
 
-	// 3. Check for explicit nixpacks.toml configuration
+	// 3. Inspect nixpacks.toml configuration if present
 	const nixpacksConfig = getRootFile("nixpacks.toml") || getFile("nixpacks.toml");
-	if (nixpacksConfig) {
-		return {
-			framework: "Nixpacks Configured Project",
-			language: "Nixpacks",
-			buildType: "nixpacks",
-			suggestedPort: 3000,
-			confidence: "high",
-			reason: "Detected custom nixpacks.toml build configuration",
-		};
+	let nixpacksStartCmd: string | undefined;
+	let nixpacksPort: number | undefined;
+	let nixpacksProviders: string[] = [];
+
+	if (nixpacksConfig?.content) {
+		const toml = nixpacksConfig.content;
+		const phaseStartMatch = toml.match(
+			/\[phases\.start\][\s\S]*?cmd\s*=\s*["']([^"']+)["']/,
+		);
+		const startMatch = toml.match(/\[start\][\s\S]*?cmd\s*=\s*["']([^"']+)["']/);
+		const cmdMatch =
+			phaseStartMatch ||
+			startMatch ||
+			toml.match(/^\s*cmd\s*=\s*["']([^"']+)["']/m);
+		if (cmdMatch?.[1]) {
+			nixpacksStartCmd = cmdMatch[1].trim();
+			const p = extractPortFromCommand(nixpacksStartCmd);
+			if (p) nixpacksPort = p;
+		}
+
+		const portMatch = toml.match(/^\s*PORT\s*=\s*["']?(\d+)["']?/m);
+		if (portMatch?.[1]) {
+			const p = Number.parseInt(portMatch[1], 10);
+			if (!Number.isNaN(p) && p > 0) nixpacksPort = p;
+		}
+
+		const provMatch = toml.match(/providers\s*=\s*\[([^\]]+)\]/);
+		if (provMatch?.[1]) {
+			nixpacksProviders = provMatch[1]
+				.split(",")
+				.map((s) => s.replace(/["'\s]/g, ""))
+				.filter(Boolean);
+		}
 	}
 
 	// 4. Check for Cloud Native Buildpacks project.toml
@@ -585,31 +609,36 @@ export const detectFrameworkFromFiles = (
 					// "start" script runs Vite preview server
 					buildType = "nixpacks";
 					const extracted = extractPortFromCommand(rawStartScript);
-					suggestedPort = extracted || 4173;
-					startCommand = rawStartScript.includes("--host")
+					suggestedPort = nixpacksPort || extracted || 4173;
+					startCommand = nixpacksStartCmd || (rawStartScript.includes("--host")
 						? `${runPrefix} start`
-						: `${runPrefix} start -- --port ${suggestedPort} --host 0.0.0.0`;
+						: `${runPrefix} start -- --port ${suggestedPort} --host 0.0.0.0`);
 				} else if (rawStartScript && !isDevServerStart) {
 					// Production custom server script (e.g. node server.js, serve dist, etc.)
 					buildType = "nixpacks";
 					const extracted = extractPortFromCommand(rawStartScript);
-					suggestedPort = extracted || 3000;
-					startCommand = `${runPrefix} start`;
+					suggestedPort = nixpacksPort || extracted || 3000;
+					startCommand = nixpacksStartCmd || `${runPrefix} start`;
 				} else if (hasPreviewScript) {
 					// Vite preview server available in scripts.preview
 					buildType = "nixpacks";
-					const extracted = extractPortFromCommand(scripts.preview);
-					suggestedPort = extracted || 4173;
-					const hasHost = String(scripts.preview).includes("--host");
-					startCommand = hasHost
+					const previewStr = String(scripts.preview);
+					const extracted = extractPortFromCommand(previewStr);
+					suggestedPort = nixpacksPort || extracted || 4173;
+					const hasHost = previewStr.includes("--host");
+					startCommand = nixpacksStartCmd || (hasHost
 						? `${runPrefix} preview`
-						: `${runPrefix} preview -- --port ${suggestedPort} --host 0.0.0.0`;
+						: `${runPrefix} preview -- --port ${suggestedPort} --host 0.0.0.0`);
 				} else {
 					// Static Vite SPA -> serve dist directory
 					buildType = "static";
 					suggestedPort = 80;
-					startCommand = undefined;
-					isStaticSpa = true;
+					startCommand = nixpacksStartCmd || undefined;
+					isStaticSpa = !nixpacksStartCmd;
+					if (nixpacksStartCmd) {
+						buildType = "nixpacks";
+						suggestedPort = nixpacksPort || 3000;
+					}
 				}
 
 				return {
@@ -1151,6 +1180,23 @@ export const detectFrameworkFromFiles = (
 			reason: pubDir
 				? `Detected static HTML assets with entry point in ${pubDir}/index.html`
 				: "Detected static HTML assets with index.html at root",
+		};
+	}
+
+	// 14. Nixpacks custom configuration (when no underlying framework was detected)
+	if (nixpacksConfig) {
+		const primaryProvider = nixpacksProviders[0];
+		const lang = primaryProvider
+			? primaryProvider.charAt(0).toUpperCase() + primaryProvider.slice(1)
+			: "Nixpacks";
+		return {
+			framework: "Nixpacks Configured Project",
+			language: lang,
+			buildType: "nixpacks",
+			suggestedPort: nixpacksPort || 3000,
+			startCommand: nixpacksStartCmd,
+			confidence: "high",
+			reason: "Detected custom nixpacks.toml build configuration",
 		};
 	}
 

@@ -137,7 +137,10 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 				...domain,
 				port: domainPort,
 			};
-			await manageDomain(application as any, updatedDomain);
+			await manageDomain(
+				{ ...application, suggestedPort: detectedPort } as any,
+				updatedDomain,
+			);
 		}
 	}
 };
@@ -567,15 +570,35 @@ Testing HTTP upstream reachability through routing layer...
 			!verifyResult.checks.appResponding &&
 			verifyResult.details?.includes("502")
 		) {
+			let diagnosticDetails = "";
+			try {
+				const remoteDocker = await getRemoteDocker(serverId);
+				const tasks = await remoteDocker.listTasks({
+					filters: JSON.stringify({ service: [application.appName] }),
+				});
+				const latestTask = tasks[0];
+				const taskState = latestTask?.Status?.State;
+				const exitCode = (latestTask?.Status as any)?.ContainerStatus?.ExitCode;
+				if (taskState && taskState !== "running") {
+					diagnosticDetails += `  • Container State: Task is currently '${taskState}' (Exit Code: ${exitCode ?? "N/A"}). The server process exited or failed to start.\n`;
+				} else {
+					diagnosticDetails += "  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
+				}
+			} catch {}
+
 			const fail502Log = `
 ❌ HTTP 502 Bad Gateway: Upstream Unreachable
 Test URL: ${verifyResult.testUrl}
-Diagnostic:
-  Traefik is running, but cannot establish a TCP connection to the container's internal port.
-Possible causes:
-  1. The application process is binding only to 127.0.0.1 (localhost) instead of 0.0.0.0.
-  2. The application is listening on a port different from the configured upstream port.
-  3. The server process exited or stopped accepting connections.
+Evidence & Diagnostic:
+${diagnosticDetails || "  • Container is running in Docker Swarm, but upstream TCP connection was refused.\n"}
+Probable root causes:
+  1. Port Mismatch: Application is listening on a port different from the configured Traefik upstream port.
+  2. Loopback Binding: Application server is bound to 127.0.0.1 (localhost) instead of 0.0.0.0 (all interfaces).
+  3. Slow Initialization: Application server took longer to start than the readiness retry deadline.
+Remediation:
+  • Verify Application > Ports or Application > Settings > Start Command.
+  • For Vite apps, ensure preview script runs with '--host 0.0.0.0 --port 4173'.
+  • For Node.js/Express, ensure process binds to '0.0.0.0' and uses process.env.PORT.
 ================================================================================
 `;
 			await appendDeploymentLog(deployment.logPath, fail502Log, serverId);
@@ -787,15 +810,35 @@ Testing HTTP upstream reachability through routing layer...
 			!verifyResult.checks.appResponding &&
 			verifyResult.details?.includes("502")
 		) {
+			let diagnosticDetails = "";
+			try {
+				const remoteDocker = await getRemoteDocker(serverId);
+				const tasks = await remoteDocker.listTasks({
+					filters: JSON.stringify({ service: [application.appName] }),
+				});
+				const latestTask = tasks[0];
+				const taskState = latestTask?.Status?.State;
+				const exitCode = (latestTask?.Status as any)?.ContainerStatus?.ExitCode;
+				if (taskState && taskState !== "running") {
+					diagnosticDetails += `  • Container State: Task is currently '${taskState}' (Exit Code: ${exitCode ?? "N/A"}). The server process exited or failed to start.\n`;
+				} else {
+					diagnosticDetails += "  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
+				}
+			} catch {}
+
 			const fail502Log = `
 ❌ HTTP 502 Bad Gateway: Upstream Unreachable
 Test URL: ${verifyResult.testUrl}
-Diagnostic:
-  Traefik is running, but cannot establish a TCP connection to the container's internal port.
-Possible causes:
-  1. The application process is binding only to 127.0.0.1 (localhost) instead of 0.0.0.0.
-  2. The application is listening on a port different from the configured upstream port.
-  3. The server process exited or stopped accepting connections.
+Evidence & Diagnostic:
+${diagnosticDetails || "  • Container is running in Docker Swarm, but upstream TCP connection was refused.\n"}
+Probable root causes:
+  1. Port Mismatch: Application is listening on a port different from the configured Traefik upstream port.
+  2. Loopback Binding: Application server is bound to 127.0.0.1 (localhost) instead of 0.0.0.0 (all interfaces).
+  3. Slow Initialization: Application server took longer to start than the readiness retry deadline.
+Remediation:
+  • Verify Application > Ports or Application > Settings > Start Command.
+  • For Vite apps, ensure preview script runs with '--host 0.0.0.0 --port 4173'.
+  • For Node.js/Express, ensure process binds to '0.0.0.0' and uses process.env.PORT.
 ================================================================================
 `;
 			await appendDeploymentLog(deployment.logPath, fail502Log, serverId);

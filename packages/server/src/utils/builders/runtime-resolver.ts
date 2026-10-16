@@ -1331,6 +1331,9 @@ export const extractPortFromCommand = (
 	if (/\b(?:vite\s+preview|run\s+preview)\b/i.test(command)) {
 		return 4173;
 	}
+	if (/\b(?:astro\s+preview)\b/i.test(command)) {
+		return 4321;
+	}
 	if (/\bstreamlit\b/i.test(command)) {
 		return 8501;
 	}
@@ -1339,4 +1342,272 @@ export const extractPortFromCommand = (
 	}
 
 	return undefined;
+};
+
+export interface ApplicationRuntimeConfigParams {
+	application?: {
+		appName?: string | null;
+		command?: string | null;
+		ports?: Array<{ targetPort?: number | null }> | null;
+		buildType?: string | null;
+		env?: string | null;
+		environment?: {
+			env?: string | null;
+			project?: { env?: string | null } | null;
+		} | null;
+	} | null;
+	packageJsonContent?: string | null;
+	nixpacksTomlContent?: string | null;
+	files?: FileItem[];
+	detectedFramework?: string;
+	detectedLanguage?: string;
+	detectedPort?: number;
+	detectedStartCommand?: string;
+	packageManager?: SupportedPackageManager;
+	isStaticSpa?: boolean;
+	publishDirectory?: string;
+	imageCmd?: string;
+	imageExposedPorts?: number[];
+}
+
+export interface ApplicationRuntimeConfig {
+	framework: string;
+	language: string;
+	buildType: string;
+	packageManager: SupportedPackageManager;
+	startupCommand: string;
+	startupCommandSource:
+		| "customer_command"
+		| "nixpacks_toml"
+		| "package_json_start"
+		| "package_json_preview"
+		| "framework_default"
+		| "image_inspect"
+		| "fallback";
+	port: number;
+	portSource:
+		| "customer_port"
+		| "customer_command"
+		| "customer_env"
+		| "nixpacks_toml"
+		| "project_manifest"
+		| "framework_default"
+		| "image_inspect"
+		| "platform_default";
+	isStaticSpa: boolean;
+	publishDirectory?: string;
+	isHttpWorkload: boolean;
+	diagnostics?: string[];
+}
+
+/**
+ * Authoritative Universal Application Startup & Port Resolution Pipeline.
+ * Respects strict multi-tenant isolation and documented precedence.
+ */
+export const resolveApplicationRuntimeConfig = (
+	params: ApplicationRuntimeConfigParams,
+): ApplicationRuntimeConfig => {
+	const app = params.application;
+	const diagnostics: string[] = [];
+
+	// 1. Explicit Customer Overrides
+	const customerCommand = app?.command?.trim() || undefined;
+	const customerPort =
+		app?.ports?.[0]?.targetPort && app.ports[0].targetPort > 0
+			? app.ports[0].targetPort
+			: undefined;
+
+	let customerEnvPort: number | undefined;
+	const allEnvs = [
+		app?.env,
+		app?.environment?.env,
+		app?.environment?.project?.env,
+	];
+	for (const envStr of allEnvs) {
+		if (envStr) {
+			const m = envStr.match(/^\s*PORT\s*=\s*["']?(\d+)["']?/m);
+			if (m?.[1]) {
+				const p = Number.parseInt(m[1], 10);
+				if (!Number.isNaN(p) && p > 0) {
+					customerEnvPort = p;
+					break;
+				}
+			}
+		}
+	}
+
+	// 2. Parse nixpacks.toml if available
+	let nixpacksStartCmd: string | undefined;
+	let nixpacksTomlPort: number | undefined;
+	if (params.nixpacksTomlContent) {
+		const toml = params.nixpacksTomlContent;
+		const phaseStartMatch = toml.match(
+			/\[phases\.start\][\s\S]*?cmd\s*=\s*["']([^"']+)["']/,
+		);
+		const startMatch = toml.match(/\[start\][\s\S]*?cmd\s*=\s*["']([^"']+)["']/);
+		const cmdMatch =
+			phaseStartMatch ||
+			startMatch ||
+			toml.match(/^\s*cmd\s*=\s*["']([^"']+)["']/m);
+		if (cmdMatch?.[1]) {
+			nixpacksStartCmd = cmdMatch[1].trim();
+			const p = extractPortFromCommand(nixpacksStartCmd);
+			if (p) nixpacksTomlPort = p;
+		}
+		const portMatch = toml.match(/^\s*PORT\s*=\s*["']?(\d+)["']?/m);
+		if (portMatch?.[1]) {
+			const p = Number.parseInt(portMatch[1], 10);
+			if (!Number.isNaN(p) && p > 0) nixpacksTomlPort = p;
+		}
+	}
+
+	// 3. Parse package.json if available
+	let pkgScripts: Record<string, string> = {};
+	let pkgDeps: Record<string, string> = {};
+	let isViteSpa = false;
+	let isAstro = false;
+	if (params.packageJsonContent) {
+		try {
+			const parsed = JSON.parse(params.packageJsonContent);
+			pkgScripts = parsed.scripts || {};
+			pkgDeps = {
+				...(parsed.dependencies || {}),
+				...(parsed.devDependencies || {}),
+			};
+			isViteSpa = Boolean(pkgDeps.vite);
+			isAstro = Boolean(pkgDeps.astro);
+		} catch {}
+	}
+
+	// 4. Determine package manager
+	const pm: SupportedPackageManager =
+		params.packageManager ||
+		(params.files
+			? resolvePackageManagerAndCommands({
+					files: params.files,
+					packageJsonContent: params.packageJsonContent || undefined,
+				}).packageManager
+			: "npm");
+	const runPrefix =
+		pm === "bun"
+			? "bun run"
+			: pm === "pnpm"
+				? "pnpm run"
+				: pm === "yarn"
+					? "yarn"
+					: "npm run";
+
+	// 5. Workload Classification: HTTP workload vs Background Worker / Scheduled Job
+	const isWorkerCommand = Boolean(
+		customerCommand &&
+			/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer)\b/i.test(
+				customerCommand,
+			),
+	);
+	const isHttpWorkload = !isWorkerCommand;
+
+	// 6. Precedence for Effective Port
+	let port = 3000;
+	let portSource: ApplicationRuntimeConfig["portSource"] = "platform_default";
+
+	if (app?.buildType === "static" || params.isStaticSpa) {
+		port = 80;
+		portSource = "framework_default";
+	} else if (customerPort) {
+		port = customerPort;
+		portSource = "customer_port";
+	} else if (customerCommand && extractPortFromCommand(customerCommand)) {
+		port = extractPortFromCommand(customerCommand)!;
+		portSource = "customer_command";
+	} else if (customerEnvPort) {
+		port = customerEnvPort;
+		portSource = "customer_env";
+	} else if (nixpacksTomlPort) {
+		port = nixpacksTomlPort;
+		portSource = "nixpacks_toml";
+	} else if (params.detectedPort && params.detectedPort > 0) {
+		port = params.detectedPort;
+		portSource = "framework_default";
+	} else if (params.imageExposedPorts && params.imageExposedPorts.length > 0) {
+		port = params.imageExposedPorts[0]!;
+		portSource = "image_inspect";
+	} else if (isViteSpa && pkgScripts.preview) {
+		const extracted = extractPortFromCommand(pkgScripts.preview);
+		port = extracted || 4173;
+		portSource = "framework_default";
+	} else if (isAstro) {
+		port = 4321;
+		portSource = "framework_default";
+	} else {
+		port = 3000;
+		portSource = "platform_default";
+	}
+
+	// 7. Precedence for Effective Startup Command
+	let startupCommand = "npm start";
+	let startupCommandSource: ApplicationRuntimeConfig["startupCommandSource"] =
+		"fallback";
+
+	if (customerCommand) {
+		startupCommand = customerCommand;
+		startupCommandSource = "customer_command";
+	} else if (nixpacksStartCmd) {
+		startupCommand = nixpacksStartCmd;
+		startupCommandSource = "nixpacks_toml";
+	} else if (params.detectedStartCommand) {
+		startupCommand = params.detectedStartCommand;
+		startupCommandSource = "framework_default";
+	} else if (isViteSpa && pkgScripts.preview) {
+		const previewStr = String(pkgScripts.preview);
+		const hasHost = previewStr.includes("--host");
+		const hasPort = /--port|-p\b/i.test(previewStr);
+		let flags = "";
+		if (!hasPort) flags += ` --port ${port}`;
+		if (!hasHost) flags += " --host 0.0.0.0";
+		startupCommand = flags
+			? `${runPrefix} preview --${flags}`
+			: `${runPrefix} preview`;
+		startupCommandSource = "package_json_preview";
+	} else if (isAstro && pkgScripts.preview) {
+		const previewStr = String(pkgScripts.preview);
+		const hasHost = previewStr.includes("--host");
+		const hasPort = /--port|-p\b/i.test(previewStr);
+		let flags = "";
+		if (!hasPort) flags += ` --port ${port}`;
+		if (!hasHost) flags += " --host 0.0.0.0";
+		startupCommand = flags
+			? `${runPrefix} preview --${flags}`
+			: `${runPrefix} preview`;
+		startupCommandSource = "package_json_preview";
+	} else if (pkgScripts.start) {
+		const rawStart = String(pkgScripts.start).trim();
+		const isViteDev =
+			isViteSpa &&
+			(rawStart === "vite" || /^vite(?:\s+(?:dev|serve))?\b/i.test(rawStart));
+		if (isViteDev && pkgScripts.preview) {
+			startupCommand = `${runPrefix} preview -- --port ${port} --host 0.0.0.0`;
+			startupCommandSource = "package_json_preview";
+		} else {
+			startupCommand = pm === "bun" ? "bun start" : `${pm} start`;
+			startupCommandSource = "package_json_start";
+		}
+	} else if (params.imageCmd) {
+		startupCommand = params.imageCmd;
+		startupCommandSource = "image_inspect";
+	}
+
+	return {
+		framework: params.detectedFramework || (isViteSpa ? "Vite" : "Application"),
+		language: params.detectedLanguage || "JavaScript",
+		buildType: app?.buildType || (params.isStaticSpa ? "static" : "nixpacks"),
+		packageManager: pm,
+		startupCommand,
+		startupCommandSource,
+		port,
+		portSource,
+		isStaticSpa: Boolean(params.isStaticSpa),
+		publishDirectory: params.publishDirectory,
+		isHttpWorkload,
+		diagnostics: diagnostics.length > 0 ? diagnostics : undefined,
+	};
 };

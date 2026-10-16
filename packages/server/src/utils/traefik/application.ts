@@ -329,7 +329,25 @@ export const resolveDomainUpstreamPort = (
 		return 80;
 	}
 
-	// 2. Check if customer explicitly set PORT in application environment variables
+	// 2. Explicit HatDot application container target port configuration
+	if (
+		app &&
+		"ports" in app &&
+		Array.isArray(app.ports) &&
+		app.ports.length > 0 &&
+		app.ports[0]?.targetPort &&
+		app.ports[0].targetPort > 0
+	) {
+		return app.ports[0].targetPort;
+	}
+
+	// 3. Explicit port in customer-configured startup command (e.g. --port 4173, --server.port=8501)
+	const cmdPort = extractPortFromCommand(app?.command);
+	if (cmdPort) {
+		return cmdPort;
+	}
+
+	// 4. Explicit PORT in application environment variables
 	const allEnvs = [
 		app?.env,
 		app?.environment?.env,
@@ -347,13 +365,7 @@ export const resolveDomainUpstreamPort = (
 		}
 	}
 
-	// 3. Check if application startup command declares a port (e.g. --port 4173, --server.port=8501)
-	const cmdPort = extractPortFromCommand(app?.command);
-	if (cmdPort) {
-		return cmdPort;
-	}
-
-	// 4. Check if app has suggestedPort from framework detection (e.g. 4173 for Vite preview)
+	// 5. App has suggestedPort from framework detection (e.g. 4173 for Vite preview)
 	if (
 		app?.suggestedPort &&
 		app.suggestedPort > 0 &&
@@ -362,18 +374,34 @@ export const resolveDomainUpstreamPort = (
 		return app.suggestedPort;
 	}
 
-	// 5. If the application has explicit container target ports configured
-	if (
-		app &&
-		"ports" in app &&
-		Array.isArray(app.ports) &&
-		app.ports.length > 0 &&
-		app.ports[0]?.targetPort
-	) {
-		return app.ports[0].targetPort;
+	// 6. Inspect application build directory if suggestedPort was not supplied in memory
+	if (!app?.suggestedPort && app?.appName) {
+		try {
+			const { APPLICATIONS_PATH } = paths();
+			const codeDir = path.join(APPLICATIONS_PATH, app.appName, "code");
+			if (fs.existsSync(codeDir)) {
+				let detectFrameworkFromDirectorySync: any;
+				try {
+					detectFrameworkFromDirectorySync = require("../../services/app-detector").detectFrameworkFromDirectorySync;
+				} catch {
+					try {
+						detectFrameworkFromDirectorySync = require("@dokploy/server/services/app-detector").detectFrameworkFromDirectorySync;
+					} catch {}
+				}
+				if (detectFrameworkFromDirectorySync) {
+					const det = detectFrameworkFromDirectorySync(codeDir);
+					if (
+						det?.suggestedPort &&
+						(app.buildType !== "nixpacks" || det.suggestedPort !== 80)
+					) {
+						return det.suggestedPort;
+					}
+				}
+			}
+		} catch {}
 	}
 
-	// 6. If domain has an explicit customer-configured port that is not default 3000
+	// 7. If domain has an explicit customer-configured port that is not default 3000
 	if (domain.port && domain.port > 0 && domain.port !== 3000) {
 		return domain.port;
 	}

@@ -602,6 +602,17 @@ if [ -d ${quote([buildAppDirectory])} ]; then
       if [ -n "$DETECTED_START" ]; then
         export NIXPACKS_START_CMD="$DETECTED_START"
         echo "✓ HatDot resolved application startup command: $DETECTED_START" ;
+        DETECTED_PORT=$(node -e "
+          try {
+            const cmd = process.argv[1] || '';
+            const m = cmd.match(/--port[=\s](\d+)/i) || cmd.match(/-p[=\s](\d+)/i) || (cmd.includes('preview') ? [null, '4173'] : null);
+            if (m && m[1]) console.log(m[1]);
+          } catch(e) {}
+        " "$DETECTED_START" 2>/dev/null || true)
+        if [ -n "$DETECTED_PORT" ]; then
+          export PORT="$DETECTED_PORT"
+          export NIXPACKS_PORT="$DETECTED_PORT"
+        fi
       elif [ -f "${buildAppDirectory}/server.js" ]; then
         export NIXPACKS_START_CMD="node server.js"
         echo "✓ HatDot detected entrypoint: node server.js" ;

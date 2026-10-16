@@ -280,25 +280,38 @@ describe("Universal Deployment Engine: Traefik Router TLS Configuration", () => 
 		security: [],
 	};
 
+	const createMockDomain = (overrides: Partial<Domain> = {}): Domain => ({
+		domainId: "domain-1",
+		host: "haly-myapp-a27eec.hatdot.cloud",
+		https: true,
+		port: 4173,
+		path: null,
+		serviceName: "app-service",
+		domainType: "application",
+		uniqueConfigKey: 1,
+		createdAt: new Date().toISOString(),
+		composeId: null,
+		customCertResolver: null,
+		applicationId: "app-1",
+		previewDeploymentId: null,
+		certificateType: "letsencrypt",
+		internalPath: "/",
+		stripPath: false,
+		middlewares: [],
+		forwardAuthEnabled: false,
+		enabled: true,
+		customEntrypoint: null,
+		...overrides,
+	});
+
 	it("configures certResolver: 'letsencrypt' when https is true", async () => {
-		const mockDomain: Domain = {
+		const mockDomain = createMockDomain({
 			domainId: "domain-1",
 			host: "haly-myapp-a27eec.hatdot.cloud",
 			https: true,
 			port: 4173,
-			path: null,
 			certificateType: "letsencrypt",
-			customCertResolver: null,
-			serviceName: "app-service",
-			applicationId: "app-1",
-			composeId: null,
-			createdAt: new Date().toISOString(),
-			domainType: "application",
-			enabled: true,
-			serverId: null,
-			stripPrefix: false,
-			uniqueConfigKey: 1,
-		};
+		});
 
 		const routerConfig = await createRouterConfig(
 			mockApp,
@@ -312,24 +325,14 @@ describe("Universal Deployment Engine: Traefik Router TLS Configuration", () => 
 	});
 
 	it("ensures https: true with certificateType 'none' falls back to letsencrypt rather than leaving tls undefined", async () => {
-		const mockDomain: Domain = {
+		const mockDomain = createMockDomain({
 			domainId: "domain-2",
 			host: "butax-qrcode-pukssj.hatdot.cloud",
 			https: true,
 			port: 3000,
-			path: null,
 			certificateType: "none", // misconfigured or legacy
-			customCertResolver: null,
-			serviceName: "app-service",
-			applicationId: "app-2",
-			composeId: null,
-			createdAt: new Date().toISOString(),
-			domainType: "application",
-			enabled: true,
-			serverId: null,
-			stripPrefix: false,
 			uniqueConfigKey: 2,
-		};
+		});
 
 		const routerConfig = await createRouterConfig(
 			mockApp,
@@ -343,24 +346,14 @@ describe("Universal Deployment Engine: Traefik Router TLS Configuration", () => 
 	});
 
 	it("omits tls when https is false and certificateType is none", async () => {
-		const mockDomain: Domain = {
+		const mockDomain = createMockDomain({
 			domainId: "domain-3",
 			host: "internal.local",
 			https: false,
 			port: 80,
-			path: null,
 			certificateType: "none",
-			customCertResolver: null,
-			serviceName: "app-service",
-			applicationId: "app-3",
-			composeId: null,
-			createdAt: new Date().toISOString(),
-			domainType: "application",
-			enabled: true,
-			serverId: null,
-			stripPrefix: false,
 			uniqueConfigKey: 3,
-		};
+		});
 
 		const routerConfig = await createRouterConfig(
 			mockApp,

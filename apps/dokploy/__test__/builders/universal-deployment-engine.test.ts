@@ -1640,6 +1640,81 @@ dependencies = [
 			expect(pm.startCommand).toContain("--host 0.0.0.0");
 		});
 
+		it("detects Vite preview start script with custom port flag (call site 1)", () => {
+			const files: FileEntry[] = [
+				{
+					path: "package.json",
+					content: JSON.stringify({
+						name: "vite-custom-preview",
+						scripts: {
+							build: "vite build",
+							start: "vite preview --port 5005",
+						},
+						dependencies: { react: "^19.0.0" },
+						devDependencies: { vite: "^6.2.0" },
+					}),
+				},
+			];
+
+			const detection = detectFrameworkFromFiles(files);
+			expect(detection.buildType).toBe("nixpacks");
+			expect(detection.suggestedPort).toBe(5005);
+			expect(detection.startCommand).toBe("npm run start -- --port 5005 --host 0.0.0.0");
+		});
+
+		it("detects custom production server start script with port flag (call site 2)", () => {
+			const filesWithPort: FileEntry[] = [
+				{
+					path: "package.json",
+					content: JSON.stringify({
+						name: "vite-custom-server",
+						scripts: {
+							build: "vite build",
+							start: "node server.js --port 8080",
+						},
+						dependencies: { react: "^19.0.0", express: "^4.21.0" },
+						devDependencies: { vite: "^6.2.0" },
+					}),
+				},
+			];
+
+			const detection1 = detectFrameworkFromFiles(filesWithPort);
+			expect(detection1.buildType).toBe("nixpacks");
+			expect(detection1.suggestedPort).toBe(8080);
+			expect(detection1.startCommand).toBe("npm run start");
+
+			const filesWithShortFlag: FileEntry[] = [
+				{
+					path: "package.json",
+					content: JSON.stringify({
+						name: "vite-serve-server",
+						scripts: {
+							build: "vite build",
+							start: "serve dist -p 4000",
+						},
+						dependencies: { react: "^19.0.0" },
+						devDependencies: { vite: "^6.2.0" },
+					}),
+				},
+			];
+
+			const detection2 = detectFrameworkFromFiles(filesWithShortFlag);
+			expect(detection2.buildType).toBe("nixpacks");
+			expect(detection2.suggestedPort).toBe(4000);
+			expect(detection2.startCommand).toBe("npm run start");
+		});
+
+		it("extractPortFromCommand safely handles invalid, missing, and non-string inputs", () => {
+			expect(extractPortFromCommand(null)).toBeUndefined();
+			expect(extractPortFromCommand(undefined)).toBeUndefined();
+			expect(extractPortFromCommand("")).toBeUndefined();
+			expect(extractPortFromCommand("   ")).toBeUndefined();
+			expect(extractPortFromCommand("npm start")).toBeUndefined();
+			expect(extractPortFromCommand("node server.js --invalid-flag")).toBeUndefined();
+			expect(extractPortFromCommand("node server.js --port -1")).toBeUndefined();
+			expect(extractPortFromCommand("node server.js --port NaN")).toBeUndefined();
+		});
+
 		it("resolves Node.js 24 to 24.11.0 via MODERN_24_11 archive when engines require ^22.18.0 || >=24.11.0", () => {
 			const res = resolveNodeRuntime({
 				packageJsonContent: JSON.stringify({

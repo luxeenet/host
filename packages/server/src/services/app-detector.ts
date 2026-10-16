@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+	extractPortFromCommand,
 	resolveDotnetRuntime,
 	resolveGoRuntime,
 	resolveJavaRuntime,
@@ -143,7 +144,7 @@ export const isRecognizedProjectManifest = (fileName: string): boolean => {
 	);
 };
 
-export { extractPortFromCommand } from "../utils/builders/runtime-resolver";
+export { extractPortFromCommand };
 
 export const resolveProjectRoot = (
 	baseDir: string,

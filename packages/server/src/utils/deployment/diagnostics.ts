@@ -19,7 +19,11 @@ export type DiagnosticCode =
 	| "CONTAINER_RUNNING_NO_LISTENER"
 	| "COMMAND_EXITED_EARLY"
 	| "MALFORMED_PACKAGE_JSON"
-	| "HOST_VALIDATION_MANUAL_CONFIGURATION";
+	| "HOST_VALIDATION_MANUAL_CONFIGURATION"
+	| "UNSUPPORTED_NATIVE_ARCHITECTURE"
+	| "NATIVE_BINDING_RESOLUTION_FAILED"
+	| "INCOMPATIBLE_NATIVE_BINDING_VERSION"
+	| "UNKNOWN_BUILD_ERROR";
 
 export type DeploymentState =
 	| "configuration_failed"
@@ -164,20 +168,68 @@ export const DIAGNOSTIC_CATALOG: Record<DiagnosticCode, DiagnosticInfo> = {
 		explanation: "The application framework requires explicit allowed-host configuration.",
 		remediation: "Follow the framework-specific guide to add the domain to trusted hosts.",
 	},
+	UNSUPPORTED_NATIVE_ARCHITECTURE: {
+		code: "UNSUPPORTED_NATIVE_ARCHITECTURE",
+		title: "Unsupported CPU Architecture for Native Bindings",
+		explanation:
+			"The application requires prebuilt native binaries (such as Rolldown) that are not published for this CPU architecture.",
+		remediation:
+			"Deploy to an x86_64 (amd64) or aarch64 (arm64) Linux server host, or configure a custom Dockerfile.",
+	},
+	NATIVE_BINDING_RESOLUTION_FAILED: {
+		code: "NATIVE_BINDING_RESOLUTION_FAILED",
+		title: "Native Binary Resolution Failed",
+		explanation:
+			"A platform-specific native binary package (e.g. Rolldown) omitted from the lockfile could not be installed.",
+		remediation:
+			"Ensure your package manager can reach the npm registry, or commit a Linux-compatible lockfile.",
+	},
+	INCOMPATIBLE_NATIVE_BINDING_VERSION: {
+		code: "INCOMPATIBLE_NATIVE_BINDING_VERSION",
+		title: "Incompatible Native Binding Version",
+		explanation:
+			"The installed native binary version does not match the version required by your bundler or framework.",
+		remediation:
+			"Run npm update or align optional dependency versions in your package manifest.",
+	},
+	UNKNOWN_BUILD_ERROR: {
+		code: "UNKNOWN_BUILD_ERROR",
+		title: "Unexpected Build Error",
+		explanation:
+			"An unexpected error occurred during the build process.",
+		remediation:
+			"Check your project build configuration or contact HatDot support with your deployment ID.",
+	},
 };
 
 /**
  * Redacts passwords, bearer tokens, API keys, and sensitive environment variables from logs.
  */
+/**
+ * Redacts passwords, bearer tokens, API keys, private keys, database credentials,
+ * and sensitive environment variables from logs.
+ */
 export const redactSensitiveInformation = (text: string): string => {
 	if (!text) return "";
 	return text
-		.replace(/([a-zA-Z0-9+.-]+:\/\/[^:]+:)([^@]+)(@)/g, "$1••••••••$3")
-		.replace(/(?:password|passwd|secret|token|api[_-]?key|auth|bearer)[\s=:"]+([^\s,;"]+)/gi, (match, val) => {
+		// Redact private keys (RSA, EC, OPENSSH, etc.)
+		.replace(/-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/g, "[REDACTED PRIVATE KEY]")
+		// Redact database URIs with passwords: postgres://user:pass@host:5432/db or redis://:pass@host:6379
+		.replace(/([a-zA-Z0-9+.-]+:\/\/(?:[^:\s'"]*:)?)([^\s'"]+?)(@[a-zA-Z0-9_.-]+(?::\d+)?(?=[/?#'"\s]|$))/g, "$1••••••••$3")
+		// Redact query parameter credentials: ?token=xyz or &password=xyz
+		.replace(/([?&](?:password|passwd|secret|token|api[_-]?key|auth)=)[^&\s'"]+/gi, "$1••••••••")
+		// Redact Authorization headers and tokens
+		.replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer ••••••••")
+		.replace(/Basic\s+[A-Za-z0-9+/=]+=*/gi, "Basic ••••••••")
+		// Redact CLI flags: --password=xyz or --token xyz
+		.replace(/--(?:password|passwd|token|secret|api[_-]?key|auth)[\s=]+([^\s"']+)/gi, (match, val) => {
+			return match.replace(val, "••••••••");
+		})
+		// Redact environment variable assignments: SECRET=xyz or API_KEY=xyz
+		.replace(/(?:password|passwd|secret|token|api[_-]?key|auth|jwt|private[_-]?key)[\s=:"]+([^\s,;"]+)/gi, (match, val) => {
 			if (val.length <= 4) return match.replace(val, "••••");
 			return match.replace(val, `${val.slice(0, 2)}••••${val.slice(-2)}`);
-		})
-		.replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer ••••••••");
+		});
 };
 
 /**

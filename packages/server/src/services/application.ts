@@ -47,6 +47,7 @@ import {
 	saveDeploymentPlanSync,
 	formatDeploymentPlanLog,
 } from "../utils/builders/deployment-plan";
+import { sanitizeLogContent } from "../utils/deployment/logging-boundary";
 import {
 	createDeployment,
 	createDeploymentPreview,
@@ -166,7 +167,8 @@ export const appendDeploymentLog = async (
 	content: string,
 	serverId?: string | null,
 ) => {
-	const encoded = encodeBase64(content);
+	const sanitized = sanitizeLogContent(content);
+	const encoded = encodeBase64(sanitized);
 	const cmd = `echo "${encoded}" | base64 -d >> "${logPath}";`;
 	if (serverId) {
 		await execAsyncRemote(serverId, cmd).catch(() => {});

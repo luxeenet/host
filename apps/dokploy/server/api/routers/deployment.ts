@@ -5,12 +5,16 @@ import {
 	findAllDeploymentsByComposeId,
 	findAllDeploymentsByServerId,
 	findAllDeploymentsCentralized,
+	findApplicationById,
+	findComposeById,
 	findDeploymentById,
 	findScheduleById,
 	IS_CLOUD,
 	removeDeployment,
 	resolveServicePath,
 	updateDeploymentStatus,
+	transformLogForAudience,
+	type DeploymentAudience,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -263,22 +267,55 @@ export const deploymentRouter = createTRPCRouter({
 				return "";
 			}
 
+			// Enforce tenant boundary: verify deployment belongs to caller's active organization
+			let deploymentOrgId: string | null = null;
+			if (deployment.applicationId) {
+				const app = await findApplicationById(deployment.applicationId);
+				deploymentOrgId = app?.environment?.project?.organizationId ?? null;
+			} else if (deployment.composeId) {
+				const comp = await findComposeById(deployment.composeId);
+				deploymentOrgId = comp?.environment?.project?.organizationId ?? null;
+			}
+
+			if (deploymentOrgId && deploymentOrgId !== ctx.session.activeOrganizationId) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You don't have access to this deployment.",
+				});
+			}
+
+			// Determine viewer audience: authorized admin vs customer
+			let isAdmin = false;
+			try {
+				if (ctx.user.isPlatformAdmin) {
+					isAdmin = true;
+				} else if (ctx.session?.activeOrganizationId) {
+					const member = await findMemberByUserId(
+						ctx.user.id,
+						ctx.session.activeOrganizationId,
+					);
+					isAdmin = member?.role === "owner" || member?.role === "admin";
+				}
+			} catch {}
+
+			const audience: DeploymentAudience = isAdmin ? "admin" : "customer";
+
 			const command = `tail -n ${input.tail} "${deployment.logPath}" 2>/dev/null || echo ""`;
 			const serverId =
 				deployment.serverId ||
 				deployment.schedule?.serverId ||
 				deployment.application?.serverId ||
 				deployment.compose?.serverId;
+
+			let rawLog = "";
 			if (serverId) {
 				const { stdout } = await execAsyncRemote(serverId, command);
-				return stdout;
+				rawLog = stdout;
+			} else if (!IS_CLOUD) {
+				const { stdout } = await execAsync(command);
+				rawLog = stdout;
 			}
 
-			if (IS_CLOUD) {
-				return "";
-			}
-
-			const { stdout } = await execAsync(command);
-			return stdout;
+			return transformLogForAudience(rawLog, audience);
 		}),
 });

@@ -1,6 +1,13 @@
 import { spawn } from "node:child_process";
 import type http from "node:http";
-import { findServerById, IS_CLOUD, validateRequest } from "@dokploy/server";
+import {
+	findServerById,
+	IS_CLOUD,
+	validateRequest,
+	transformChunkForAudience,
+	type DeploymentAudience,
+} from "@dokploy/server";
+import { findMemberByUserId } from "@dokploy/server/services/permission";
 import { encodeBase64 } from "@dokploy/server/utils/docker/utils";
 import { readValidDirectory } from "@dokploy/server/wss/utils";
 import { Client } from "ssh2";
@@ -51,6 +58,22 @@ export const setupDeploymentLogsWebSocketServer = (
 			return;
 		}
 
+		// Determine viewer audience: admin vs customer
+		let isAdmin = false;
+		try {
+			if (user.isPlatformAdmin) {
+				isAdmin = true;
+			} else if (session.activeOrganizationId) {
+				const member = await findMemberByUserId(
+					user.id,
+					session.activeOrganizationId,
+				);
+				isAdmin = member?.role === "owner" || member?.role === "admin";
+			}
+		} catch {}
+
+		const audience: DeploymentAudience = isAdmin ? "admin" : "customer";
+
 		let tailProcess: ReturnType<typeof spawn> | null = null;
 		let sshClient: Client | null = null;
 
@@ -87,12 +110,18 @@ export const setupDeploymentLogsWebSocketServer = (
 								})
 								.on("data", (data: string) => {
 									if (ws.readyState === ws.OPEN) {
-										ws.send(data.toString());
+										const transformed = transformChunkForAudience(data.toString(), audience);
+										if (transformed) {
+											ws.send(transformed);
+										}
 									}
 								})
 								.stderr.on("data", (data) => {
 									if (ws.readyState === ws.OPEN) {
-										ws.send(data.toString());
+										const transformed = transformChunkForAudience(data.toString(), audience);
+										if (transformed) {
+											ws.send(transformed);
+										}
 									}
 								});
 						});
@@ -132,7 +161,10 @@ export const setupDeploymentLogsWebSocketServer = (
 				if (stdout) {
 					stdout.on("data", (data) => {
 						if (ws.readyState === ws.OPEN) {
-							ws.send(data.toString());
+							const transformed = transformChunkForAudience(data.toString(), audience);
+							if (transformed) {
+								ws.send(transformed);
+							}
 						}
 					});
 				}
@@ -140,7 +172,10 @@ export const setupDeploymentLogsWebSocketServer = (
 				if (stderr) {
 					stderr.on("data", (data) => {
 						if (ws.readyState === ws.OPEN) {
-							ws.send(new Error(`tail error: ${data.toString()}`).message);
+							const transformed = transformChunkForAudience(data.toString(), audience);
+							if (transformed) {
+								ws.send(transformed);
+							}
 						}
 					});
 				}

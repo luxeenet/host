@@ -375,6 +375,9 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 export NIXPACKS_PATH="\${NIXPACKS_PATH:-}"
 export HOST="\${HOST:-0.0.0.0}"
 export NIXPACKS_HOST="\${NIXPACKS_HOST:-0.0.0.0}"
+# Correct deprecated npm production config warning (npm warn config production Use --omit=dev instead)
+unset NPM_CONFIG_PRODUCTION 2>/dev/null || export NPM_CONFIG_PRODUCTION=""
+export NPM_CONFIG_UPDATE_NOTIFIER="false"
 ${activeStartCommand ? `export NIXPACKS_START_CMD="\${NIXPACKS_START_CMD:-${activeStartCommand.replace(/"/g, '\\"')}}"` : ""}
 ${effectivePort ? `export PORT="\${PORT:-${effectivePort}}"\nexport NIXPACKS_PORT="\${NIXPACKS_PORT:-${effectivePort}}"` : ""}
 
@@ -597,7 +600,7 @@ if [ -d ${quote([buildAppDirectory])} ]; then
 
   # Fix cross-platform lockfile optional dependency omissions (npm/cli#4828)
   if [ -f "${buildAppDirectory}/package.json" ]; then
-    NATIVE_REPAIR='if [ -d "node_modules/rolldown" ]; then ARCH=$(uname -m); case "$ARCH" in x86_64) PKG="@rolldown/binding-linux-x64-gnu" ;; aarch64|arm64) PKG="@rolldown/binding-linux-arm64-gnu" ;; *) PKG="" ;; esac; if [ -n "$PKG" ] && [ ! -d "node_modules/$PKG" ]; then VER=$(node -e "try { console.log(require(\"./node_modules/rolldown/package.json\").version); } catch(e){}" 2>/dev/null || true); echo "⚡ HatDot detected missing Rolldown Linux native binding ($PKG@\${VER}). Installing..."; if [ -n "$VER" ]; then npm i "$PKG@$VER" --no-save; else npm i "$PKG" --no-save; fi || { echo "❌ Failed to install required Rolldown native binding: $PKG"; exit 1; }; fi; fi'
+    NATIVE_REPAIR='if [ -d "node_modules/rolldown" ]; then ARCH=$(uname -m 2>/dev/null || echo "x86_64"); case "$ARCH" in x86_64) PKG="@rolldown/binding-linux-x64-gnu" ;; aarch64|arm64) PKG="@rolldown/binding-linux-arm64-gnu" ;; *) PKG="" ;; esac; if [ -z "$PKG" ]; then echo "❌ HatDot Error [UNSUPPORTED_NATIVE_ARCHITECTURE]: CPU architecture \x27$ARCH\x27 is not supported by Rolldown native bindings." >&2; exit 1; fi; if [ -d "node_modules/$PKG" ]; then echo "✓ HatDot verified native binding $PKG is already installed and valid."; else VER=$(node -e "try { console.log(require(\"./node_modules/rolldown/package.json\").version); } catch(e){}" 2>/dev/null || true); echo "⚡ HatDot detected missing Rolldown Linux native binding ($PKG@\${VER}). Installing..."; if [ -n "$VER" ]; then npm i "$PKG@$VER" --no-save --ignore-scripts=false; else npm i "$PKG" --no-save --ignore-scripts=false; fi || { echo "❌ Failed to install required Rolldown native binding: $PKG" >&2; exit 1; }; if [ ! -d "node_modules/$PKG" ]; then echo "❌ Failed to verify native binding in node_modules: $PKG" >&2; exit 1; fi; echo "✓ HatDot successfully verified native binding $PKG."; fi; fi'
     if [ -n "$NIXPACKS_BUILD_CMD" ]; then
       case "$NIXPACKS_BUILD_CMD" in
         *"@rolldown/binding"*|"rolldown"*) ;;

@@ -301,3 +301,4 @@ export * from "./static";
 export * from "./vite-config";
 export * from "./host-validation";
 export * from "./deployment-plan";
+export * from "./native-dependency-resolver";

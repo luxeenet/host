@@ -1568,6 +1568,7 @@ dependencies = [
 		it("detects Vite (React) (TypeScript) static application and distinguishes it from dev server", () => {
 			const files: FileEntry[] = [
 				{
+					name: "package.json",
 					path: "package.json",
 					content: JSON.stringify({
 						name: "vite-react-ts-app",
@@ -1586,10 +1587,10 @@ dependencies = [
 						},
 					}),
 				},
-				{ path: "tsconfig.json", content: "{}" },
-				{ path: "vite.config.ts", content: "export default {}" },
-				{ path: "index.html", content: "<html></html>" },
-				{ path: "src/App.tsx", content: "export default () => <h1>App</h1>" },
+				{ name: "tsconfig.json", path: "tsconfig.json", content: "{}" },
+				{ name: "vite.config.ts", path: "vite.config.ts", content: "export default {}" },
+				{ name: "index.html", path: "index.html", content: "<html></html>" },
+				{ name: "App.tsx", path: "src/App.tsx", content: "export default () => <h1>App</h1>" },
 			];
 
 			const detection = detectFrameworkFromFiles(files);
@@ -1610,6 +1611,7 @@ dependencies = [
 		it("detects Vite application with preview script and binds to port 4173 with 0.0.0.0", () => {
 			const files: FileEntry[] = [
 				{
+					name: "package.json",
 					path: "package.json",
 					content: JSON.stringify({
 						name: "vite-preview-app",
@@ -1643,6 +1645,7 @@ dependencies = [
 		it("detects Vite preview start script with custom port flag (call site 1)", () => {
 			const files: FileEntry[] = [
 				{
+					name: "package.json",
 					path: "package.json",
 					content: JSON.stringify({
 						name: "vite-custom-preview",
@@ -1665,6 +1668,7 @@ dependencies = [
 		it("detects custom production server start script with port flag (call site 2)", () => {
 			const filesWithPort: FileEntry[] = [
 				{
+					name: "package.json",
 					path: "package.json",
 					content: JSON.stringify({
 						name: "vite-custom-server",
@@ -1685,6 +1689,7 @@ dependencies = [
 
 			const filesWithShortFlag: FileEntry[] = [
 				{
+					name: "package.json",
 					path: "package.json",
 					content: JSON.stringify({
 						name: "vite-serve-server",

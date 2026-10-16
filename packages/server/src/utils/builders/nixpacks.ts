@@ -16,10 +16,11 @@ import {
 	resolveNodeRuntime,
 	resolvePackageManagerAndCommands,
 } from "./runtime-resolver";
+import { getAuthorizedHostsSync } from "./host-validation";
 import {
-	configureViteAllowedHosts,
-	getAuthorizedHostsSync,
-} from "./vite-config";
+	loadDeploymentPlanSync,
+	resolveDeploymentPlan,
+} from "./deployment-plan";
 
 export const getNixpacksCommand = (application: ApplicationNested) => {
 	const { env, appName, publishDirectory, cleanCache, command: customerCommand } = application;
@@ -67,18 +68,25 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	let preResolvedSetupCmds: string[] | undefined;
 	let preResolvedPythonVersion: string | undefined;
 
+	const plan =
+		loadDeploymentPlanSync(appName, application.serverId) ||
+		resolveDeploymentPlan({
+			application,
+			buildAppDirectory: fs.existsSync(buildAppDirectory)
+				? buildAppDirectory
+				: undefined,
+		});
+
 	if (fs.existsSync(buildAppDirectory)) {
 		try {
-			// Configure Vite allowedHosts for authorized hostnames
-			const authorizedHosts = getAuthorizedHostsSync(application);
-			if (authorizedHosts.length > 0) {
-				configureViteAllowedHosts(buildAppDirectory, authorizedHosts);
-				const hostsStr = authorizedHosts.join(",");
-				args.push(
-					"--env",
-					`__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=${hostsStr}`,
-				);
-				args.push("--env", `VITE_ALLOWED_HOSTS=${hostsStr}`);
+			// Configure Vite allowedHosts for authorized hostnames via framework environment
+			if (plan.hostValidation.env.length > 0) {
+				for (const envItem of plan.hostValidation.env) {
+					const [key] = envItem.split("=");
+					if (!envVariables.some((e) => e.startsWith(`${key}=`))) {
+						args.push("--env", envItem);
+					}
+				}
 			}
 
 			const detected = detectFrameworkFromDirectorySync(buildAppDirectory);
@@ -277,6 +285,18 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	const cmdPort = extractPortFromCommand(activeStartCommand);
 	if (cmdPort) {
 		effectivePort = cmdPort;
+	} else if (customerCommand) {
+		if (preResolvedPort) {
+			effectivePort = preResolvedPort;
+		} else if (effectiveProvider === "python") {
+			effectivePort = 8501;
+		} else if (activeStartCommand && /\bpreview\b/i.test(activeStartCommand)) {
+			effectivePort = 4173;
+		} else {
+			effectivePort = 3000;
+		}
+	} else if (plan?.port?.value) {
+		effectivePort = plan.port.value;
 	} else if (preResolvedPort) {
 		effectivePort = preResolvedPort;
 	} else if (effectiveProvider === "python") {
@@ -355,6 +375,8 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 export NIXPACKS_PATH="\${NIXPACKS_PATH:-}"
 export HOST="\${HOST:-0.0.0.0}"
 export NIXPACKS_HOST="\${NIXPACKS_HOST:-0.0.0.0}"
+${activeStartCommand ? `export NIXPACKS_START_CMD="\${NIXPACKS_START_CMD:-${activeStartCommand.replace(/"/g, '\\"')}}"` : ""}
+${effectivePort ? `export PORT="\${PORT:-${effectivePort}}"\nexport NIXPACKS_PORT="\${NIXPACKS_PORT:-${effectivePort}}"` : ""}
 
 if [ -d ${quote([buildAppDirectory])} ]; then
   # Pure Python detection in preflight shell
@@ -587,7 +609,9 @@ if [ -d ${quote([buildAppDirectory])} ]; then
   fi
 
   # Resolve dynamic startup command if not explicitly supplied
-  if [ -z "$NIXPACKS_START_CMD" ] && [ -f "${buildAppDirectory}/package.json" ]; then
+  if [ -n "$NIXPACKS_START_CMD" ]; then
+    echo "✓ HatDot resolved application startup command: $NIXPACKS_START_CMD" ;
+  elif [ -f "${buildAppDirectory}/package.json" ]; then
     if [ "$IS_STATIC_SPA" = "true" ]; then
       echo "✓ Detected static frontend SPA. Allowing Nixpacks Caddy static server to host production build on port 80." ;
     else
@@ -595,9 +619,12 @@ if [ -d ${quote([buildAppDirectory])} ]; then
         try {
           const p = require('${buildAppDirectory}/package.json');
           const s = p.scripts || {};
+          const isViteSpa = Boolean((p.dependencies && p.dependencies.vite) || (p.devDependencies && p.devDependencies.vite));
           const start = s.start || '';
           const isViteDev = /vite(\s|$)/.test(start) && !start.includes('preview');
-          if (s.start && !isViteDev) {
+          if (isViteSpa && s.preview) {
+            console.log('npm run preview -- --host 0.0.0.0 --port 4173');
+          } else if (s.start && !isViteDev) {
             console.log('npm start');
           } else if (s['start:prod']) {
             console.log('npm run start:prod');

@@ -25,6 +25,7 @@ import { findApplicationById } from "./application";
 import { detectCDNProvider } from "./cdn";
 import { findComposeById } from "./compose";
 import { findServerById } from "./server";
+import { detectHostRejection } from "../utils/builders/host-validation";
 
 export type Domain = typeof domains.$inferSelect;
 
@@ -1201,12 +1202,23 @@ export const verifyApplicationLiveUrl = async (
 				}
 			} catch {}
 
-			if (
+			const hostRejection = detectHostRejection({
+				status: response.status,
+				body: bodyText,
+			}) || (
 				bodyText.includes("Blocked request. This host") ||
 				(bodyText.includes("is not allowed") &&
 					(bodyText.includes("allowedHosts") ||
 						bodyText.includes("Host (")))
-			) {
+					? {
+							framework: "vite" as const,
+							message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
+							remediation: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
+						}
+					: null
+			);
+
+			if (hostRejection) {
 				return {
 					isLive: false,
 					testUrl,
@@ -1216,9 +1228,11 @@ export const verifyApplicationLiveUrl = async (
 						httpsActive: false,
 						appResponding: false,
 					},
-					statusCode: 403,
-					message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
-					details: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
+					statusCode: response.status === 400 ? 400 : 403,
+					message: hostRejection.framework === "vite"
+						? `Vite rejected host header: ${host} is not in preview.allowedHosts.`
+						: `${hostRejection.framework.toUpperCase()} host validation rejected the request: ${hostRejection.message}`,
+					details: hostRejection.remediation || `Host validation blocked the request for "${host}".`,
 				};
 			}
 
@@ -1299,12 +1313,23 @@ export const verifyApplicationLiveUrl = async (
 							}
 						} catch {}
 
-						if (
+						const fallbackRejection = detectHostRejection({
+							status: httpRes.status,
+							body: httpBody,
+						}) || (
 							httpBody.includes("Blocked request. This host") ||
 							(httpBody.includes("is not allowed") &&
 								(httpBody.includes("allowedHosts") ||
 									httpBody.includes("Host (")))
-						) {
+								? {
+										framework: "vite" as const,
+										message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
+										remediation: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
+									}
+								: null
+						);
+
+						if (fallbackRejection) {
 							return {
 								isLive: false,
 								testUrl,
@@ -1314,9 +1339,11 @@ export const verifyApplicationLiveUrl = async (
 									httpsActive: false,
 									appResponding: false,
 								},
-								statusCode: 403,
-								message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
-								details: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
+								statusCode: httpRes.status === 400 ? 400 : 403,
+								message: fallbackRejection.framework === "vite"
+									? `Vite rejected host header: ${host} is not in preview.allowedHosts.`
+									: `${fallbackRejection.framework.toUpperCase()} host validation rejected the request: ${fallbackRejection.message}`,
+								details: fallbackRejection.remediation || `Host validation blocked the request for "${host}".`,
 							};
 						}
 

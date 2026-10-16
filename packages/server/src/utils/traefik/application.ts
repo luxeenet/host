@@ -374,8 +374,25 @@ export const resolveDomainUpstreamPort = (
 		return app.suggestedPort;
 	}
 
-	// 6. Inspect application build directory if suggestedPort was not supplied in memory
+	// 6. Inspect saved deployment plan or application build directory
 	if (!app?.suggestedPort && app?.appName) {
+		try {
+			let loadDeploymentPlanSync: any;
+			try {
+				loadDeploymentPlanSync = require("../builders/deployment-plan").loadDeploymentPlanSync;
+			} catch {
+				try {
+					loadDeploymentPlanSync = require("@dokploy/server/utils/builders/deployment-plan").loadDeploymentPlanSync;
+				} catch {}
+			}
+			if (loadDeploymentPlanSync) {
+				const plan = loadDeploymentPlanSync(app.appName);
+				if (plan?.port?.value && (app.buildType !== "nixpacks" || plan.port.value !== 80)) {
+					return plan.port.value;
+				}
+			}
+		} catch {}
+
 		try {
 			const { APPLICATIONS_PATH } = paths();
 			const codeDir = path.join(APPLICATIONS_PATH, app.appName, "code");

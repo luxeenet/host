@@ -3,11 +3,7 @@ import path from "node:path";
 import type { ApplicationNested } from ".";
 import { getConfiguredPlatformDomain } from "../../services/domain";
 
-export type ApplicationWithDomains = {
-	appName?: string | null;
-	domains?: Array<{ host?: string | null; enabled?: boolean | null }> | null;
-	[key: string]: any;
-};
+import type { ApplicationWithDomains } from "./host-validation";
 
 export interface ViteConfigUpdateResult {
 	content: string;
@@ -299,50 +295,12 @@ export default defineConfig({
 	return { success: false, addedHosts: [] };
 };
 
-/**
- * Returns the authoritative list of allowed hostnames for an application.
- * Multi-tenant safe: only extracts hostnames assigned or authorized for this specific application.
- */
-export const getAuthorizedHostsSync = (
-	application: ApplicationNested | ApplicationWithDomains,
-	platformDomain?: string | null,
-): string[] => {
-	const hosts = new Set<string>();
-
-	if (application.appName) {
-		const domainBase =
-			platformDomain ||
-			process.env.PLATFORM_DOMAIN ||
-			process.env.BRAND_PLATFORM_SUBDOMAIN_BASE ||
-			"hatdot.cloud";
-		hosts.add(`${application.appName}.${domainBase}`);
-	}
-
-	if (
-		"domains" in application &&
-		Array.isArray(application.domains) &&
-		application.domains.length > 0
-	) {
-		for (const d of application.domains) {
-			if (d?.host && d.enabled !== false) {
-				const clean = d.host
-					.replace(/^https?:\/\//, "")
-					.split(/[/:]/)[0]!
-					.trim()
-					.toLowerCase();
-				if (clean) {
-					hosts.add(clean);
-				}
-			}
-		}
-	}
-
-	return Array.from(hosts);
-};
-
-export const getAuthorizedHostsForApplication = async (
-	application: ApplicationNested | ApplicationWithDomains,
-): Promise<string[]> => {
-	const platformDomain = await getConfiguredPlatformDomain();
-	return getAuthorizedHostsSync(application, platformDomain);
-};
+export {
+	getAuthorizedHostsSync,
+	getAuthorizedHostsForApplication,
+	normalizeHostname,
+	resolveHostValidation,
+	detectHostRejection,
+	type HostValidationPlan,
+	type HostRejection,
+} from "./host-validation";

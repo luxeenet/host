@@ -43,9 +43,10 @@ import {
 } from "./app-detector";
 import { getBuildAppDirectory } from "../utils/filesystem/directory";
 import {
-	configureViteAllowedHosts,
-	getAuthorizedHostsForApplication,
-} from "../utils/builders/vite-config";
+	resolveDeploymentPlan,
+	saveDeploymentPlanSync,
+	formatDeploymentPlanLog,
+} from "../utils/builders/deployment-plan";
 import {
 	createDeployment,
 	createDeploymentPreview,
@@ -58,6 +59,7 @@ import {
 	getDomainHost,
 	updateDomainById,
 	verifyApplicationLiveUrl,
+	getConfiguredPlatformDomain,
 } from "./domain";
 import {
 	createPreviewDeploymentComment,
@@ -461,41 +463,26 @@ export const deployApplication = async ({
 			});
 		}
 
+		// Stage 1: Resolve unified DeploymentPlan
+		const buildAppDir = getBuildAppDirectory(application);
+		let platformDomain: string | null = null;
 		try {
-			const buildAppDir = getBuildAppDirectory(application);
-			if (fs.existsSync(buildAppDir)) {
-				// Automatically configure Vite allowedHosts for authorized hostnames
-				try {
-					const authorizedHosts =
-						await getAuthorizedHostsForApplication(application);
-					if (authorizedHosts.length > 0) {
-						configureViteAllowedHosts(buildAppDir, authorizedHosts);
-					}
-				} catch {}
-
-				const inspection = await detectFrameworkFromDirectory(buildAppDir);
-				const packageManager = inspection.packageManager || (inspection.language === "Python" ? "pip" : "npm");
-				const startupCommand = application.command || inspection.startCommand || "default";
-				let expectedPort = inspection.suggestedPort;
-				const cmdPort = extractPortFromCommand(startupCommand);
-				if (cmdPort) {
-					expectedPort = cmdPort;
-				}
-				const stage1Log = `
-================================================================================
-Stage 1/7: Configuration & Framework Detection
---------------------------------------------------------------------------------
-Selected Builder:      ${application.buildType}
-Detected Framework:    ${inspection.framework} (${inspection.language})
-Runtime Version:       ${inspection.runtimeVersion || "standard"}
-Package Manager:       ${packageManager}
-Startup Command:       ${startupCommand}
-Expected Port:         ${expectedPort}
-================================================================================
-`;
-				await appendDeploymentLog(deployment.logPath, stage1Log, serverId);
+			if (typeof getConfiguredPlatformDomain === "function") {
+				platformDomain = await getConfiguredPlatformDomain();
 			}
 		} catch {}
+
+		const plan = resolveDeploymentPlan({
+			application,
+			buildAppDirectory: fs.existsSync(buildAppDir) ? buildAppDir : undefined,
+			platformDomain,
+		});
+		saveDeploymentPlanSync(application.appName, plan, serverId);
+
+		if (fs.existsSync(buildAppDir)) {
+			const stage1Log = formatDeploymentPlanLog(plan);
+			await appendDeploymentLog(deployment.logPath, stage1Log, serverId);
+		}
 
 		command += await getBuildCommand(application);
 
@@ -768,17 +755,27 @@ export const rebuildApplication = async ({
 	});
 
 	try {
-		let command = "set -e;";
+		const buildAppDir = getBuildAppDirectory(application);
+		let platformDomain: string | null = null;
 		try {
-			const buildAppDir = getBuildAppDirectory(application);
-			if (fs.existsSync(buildAppDir)) {
-				const authorizedHosts =
-					await getAuthorizedHostsForApplication(application);
-				if (authorizedHosts.length > 0) {
-					configureViteAllowedHosts(buildAppDir, authorizedHosts);
-				}
+			if (typeof getConfiguredPlatformDomain === "function") {
+				platformDomain = await getConfiguredPlatformDomain();
 			}
 		} catch {}
+
+		const plan = resolveDeploymentPlan({
+			application,
+			buildAppDirectory: fs.existsSync(buildAppDir) ? buildAppDir : undefined,
+			platformDomain,
+		});
+		saveDeploymentPlanSync(application.appName, plan, serverId);
+
+		if (fs.existsSync(buildAppDir)) {
+			const stage1Log = formatDeploymentPlanLog(plan);
+			await appendDeploymentLog(deployment.logPath, stage1Log, serverId);
+		}
+
+		let command = "set -e;";
 		// Check case for docker only
 		command += await getBuildCommand(application);
 		const commandWithLog = `(${command}) >> ${deployment.logPath} 2>&1`;

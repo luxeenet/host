@@ -22,6 +22,7 @@ import { getPaketoCommand } from "./paketo";
 import { getRailpackCommand } from "./railpack";
 import { getStaticCommand } from "./static";
 import { extractPortFromCommand } from "./runtime-resolver";
+import { getAuthorizedHostsSync } from "./vite-config";
 
 // NIXPACKS codeDirectory = where is the path of the code directory
 // HEROKU codeDirectory = where is the path of the code directory
@@ -174,6 +175,24 @@ export const mechanizeDockerContainer = async (
 		envVariables.push(`NIXPACKS_PORT=${targetPort}`);
 	}
 
+	// Inject authorized hostnames for Vite and other framework allowedHosts validation
+	const authorizedHosts = getAuthorizedHostsSync(application);
+	if (authorizedHosts.length > 0) {
+		const hostsStr = authorizedHosts.join(",");
+		if (
+			!envVariables.some((e) =>
+				e.startsWith("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="),
+			)
+		) {
+			envVariables.push(
+				`__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=${hostsStr}`,
+			);
+		}
+		if (!envVariables.some((e) => e.startsWith("VITE_ALLOWED_HOSTS="))) {
+			envVariables.push(`VITE_ALLOWED_HOSTS=${hostsStr}`);
+		}
+	}
+
 	const image = await getImageName(application);
 	const authConfig = await getAuthConfig(application);
 	const docker = await getRemoteDocker(application.serverId);
@@ -304,3 +323,4 @@ export * from "./railpack";
 export * from "./runtime-catalog";
 export * from "./runtime-resolver";
 export * from "./static";
+export * from "./vite-config";

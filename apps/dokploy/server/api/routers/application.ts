@@ -267,16 +267,17 @@ export const applicationRouter = createTRPCRouter({
 				applicationStatus: "idle",
 			});
 
-			const host = await generateTraefikMeDomain(
-				newApplication.appName,
-				ctx.user.ownerId,
-				input.serverId,
-			);
+			const { host, supportsHttps } =
+				await resolveGeneratedApplicationDomain(
+					newApplication.appName,
+					input.serverId,
+				);
 
 			const domain = await createDomain({
 				host,
 				port: 80,
-				https: false,
+				https: supportsHttps,
+				certificateType: supportsHttps ? "letsencrypt" : "none",
 				applicationId: newApplication.applicationId,
 				domainType: "application",
 			});

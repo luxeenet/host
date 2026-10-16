@@ -16,6 +16,10 @@ import {
 	resolveNodeRuntime,
 	resolvePackageManagerAndCommands,
 } from "./runtime-resolver";
+import {
+	configureViteAllowedHosts,
+	getAuthorizedHostsSync,
+} from "./vite-config";
 
 export const getNixpacksCommand = (application: ApplicationNested) => {
 	const { env, appName, publishDirectory, cleanCache, command: customerCommand } = application;
@@ -65,6 +69,18 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 
 	if (fs.existsSync(buildAppDirectory)) {
 		try {
+			// Configure Vite allowedHosts for authorized hostnames
+			const authorizedHosts = getAuthorizedHostsSync(application);
+			if (authorizedHosts.length > 0) {
+				configureViteAllowedHosts(buildAppDirectory, authorizedHosts);
+				const hostsStr = authorizedHosts.join(",");
+				args.push(
+					"--env",
+					`__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=${hostsStr}`,
+				);
+				args.push("--env", `VITE_ALLOWED_HOSTS=${hostsStr}`);
+			}
+
 			const detected = detectFrameworkFromDirectorySync(buildAppDirectory);
 
 			if (detected.language === "Python") {

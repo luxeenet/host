@@ -43,6 +43,10 @@ import {
 } from "./app-detector";
 import { getBuildAppDirectory } from "../utils/filesystem/directory";
 import {
+	configureViteAllowedHosts,
+	getAuthorizedHostsForApplication,
+} from "../utils/builders/vite-config";
+import {
 	createDeployment,
 	createDeploymentPreview,
 	updateDeployment,
@@ -460,6 +464,15 @@ export const deployApplication = async ({
 		try {
 			const buildAppDir = getBuildAppDirectory(application);
 			if (fs.existsSync(buildAppDir)) {
+				// Automatically configure Vite allowedHosts for authorized hostnames
+				try {
+					const authorizedHosts =
+						await getAuthorizedHostsForApplication(application);
+					if (authorizedHosts.length > 0) {
+						configureViteAllowedHosts(buildAppDir, authorizedHosts);
+					}
+				} catch {}
+
 				const inspection = await detectFrameworkFromDirectory(buildAppDir);
 				const packageManager = inspection.packageManager || (inspection.language === "Python" ? "pip" : "npm");
 				const startupCommand = application.command || inspection.startCommand || "default";
@@ -630,39 +643,61 @@ Remediation:
 				verifyLog += "  ⏳ HTTPS certificate provisioning in progress\n";
 			}
 			verifyLog += `\nYour application is live and accessible at:\n${verifyResult.testUrl}\n`;
+			verifyLog += "================================================================================\n";
+			await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+
+			await updateDeploymentStatus(deployment.deploymentId, "done");
+			await updateApplicationStatus(applicationId, "done");
+
+			await sendBuildSuccessNotifications({
+				projectName: application.environment.project.name,
+				applicationName: application.name,
+				applicationType: "application",
+				buildLink,
+				organizationId: application.environment.project.organizationId,
+				domains: application.domains,
+				environmentName: application.environment.name,
+			});
 		} else {
-			verifyLog += "⚠️ Public URL Reachability: Unverified (Pending / Incomplete)\n";
-			verifyLog += "--------------------------------------------------------------------------------\n";
-			verifyLog += `Test URL: ${verifyResult.testUrl}\n\n`;
-			verifyLog += "Deployment Health Status:\n";
-			verifyLog += "  ✓ Container running and task converged in Docker Swarm\n";
-			verifyLog += `  ${verifyResult.checks.dnsResolves ? "✓" : "⏳"} Public DNS resolution: ${verifyResult.checks.dnsResolves ? "Resolved" : "Pending or unconfigured"}\n`;
-			verifyLog += `  ${verifyResult.checks.appResponding ? "✓" : "⏳"} Application reachability: ${verifyResult.checks.appResponding ? "Responded" : "No response"}\n`;
-			verifyLog += `  ${verifyResult.checks.httpsActive ? "✓" : "⏳"} HTTPS status: ${verifyResult.checks.httpsActive ? "Active" : "Pending certificate issuance"}\n\n`;
-			if (verifyResult.details) {
-				verifyLog += `Diagnostic:\n  ${verifyResult.details}\n\n`;
+			const isWorker = Boolean(
+				application.command &&
+					/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer)\b/i.test(
+						application.command,
+					),
+			);
+			if (isWorker) {
+				verifyLog += "✓ Non-HTTP workload verified (background worker/queue converged in Docker Swarm).\n";
+				verifyLog += "================================================================================\n";
+				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+				await updateDeploymentStatus(deployment.deploymentId, "done");
+				await updateApplicationStatus(applicationId, "done");
+			} else {
+				verifyLog += "❌ Public URL Reachability: Verification Failed\n";
+				verifyLog += "--------------------------------------------------------------------------------\n";
+				verifyLog += `Test URL: ${verifyResult.testUrl}\n\n`;
+				verifyLog += "Deployment Health Status:\n";
+				verifyLog += "  ✓ Container running and task converged in Docker Swarm\n";
+				verifyLog += `  ${verifyResult.checks.dnsResolves ? "✓" : "❌"} Public DNS resolution: ${verifyResult.checks.dnsResolves ? "Resolved" : "Pending or unconfigured"}\n`;
+				verifyLog += `  ${verifyResult.checks.appResponding ? "✓" : "❌"} Application reachability: ${verifyResult.checks.appResponding ? "Responded" : "No response"}\n`;
+				verifyLog += `  ${verifyResult.checks.httpsActive ? "✓" : "⏳"} HTTPS status: ${verifyResult.checks.httpsActive ? "Active" : "Pending certificate issuance"}\n\n`;
+				if (verifyResult.details) {
+					verifyLog += `Diagnostic:\n  ${verifyResult.details}\n\n`;
+				}
+				verifyLog += "Actionable Remediation:\n";
+				verifyLog += "  1. DNS Propagation: If you just configured this domain, please allow 1-3 minutes for global DNS caches to refresh.\n";
+				verifyLog += "  2. SSL/TLS Issuance: Let's Encrypt requires active DNS resolution before issuing production TLS certificates.\n";
+				verifyLog += "  3. Host Validation: For Vite applications, ensure the assigned hostname is allowed in preview.allowedHosts.\n";
+				verifyLog += "  4. Ingress & Firewall: Ensure server firewall allows incoming connections on ports 80 (HTTP) and 443 (HTTPS).\n";
+				verifyLog += `  5. Direct Test: Test connectivity from your machine using: curl -Iv ${verifyResult.testUrl}\n`;
+				verifyLog += "================================================================================\n";
+				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+				await updateDeploymentStatus(deployment.deploymentId, "error");
+				await updateApplicationStatus(applicationId, "error");
+				throw new DeploymentReadinessError(
+					`Stage 7 Verification Failed: ${verifyResult.message || "Application public URL is unreachable"}`,
+				);
 			}
-			verifyLog += "Actionable Remediation:\n";
-			verifyLog += "  1. DNS Propagation: If you just configured this domain, please allow 1-3 minutes for global DNS caches to refresh.\n";
-			verifyLog += "  2. SSL/TLS Issuance: Let's Encrypt requires active DNS resolution before issuing production TLS certificates.\n";
-			verifyLog += "  3. Ingress & Firewall: Ensure server firewall allows incoming connections on ports 80 (HTTP) and 443 (HTTPS).\n";
-			verifyLog += `  4. Direct Test: Test connectivity from your machine using: curl -Iv ${verifyResult.testUrl}\n`;
 		}
-		verifyLog += "================================================================================\n";
-		await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
-
-		await updateDeploymentStatus(deployment.deploymentId, "done");
-		await updateApplicationStatus(applicationId, "done");
-
-		await sendBuildSuccessNotifications({
-			projectName: application.environment.project.name,
-			applicationName: application.name,
-			applicationType: "application",
-			buildLink,
-			organizationId: application.environment.project.organizationId,
-			domains: application.domains,
-			environmentName: application.environment.name,
-		});
 	} catch (error) {
 		let command = "";
 
@@ -734,6 +769,16 @@ export const rebuildApplication = async ({
 
 	try {
 		let command = "set -e;";
+		try {
+			const buildAppDir = getBuildAppDirectory(application);
+			if (fs.existsSync(buildAppDir)) {
+				const authorizedHosts =
+					await getAuthorizedHostsForApplication(application);
+				if (authorizedHosts.length > 0) {
+					configureViteAllowedHosts(buildAppDir, authorizedHosts);
+				}
+			}
+		} catch {}
 		// Check case for docker only
 		command += await getBuildCommand(application);
 		const commandWithLog = `(${command}) >> ${deployment.logPath} 2>&1`;
@@ -870,39 +915,61 @@ Remediation:
 				verifyLog += "  ⏳ HTTPS certificate provisioning in progress\n";
 			}
 			verifyLog += `\nYour application is live and accessible at:\n${verifyResult.testUrl}\n`;
+			verifyLog += "================================================================================\n";
+			await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+
+			await updateDeploymentStatus(deployment.deploymentId, "done");
+			await updateApplicationStatus(applicationId, "done");
+
+			await sendBuildSuccessNotifications({
+				projectName: application.environment.project.name,
+				applicationName: application.name,
+				applicationType: "application",
+				buildLink,
+				organizationId: application.environment.project.organizationId,
+				domains: application.domains,
+				environmentName: application.environment.name,
+			});
 		} else {
-			verifyLog += "⚠️ Public URL Reachability: Unverified (Pending / Incomplete)\n";
-			verifyLog += "--------------------------------------------------------------------------------\n";
-			verifyLog += `Test URL: ${verifyResult.testUrl}\n\n`;
-			verifyLog += "Deployment Health Status:\n";
-			verifyLog += "  ✓ Container running and task converged in Docker Swarm\n";
-			verifyLog += `  ${verifyResult.checks.dnsResolves ? "✓" : "⏳"} Public DNS resolution: ${verifyResult.checks.dnsResolves ? "Resolved" : "Pending or unconfigured"}\n`;
-			verifyLog += `  ${verifyResult.checks.appResponding ? "✓" : "⏳"} Application reachability: ${verifyResult.checks.appResponding ? "Responded" : "No response"}\n`;
-			verifyLog += `  ${verifyResult.checks.httpsActive ? "✓" : "⏳"} HTTPS status: ${verifyResult.checks.httpsActive ? "Active" : "Pending certificate issuance"}\n\n`;
-			if (verifyResult.details) {
-				verifyLog += `Diagnostic:\n  ${verifyResult.details}\n\n`;
+			const isWorker = Boolean(
+				application.command &&
+					/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer)\b/i.test(
+						application.command,
+					),
+			);
+			if (isWorker) {
+				verifyLog += "✓ Non-HTTP workload verified (background worker/queue converged in Docker Swarm).\n";
+				verifyLog += "================================================================================\n";
+				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+				await updateDeploymentStatus(deployment.deploymentId, "done");
+				await updateApplicationStatus(applicationId, "done");
+			} else {
+				verifyLog += "❌ Public URL Reachability: Verification Failed\n";
+				verifyLog += "--------------------------------------------------------------------------------\n";
+				verifyLog += `Test URL: ${verifyResult.testUrl}\n\n`;
+				verifyLog += "Deployment Health Status:\n";
+				verifyLog += "  ✓ Container running and task converged in Docker Swarm\n";
+				verifyLog += `  ${verifyResult.checks.dnsResolves ? "✓" : "❌"} Public DNS resolution: ${verifyResult.checks.dnsResolves ? "Resolved" : "Pending or unconfigured"}\n`;
+				verifyLog += `  ${verifyResult.checks.appResponding ? "✓" : "❌"} Application reachability: ${verifyResult.checks.appResponding ? "Responded" : "No response"}\n`;
+				verifyLog += `  ${verifyResult.checks.httpsActive ? "✓" : "⏳"} HTTPS status: ${verifyResult.checks.httpsActive ? "Active" : "Pending certificate issuance"}\n\n`;
+				if (verifyResult.details) {
+					verifyLog += `Diagnostic:\n  ${verifyResult.details}\n\n`;
+				}
+				verifyLog += "Actionable Remediation:\n";
+				verifyLog += "  1. DNS Propagation: If you just configured this domain, please allow 1-3 minutes for global DNS caches to refresh.\n";
+				verifyLog += "  2. SSL/TLS Issuance: Let's Encrypt requires active DNS resolution before issuing production TLS certificates.\n";
+				verifyLog += "  3. Host Validation: For Vite applications, ensure the assigned hostname is allowed in preview.allowedHosts.\n";
+				verifyLog += "  4. Ingress & Firewall: Ensure server firewall allows incoming connections on ports 80 (HTTP) and 443 (HTTPS).\n";
+				verifyLog += `  5. Direct Test: Test connectivity from your machine using: curl -Iv ${verifyResult.testUrl}\n`;
+				verifyLog += "================================================================================\n";
+				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+				await updateDeploymentStatus(deployment.deploymentId, "error");
+				await updateApplicationStatus(applicationId, "error");
+				throw new DeploymentReadinessError(
+					`Stage 7 Verification Failed: ${verifyResult.message || "Application public URL is unreachable"}`,
+				);
 			}
-			verifyLog += "Actionable Remediation:\n";
-			verifyLog += "  1. DNS Propagation: If you just configured this domain, please allow 1-3 minutes for global DNS caches to refresh.\n";
-			verifyLog += "  2. SSL/TLS Issuance: Let's Encrypt requires active DNS resolution before issuing production TLS certificates.\n";
-			verifyLog += "  3. Ingress & Firewall: Ensure server firewall allows incoming connections on ports 80 (HTTP) and 443 (HTTPS).\n";
-			verifyLog += `  4. Direct Test: Test connectivity from your machine using: curl -Iv ${verifyResult.testUrl}\n`;
 		}
-		verifyLog += "================================================================================\n";
-		await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
-
-		await updateDeploymentStatus(deployment.deploymentId, "done");
-		await updateApplicationStatus(applicationId, "done");
-
-		await sendBuildSuccessNotifications({
-			projectName: application.environment.project.name,
-			applicationName: application.name,
-			applicationType: "application",
-			buildLink,
-			organizationId: application.environment.project.organizationId,
-			domains: application.domains,
-			environmentName: application.environment.name,
-		});
 	} catch (error) {
 		let command = "";
 

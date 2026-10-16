@@ -184,7 +184,7 @@ export const createRouterConfig = async (
 
 		// redirects - skip for preview deployments as wildcard subdomains
 		// should not inherit parent redirect rules (e.g., www-redirect)
-		if (domain.domainType !== "preview") {
+		if (domain.domainType !== "preview" && Array.isArray(redirects)) {
 			for (const redirect of redirects) {
 				const middlewareName = `redirect-${appName}-${redirect.uniqueConfigKey}`;
 				routerConfig.middlewares?.push(middlewareName);
@@ -192,7 +192,7 @@ export const createRouterConfig = async (
 		}
 
 		// security
-		if (security.length > 0) {
+		if (Array.isArray(security) && security.length > 0) {
 			let middlewareName = `auth-${appName}`;
 			if (domain.domainType === "preview") {
 				middlewareName = `auth-${appName.replace(
@@ -224,8 +224,11 @@ export const createRouterConfig = async (
 			routerConfig.tls = { certResolver: "letsencrypt" };
 		} else if (certificateType === "custom" && domain.customCertResolver) {
 			routerConfig.tls = { certResolver: domain.customCertResolver };
-		} else if (certificateType === "none") {
+		} else if (certificateType === "none" && !https) {
 			routerConfig.tls = undefined;
+		} else {
+			// When HTTPS is enabled, ensure a trusted certResolver is configured
+			routerConfig.tls = { certResolver: "letsencrypt" };
 		}
 	}
 

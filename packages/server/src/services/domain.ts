@@ -281,6 +281,66 @@ export const isPrivateOrLocalAddress = (ipOrHost: string): boolean => {
 	return false;
 };
 
+export const validatePlatformSubdomainDepth = (
+	host: string,
+	platformDomain?: string | null,
+): {
+	isValid: boolean;
+	isMultiLevelSubdomain: boolean;
+	error?: string;
+	canonicalHost?: string;
+} => {
+	if (!host || !platformDomain) {
+		return { isValid: true, isMultiLevelSubdomain: false };
+	}
+
+	const cleanHost = host
+		.replace(/^https?:\/\//, "")
+		.split(/[/:]/)[0]!
+		.trim()
+		.toLowerCase();
+
+	const cleanPlatform = platformDomain
+		.replace(/^https?:\/\//, "")
+		.split(/[/:]/)[0]!
+		.trim()
+		.toLowerCase();
+
+	if (cleanHost === cleanPlatform) {
+		return {
+			isValid: true,
+			isMultiLevelSubdomain: false,
+			canonicalHost: cleanHost,
+		};
+	}
+
+	if (cleanHost.endsWith(`.${cleanPlatform}`)) {
+		const prefix = cleanHost.slice(0, -(cleanPlatform.length + 1));
+		const labels = prefix.split(".").filter(Boolean);
+		if (labels.length > 1) {
+			const singleLabel = labels[labels.length - 1];
+			const canonicalHost = `${singleLabel}.${cleanPlatform}`;
+			return {
+				isValid: false,
+				isMultiLevelSubdomain: true,
+				canonicalHost,
+				error: `Multi-level platform subdomain '${cleanHost}' is not covered by the wildcard certificate (*.${cleanPlatform}). Wildcard certificates cover single-level subdomains only. Browsers will report NET::ERR_CERT_AUTHORITY_INVALID. Use the canonical URL 'https://${canonicalHost}' instead.`,
+			};
+		}
+		return {
+			isValid: true,
+			isMultiLevelSubdomain: false,
+			canonicalHost: cleanHost,
+		};
+	}
+
+	return {
+		isValid: true,
+		isMultiLevelSubdomain: false,
+		canonicalHost: cleanHost,
+	};
+};
+
 export const createDomain = async (
 	input: z.infer<typeof apiCreateDomain>,
 	tx: any = db,
@@ -296,6 +356,17 @@ export const createDomain = async (
 			tx,
 		);
 		await checkDomainTenantConflict(host, targetOrgId, undefined, tx);
+
+		const platformDomain = await getConfiguredPlatformDomain();
+		if (platformDomain) {
+			const depthCheck = validatePlatformSubdomainDepth(host, platformDomain);
+			if (!depthCheck.isValid) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: depthCheck.error,
+				});
+			}
+		}
 	}
 
 	let portToUse = input.port;
@@ -318,10 +389,18 @@ export const createDomain = async (
 		} catch {}
 	}
 
+	const certTypeToUse =
+		input.certificateType && input.certificateType !== "none"
+			? input.certificateType
+			: input.https
+				? "letsencrypt"
+				: (input.certificateType ?? "none");
+
 	const domain = await tx
 		.insert(domains)
 		.values({
 			...input,
+			certificateType: certTypeToUse,
 			port: portToUse !== undefined ? portToUse : (input.port ?? null),
 			host: host,
 		} as typeof domains.$inferInsert)
@@ -730,6 +809,19 @@ export const updateDomainById = async (
 				targetOrgId,
 				domainId,
 			);
+			const platformDomain = await getConfiguredPlatformDomain();
+			if (platformDomain) {
+				const depthCheck = validatePlatformSubdomainDepth(
+					domainData.host.trim(),
+					platformDomain,
+				);
+				if (!depthCheck.isValid) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: depthCheck.error,
+					});
+				}
+			}
 		}
 	}
 
@@ -794,6 +886,21 @@ export const validateDomain = async (
 	try {
 		// Remove protocol and path if present
 		const cleanDomain = domain.replace(/^https?:\/\//, "").split("/")[0];
+
+		// Check platform subdomain depth
+		const platformDomain = await getConfiguredPlatformDomain();
+		if (platformDomain && cleanDomain) {
+			const depthCheck = validatePlatformSubdomainDepth(
+				cleanDomain,
+				platformDomain,
+			);
+			if (!depthCheck.isValid) {
+				return {
+					isValid: false,
+					error: depthCheck.error,
+				};
+			}
+		}
 
 		// Resolve the domain to get its IP
 		const ips = await resolveDns(cleanDomain || "");
@@ -1084,6 +1191,37 @@ export const verifyApplicationLiveUrl = async (
 				httpsActive = response.url.startsWith("https://");
 			}
 
+			// Check for Vite Host Rejection
+			let bodyText = "";
+			try {
+				if (typeof (response as any).clone === "function") {
+					bodyText = await (response as any).clone().text();
+				} else if (typeof response.text === "function") {
+					bodyText = await response.text();
+				}
+			} catch {}
+
+			if (
+				bodyText.includes("Blocked request. This host") ||
+				(bodyText.includes("is not allowed") &&
+					(bodyText.includes("allowedHosts") ||
+						bodyText.includes("Host (")))
+			) {
+				return {
+					isLive: false,
+					testUrl,
+					checks: {
+						deploymentHealthy: isHealthyDeployment,
+						dnsResolves,
+						httpsActive: false,
+						appResponding: false,
+					},
+					statusCode: 403,
+					message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
+					details: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
+				};
+			}
+
 			// Accept any 2xx or 3xx redirect or 401/403 (auth protected app is live)
 			if (
 				(response.status >= 200 && response.status < 400) ||
@@ -1152,6 +1290,36 @@ export const verifyApplicationLiveUrl = async (
 						httpRes.status === 401 ||
 						httpRes.status === 403
 					) {
+						let httpBody = "";
+						try {
+							if (typeof (httpRes as any).clone === "function") {
+								httpBody = await (httpRes as any).clone().text();
+							} else if (typeof httpRes.text === "function") {
+								httpBody = await httpRes.text();
+							}
+						} catch {}
+
+						if (
+							httpBody.includes("Blocked request. This host") ||
+							(httpBody.includes("is not allowed") &&
+								(httpBody.includes("allowedHosts") ||
+									httpBody.includes("Host (")))
+						) {
+							return {
+								isLive: false,
+								testUrl,
+								checks: {
+									deploymentHealthy: isHealthyDeployment,
+									dnsResolves,
+									httpsActive: false,
+									appResponding: false,
+								},
+								statusCode: 403,
+								message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
+								details: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
+							};
+						}
+
 						appResponding = true;
 						lastStatusCode = httpRes.status;
 						break;

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
 	extractPortFromCommand,
+	extractPortFromSourceCode,
 	resolveDotnetRuntime,
 	resolveGoRuntime,
 	resolveJavaRuntime,
@@ -13,6 +14,8 @@ import {
 	resolveRustRuntime,
 } from "../utils/builders/runtime-resolver";
 import { findApplicationById } from "./application";
+
+export { extractPortFromSourceCode };
 
 export interface FileEntry {
 	name: string;
@@ -666,20 +669,97 @@ export const detectFrameworkFromFiles = (
 						: allDeps.koa
 							? "Koa"
 							: "Hono";
-				const extractedPort = extractPortFromCommand(scripts.start);
+				let extractedPort = extractPortFromCommand(scripts.start);
+				if (!extractedPort) {
+					// Inspect common entrypoint source files for explicit port
+					const candidateFiles = [
+						pkg.main,
+						"server.js",
+						"server.ts",
+						"app.js",
+						"app.ts",
+						"index.js",
+						"index.ts",
+						"main.js",
+						"main.ts",
+						"src/server.ts",
+						"src/server.js",
+						"src/app.ts",
+						"src/app.js",
+						"src/index.ts",
+						"src/index.js",
+						"src/main.ts",
+						"src/main.js",
+					].filter(Boolean) as string[];
+
+					for (const cand of candidateFiles) {
+						const f = getFile(cand);
+						if (f?.content) {
+							const found = extractPortFromSourceCode(f.content);
+							if (found) {
+								extractedPort = found;
+								break;
+							}
+						}
+					}
+				}
+
+				const isDevStart =
+					scripts.start &&
+					(/^(?:nest\s+start|ts-node|nodemon|tsx|concurrently)\b/i.test(scripts.start) ||
+						/\b(?:--watch|-w)\b/i.test(scripts.start));
+				let startCmd: string | undefined;
+				if (scripts["start:prod"] && (isDevStart || !scripts.start)) {
+					startCmd = `${runPrefix} start:prod`;
+				} else if (scripts.start && !isDevStart) {
+					startCmd =
+						packageManager === "bun"
+							? "bun start"
+							: `${packageManager} start`;
+				} else if (scripts["start:prod"]) {
+					startCmd = `${runPrefix} start:prod`;
+				} else if (isDevStart && scripts.build) {
+					const tsMatch = scripts.start.match(
+						/\b(?:ts-node|tsx|node)\s+(?:--\S+\s+)*(?:src\/)?([a-zA-Z0-9_-]+)\.ts\b/,
+					);
+					if (tsMatch && tsMatch[1]) {
+						startCmd = `node dist/${tsMatch[1]}.js`;
+					} else {
+						startCmd =
+							packageManager === "bun"
+								? "bun start"
+								: `${packageManager} start`;
+					}
+				} else if (scripts.start) {
+					startCmd =
+						packageManager === "bun"
+							? "bun start"
+							: `${packageManager} start`;
+				} else if (pkg.main) {
+					if (typeof pkg.main === "string" && pkg.main.endsWith(".ts") && scripts.build) {
+						const jsName = pkg.main.replace(/\.ts$/, ".js").replace(/^src\//, "dist/");
+						startCmd = `node ${jsName}`;
+					} else {
+						startCmd = `node ${pkg.main}`;
+					}
+				} else if (getFile("dist/main.js") || getFile("dist/index.js") || getFile("dist/server.js")) {
+					const distEntry = getFile("dist/main.js")
+						? "dist/main.js"
+						: getFile("dist/index.js")
+							? "dist/index.js"
+							: "dist/server.js";
+					startCmd = `node ${distEntry}`;
+				} else {
+					startCmd = "node index.js";
+				}
+
 				return {
 					framework: `Node.js (${fwName})`,
 					language: allDeps.typescript ? "TypeScript" : "JavaScript",
 					buildType: "nixpacks",
 					suggestedPort: extractedPort || 3000,
 					buildCommand: scripts.build ? `${runPrefix} build` : undefined,
-					startCommand: scripts.start
-						? packageManager === "bun"
-							? "bun start"
-							: `${packageManager} start`
-						: pkg.main
-							? `node ${pkg.main}`
-							: "node index.js",
+					startCommand: startCmd,
 					runtimeVersion: nodeRuntime.resolvedVersion,
 					packageManager,
 					confidence: "high",
@@ -687,7 +767,7 @@ export const detectFrameworkFromFiles = (
 					suggestedEnv: [
 						{
 							key: "PORT",
-							description: "Server listening port (default: 3000)",
+							description: `Server listening port (default: ${extractedPort || 3000})`,
 							required: false,
 						},
 					],
@@ -874,15 +954,21 @@ export const detectFrameworkFromFiles = (
 				: (rootAppPy || getFile("app.py"))
 					? "app:app"
 					: "main:app";
+			let pyPort = 8000;
+			const codePort = extractPortFromSourceCode(
+				(rootMainPy || getFile("main.py"))?.content ||
+				(rootAppPy || getFile("app.py"))?.content || "",
+			);
+			if (codePort) pyPort = codePort;
 			return {
 				framework: "FastAPI",
 				language: "Python",
 				buildType: "nixpacks",
-				suggestedPort: 8000,
+				suggestedPort: pyPort,
 				bindHost: "0.0.0.0",
 				packageManager: pyPm,
 				installCommand: pyInstall,
-				startCommand: `uvicorn ${entry} --host 0.0.0.0 --port 8000`,
+				startCommand: `uvicorn ${entry} --host 0.0.0.0 --port ${pyPort}`,
 				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
 				reason: "Detected FastAPI dependencies in requirements/pyproject",
@@ -906,15 +992,21 @@ export const detectFrameworkFromFiles = (
 		}
 
 		if (combinedPyContent.includes("flask")) {
+			let flaskPort = 5000;
+			const codePort = extractPortFromSourceCode(
+				(rootAppPy || getFile("app.py"))?.content ||
+				(rootMainPy || getFile("main.py"))?.content || "",
+			);
+			if (codePort) flaskPort = codePort;
 			return {
 				framework: "Flask",
 				language: "Python",
 				buildType: "nixpacks",
-				suggestedPort: 5000,
+				suggestedPort: flaskPort,
 				bindHost: "0.0.0.0",
 				packageManager: pyPm,
 				installCommand: pyInstall,
-				startCommand: "flask run --host=0.0.0.0 --port=5000",
+				startCommand: `flask run --host=0.0.0.0 --port=${flaskPort}`,
 				runtimeVersion: pyRuntime.resolvedVersion,
 				confidence: "high",
 				reason: "Detected Flask dependencies in requirements/pyproject",

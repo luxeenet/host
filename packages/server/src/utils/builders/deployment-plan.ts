@@ -391,10 +391,13 @@ export const resolveDeploymentPlan = (
 	const customerCmd = app.command?.trim() || undefined;
 	const isWorker = Boolean(
 		customerCmd &&
-			/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer)\b/i.test(
+			/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer|bullmq|rq)\b/i.test(
 				customerCmd,
 			),
 	);
+	if (isWorker) {
+		strategy = "worker";
+	}
 	const isHttpWorkload = !isWorker && (strategy as string) !== "worker";
 
 	// 6. Effective Port Resolution (with deterministic precedence)
@@ -473,13 +476,22 @@ export const resolveDeploymentPlan = (
 			portValue = detectedPort;
 			portSource = "framework_default";
 		} else if (language === "Python") {
-			portValue = 8501;
+			const fwLower = framework.toLowerCase();
+			if (fwLower.includes("streamlit")) {
+				portValue = 8501;
+			} else if (fwLower.includes("flask")) {
+				portValue = 5000;
+			} else if (fwLower.includes("gradio")) {
+				portValue = 7860;
+			} else {
+				portValue = 8000;
+			}
 			portSource = "framework_default";
 		} else if (language === "Go" || language === "Rust" || language === "Java") {
 			portValue = 8080;
 			portSource = "framework_default";
 		} else if (language === "PHP") {
-			portValue = 80;
+			portValue = framework.toLowerCase().includes("laravel") ? 8000 : 80;
 			portSource = "framework_default";
 		} else if (language === ".NET" || language === "C#") {
 			portValue = 5000;
@@ -542,7 +554,27 @@ export const resolveDeploymentPlan = (
 				"Resolved production preview mode. Configured container interface binding (0.0.0.0) and target port.",
 			evidence: `package.json scripts.preview: "${previewStr}"`,
 		});
-	} else if (pkgScripts.start) {
+	} else if (
+		pkgScripts["start:prod"] &&
+		(Boolean(pkgDeps["@nestjs/core"] || pkgDeps["@nestjs/common"]) ||
+			!pkgScripts.start ||
+			/^(?:nest\s+start|ts-node|nodemon|tsx|concurrently|tsc\s+-w)\b/i.test(pkgScripts.start) ||
+			/\b(?:--watch|-w)\b/i.test(pkgScripts.start))
+	) {
+		intendedCmd = `${runPrefix} start:prod`;
+		effectiveCmd = `${runPrefix} start:prod`;
+		cmdSource = "package_json_start";
+		decisions.push({
+			stage: "startup",
+			decision: `Startup command: "${effectiveCmd}"`,
+			reason: "Detected production start script (start:prod) for backend framework",
+			evidence: `package.json scripts.start:prod: "${pkgScripts["start:prod"]}"`,
+		});
+	} else if (
+		pkgScripts.start &&
+		!/^(?:nest\s+start|ts-node|nodemon|tsx|concurrently|tsc\s+-w)\b/i.test(pkgScripts.start) &&
+		!/\b(?:--watch|-w)\b/i.test(pkgScripts.start)
+	) {
 		intendedCmd = `${pm} start`;
 		effectiveCmd = `${pm} start`;
 		cmdSource = "package_json_start";
@@ -561,6 +593,26 @@ export const resolveDeploymentPlan = (
 			decision: `Startup command: "${effectiveCmd}"`,
 			reason: "Framework auto-detected default startup command",
 			evidence: `Detector suggested: "${detectedStart}"`,
+		});
+	} else if (pkgScripts["start:prod"]) {
+		intendedCmd = `${runPrefix} start:prod`;
+		effectiveCmd = `${runPrefix} start:prod`;
+		cmdSource = "package_json_start";
+		decisions.push({
+			stage: "startup",
+			decision: `Startup command: "${effectiveCmd}"`,
+			reason: "Production start script (start:prod) from package.json",
+			evidence: `package.json scripts.start:prod: "${pkgScripts["start:prod"]}"`,
+		});
+	} else if (pkgScripts.start) {
+		intendedCmd = `${pm} start`;
+		effectiveCmd = `${pm} start`;
+		cmdSource = "package_json_start";
+		decisions.push({
+			stage: "startup",
+			decision: `Startup command: "${effectiveCmd}"`,
+			reason: "Start script from package.json",
+			evidence: `package.json scripts.start: "${pkgScripts.start}"`,
 		});
 	} else if (strategy === "static-artifact") {
 		intendedCmd = "";

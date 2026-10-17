@@ -1037,7 +1037,21 @@ export const resolvePackageManagerAndCommands = (params: {
 		isViteSpa &&
 		(/\bpreview\b/i.test(rawStart) || rawStart.startsWith("vite preview"));
 
-	if (hasStartScript && !isViteDevServerStart) {
+	// Check if scripts.start is a development-only command that should not be used in production
+	const isDevOnlyStart =
+		/^(?:nest\s+start|ts-node|nodemon|tsx|concurrently|tsc\s+-w)\b/i.test(rawStart) ||
+		/\b(?:--watch|-w)\b/i.test(rawStart);
+
+	const allPkgDeps = { ...(pkgJson.dependencies || {}), ...(pkgJson.devDependencies || {}) };
+	const isNestJs = Boolean(
+		allPkgDeps["@nestjs/core"] ||
+		allPkgDeps["@nestjs/common"]
+	);
+
+	if (isNestJs && scripts["start:prod"]) {
+		startCommand = `${runCmd} start:prod`;
+		startCommandSource = "package.json scripts.start:prod (nestjs production)";
+	} else if (hasStartScript && !isViteDevServerStart && (!isDevOnlyStart || !scripts["start:prod"])) {
 		if (isVitePreviewStart) {
 			startCommand = rawStart.includes("--host")
 				? (selectedPm === "bun" ? "bun start" : `${selectedPm} start`)
@@ -1066,8 +1080,14 @@ export const resolvePackageManagerAndCommands = (params: {
 		startCommand = `${runCmd} run`;
 		startCommandSource = "package.json scripts.run";
 	} else if (pkgJson.main && typeof pkgJson.main === "string") {
-		startCommand = `node ${pkgJson.main}`;
-		startCommandSource = `package.json main (${pkgJson.main})`;
+		if (pkgJson.main.endsWith(".ts") && hasBuildScript) {
+			const jsMain = pkgJson.main.replace(/\.ts$/, ".js").replace(/^src\//, "dist/");
+			startCommand = `node ${jsMain}`;
+			startCommandSource = `compiled main (${jsMain})`;
+		} else {
+			startCommand = `node ${pkgJson.main}`;
+			startCommandSource = `package.json main (${pkgJson.main})`;
+		}
 	} else if (fileNames.has("server.js")) {
 		startCommand = "node server.js";
 		startCommandSource = "file: server.js";
@@ -1506,6 +1526,61 @@ export const extractPortFromCommand = (
 	return undefined;
 };
 
+/**
+ * Inspect source code content (e.g. server.js, app.py, main.ts) to detect explicit listening port
+ * when not specified via CLI command flags.
+ */
+export const extractPortFromSourceCode = (
+	content?: string | null,
+): number | undefined => {
+	if (!content || typeof content !== "string") return undefined;
+
+	// 1. process.env.PORT || 8080 or process.env.PORT ?? 8080
+	const envFallbackMatch = content.match(
+		/process\.env\.PORT\s*(?:\|\||\?\?)\s*(\d{2,5})/,
+	);
+	if (envFallbackMatch?.[1]) {
+		const p = Number.parseInt(envFallbackMatch[1], 10);
+		if (!Number.isNaN(p) && p > 0 && p < 65536) return p;
+	}
+
+	// 2. const/let/var PORT = 8080 (or port = 8080, serverPort = 8080)
+	const constPortMatch = content.match(
+		/(?:const|let|var)\s+(?:PORT|port|serverPort|appPort)\s*=\s*(\d{2,5})\b/,
+	);
+	if (constPortMatch?.[1]) {
+		const p = Number.parseInt(constPortMatch[1], 10);
+		if (!Number.isNaN(p) && p > 0 && p < 65536) return p;
+	}
+
+	// 3. app.listen(8080) or server.listen(8080) or .listen({ port: 8080 })
+	const listenMatch = content.match(
+		/\.listen\(\s*(?:\{\s*port:\s*)?(\d{2,5})\b/,
+	);
+	if (listenMatch?.[1]) {
+		const p = Number.parseInt(listenMatch[1], 10);
+		if (!Number.isNaN(p) && p > 0 && p < 65536) return p;
+	}
+
+	// 4. Python Flask: app.run(port=5000) or run(port=5000)
+	const flaskMatch = content.match(/\brun\([^)]*port\s*=\s*(\d{2,5})/i);
+	if (flaskMatch?.[1]) {
+		const p = Number.parseInt(flaskMatch[1], 10);
+		if (!Number.isNaN(p) && p > 0 && p < 65536) return p;
+	}
+
+	// 5. Python Uvicorn: uvicorn.run(..., port=8000)
+	const uvicornMatch = content.match(
+		/uvicorn\.run\([^)]*port\s*=\s*(\d{2,5})/i,
+	);
+	if (uvicornMatch?.[1]) {
+		const p = Number.parseInt(uvicornMatch[1], 10);
+		if (!Number.isNaN(p) && p > 0 && p < 65536) return p;
+	}
+
+	return undefined;
+};
+
 export interface ApplicationRuntimeConfigParams {
 	application?: {
 		appName?: string | null;
@@ -1700,6 +1775,28 @@ export const resolveApplicationRuntimeConfig = (
 	} else if (isAstro) {
 		port = 4321;
 		portSource = "framework_default";
+	} else if (params.detectedLanguage === "Python") {
+		const fw = (params.detectedFramework || "").toLowerCase();
+		if (fw.includes("streamlit")) {
+			port = 8501;
+		} else if (fw.includes("flask")) {
+			port = 5000;
+		} else if (fw.includes("gradio")) {
+			port = 7860;
+		} else {
+			port = 8000;
+		}
+		portSource = "framework_default";
+	} else if (
+		params.detectedLanguage === "Go" ||
+		params.detectedLanguage === "Rust" ||
+		params.detectedLanguage === "Java"
+	) {
+		port = 8080;
+		portSource = "framework_default";
+	} else if (params.detectedLanguage === ".NET" || params.detectedLanguage === "C#") {
+		port = 5000;
+		portSource = "framework_default";
 	} else {
 		port = 3000;
 		portSource = "platform_default";
@@ -1710,13 +1807,25 @@ export const resolveApplicationRuntimeConfig = (
 	let startupCommandSource: ApplicationRuntimeConfig["startupCommandSource"] =
 		"fallback";
 
+	const rawStartConfig = pkgScripts.start ? String(pkgScripts.start).trim() : "";
+	const isDevOnlyStartConfig =
+		/^(?:nest\s+start|ts-node|nodemon|tsx|concurrently)\b/i.test(rawStartConfig) ||
+		/\b(?:--watch|-w)\b/i.test(rawStartConfig);
+	const isNest = Boolean(pkgDeps["@nestjs/core"] || pkgDeps["@nestjs/common"]);
+
 	if (customerCommand) {
 		startupCommand = customerCommand;
 		startupCommandSource = "customer_command";
 	} else if (nixpacksStartCmd) {
 		startupCommand = nixpacksStartCmd;
 		startupCommandSource = "nixpacks_toml";
-	} else if (params.detectedStartCommand) {
+	} else if (isNest && pkgScripts["start:prod"]) {
+		startupCommand = `${runPrefix} start:prod`;
+		startupCommandSource = "package_json_start";
+	} else if (isDevOnlyStartConfig && pkgScripts["start:prod"]) {
+		startupCommand = `${runPrefix} start:prod`;
+		startupCommandSource = "package_json_start";
+	} else if (params.detectedStartCommand && (isDevOnlyStartConfig || !pkgScripts.start)) {
 		startupCommand = params.detectedStartCommand;
 		startupCommandSource = "framework_default";
 	} else if (isViteSpa && pkgScripts.preview) {
@@ -1741,7 +1850,7 @@ export const resolveApplicationRuntimeConfig = (
 			? `${runPrefix} preview --${flags}`
 			: `${runPrefix} preview`;
 		startupCommandSource = "package_json_preview";
-	} else if (pkgScripts.start) {
+	} else if (pkgScripts.start && !isDevOnlyStartConfig) {
 		const rawStart = String(pkgScripts.start).trim();
 		const isViteDev =
 			isViteSpa &&
@@ -1753,6 +1862,12 @@ export const resolveApplicationRuntimeConfig = (
 			startupCommand = pm === "bun" ? "bun start" : `${pm} start`;
 			startupCommandSource = "package_json_start";
 		}
+	} else if (params.detectedStartCommand) {
+		startupCommand = params.detectedStartCommand;
+		startupCommandSource = "framework_default";
+	} else if (pkgScripts["start:prod"]) {
+		startupCommand = `${runPrefix} start:prod`;
+		startupCommandSource = "package_json_start";
 	} else if (params.imageCmd) {
 		startupCommand = params.imageCmd;
 		startupCommandSource = "image_inspect";

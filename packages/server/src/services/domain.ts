@@ -26,6 +26,7 @@ import { detectCDNProvider } from "./cdn";
 import { findComposeById } from "./compose";
 import { findServerById } from "./server";
 import { detectHostRejection } from "../utils/builders/host-validation";
+import { loadDeploymentPlanSync } from "../utils/builders/deployment-plan";
 
 export type Domain = typeof domains.$inferSelect;
 
@@ -376,6 +377,7 @@ export const createDomain = async (
 			const app = await findApplicationById(input.applicationId);
 			if (app) {
 				if (!portToUse || portToUse === 3000) {
+					const plan = loadDeploymentPlanSync(app.appName, app.serverId);
 					if (app.buildType === "static") {
 						portToUse = 80;
 					} else if (
@@ -384,6 +386,8 @@ export const createDomain = async (
 						app.ports[0]?.targetPort
 					) {
 						portToUse = app.ports[0].targetPort;
+					} else if (plan?.port?.value) {
+						portToUse = plan.port.value;
 					}
 				}
 			}

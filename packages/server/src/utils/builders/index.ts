@@ -86,6 +86,71 @@ export const getBuildCommand = async (rawApplication: ApplicationNested) => {
 	return command;
 };
 
+export const buildContainerEnvironmentVariables = (
+	application: ApplicationNested,
+	explicitPlan?: any,
+): string[] => {
+	const { env, appName } = application;
+	const envVariables = prepareEnvironmentVariables(
+		env,
+		application.environment?.project?.env || "",
+		application.environment?.env || "",
+	);
+
+	// Ensure container binds to 0.0.0.0 and listens on the expected port across all backend runtimes
+	const hasHost = envVariables.some((e) => e.startsWith("HOST="));
+	const hasPort = envVariables.some((e) => e.startsWith("PORT="));
+	if (!hasHost) {
+		envVariables.push("HOST=0.0.0.0");
+		envVariables.push("NIXPACKS_HOST=0.0.0.0");
+		envVariables.push("FASTIFY_ADDRESS=0.0.0.0");
+		envVariables.push("UVICORN_HOST=0.0.0.0");
+		envVariables.push("FLASK_RUN_HOST=0.0.0.0");
+		envVariables.push("STREAMLIT_SERVER_ADDRESS=0.0.0.0");
+		envVariables.push("SERVER_HOST=0.0.0.0");
+		envVariables.push("BIND_HOST=0.0.0.0");
+		envVariables.push("ADDRESS=0.0.0.0");
+	}
+	if (!envVariables.some((e) => e.startsWith("PYTHONUNBUFFERED="))) {
+		envVariables.push("PYTHONUNBUFFERED=1");
+	}
+	// Resolve single source of truth deployment plan for ports and environment
+	let plan = explicitPlan || loadDeploymentPlanSync(appName, application.serverId);
+	if (!plan) {
+		try {
+			const buildDir = getBuildAppDirectory(application);
+			plan = resolveDeploymentPlan({
+				application,
+				buildAppDirectory: fs.existsSync(buildDir) ? buildDir : undefined,
+			});
+		} catch {
+			plan = resolveDeploymentPlan({ application });
+		}
+	}
+
+	if (!hasPort && plan?.port?.value) {
+		const targetPort = plan.port.value;
+		envVariables.push(`PORT=${targetPort}`);
+		envVariables.push(`NIXPACKS_PORT=${targetPort}`);
+		envVariables.push(`UVICORN_PORT=${targetPort}`);
+		envVariables.push(`FLASK_RUN_PORT=${targetPort}`);
+		envVariables.push(`ASPNETCORE_URLS=http://0.0.0.0:${targetPort}`);
+		envVariables.push(`ASPNETCORE_HTTP_PORTS=${targetPort}`);
+	}
+
+	// Inject authorized hostnames only for frameworks that enforce Host validation (e.g. Vite)
+	if (plan?.hostValidation?.env && plan.hostValidation.env.length > 0) {
+		for (const envItem of plan.hostValidation.env) {
+			const [k] = envItem.split("=");
+			if (k && !envVariables.some((e) => e.startsWith(`${k}=`))) {
+				envVariables.push(envItem);
+			}
+		}
+	}
+
+	return envVariables;
+};
+
 export const mechanizeDockerContainer = async (
 	rawApplication: ApplicationNested,
 ) => {
@@ -129,44 +194,7 @@ export const mechanizeDockerContainer = async (
 
 	const bindsMount = generateBindMounts(mounts);
 	const filesMount = generateFileMounts(appName, application);
-	const envVariables = prepareEnvironmentVariables(
-		env,
-		application.environment.project.env,
-		application.environment.env,
-	);
-
-	// Ensure container binds to 0.0.0.0 and listens on the expected port
-	const hasHost = envVariables.some((e) => e.startsWith("HOST="));
-	const hasPort = envVariables.some((e) => e.startsWith("PORT="));
-	if (!hasHost) {
-		envVariables.push("HOST=0.0.0.0");
-		envVariables.push("NIXPACKS_HOST=0.0.0.0");
-	}
-	// Resolve single source of truth deployment plan for ports and environment
-	let plan = loadDeploymentPlanSync(appName, application.serverId);
-	if (!plan) {
-		const buildDir = getBuildAppDirectory(application);
-		plan = resolveDeploymentPlan({
-			application,
-			buildAppDirectory: fs.existsSync(buildDir) ? buildDir : undefined,
-		});
-	}
-
-	if (!hasPort) {
-		const targetPort = plan.port.value;
-		envVariables.push(`PORT=${targetPort}`);
-		envVariables.push(`NIXPACKS_PORT=${targetPort}`);
-	}
-
-	// Inject authorized hostnames only for frameworks that enforce Host validation (e.g. Vite)
-	if (plan.hostValidation.env.length > 0) {
-		for (const envItem of plan.hostValidation.env) {
-			const [k] = envItem.split("=");
-			if (k && !envVariables.some((e) => e.startsWith(`${k}=`))) {
-				envVariables.push(envItem);
-			}
-		}
-	}
+	const envVariables = buildContainerEnvironmentVariables(application);
 
 	const image = await getImageName(application);
 	const authConfig = await getAuthConfig(application);

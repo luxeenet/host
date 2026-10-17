@@ -12,6 +12,8 @@ import {
 } from "../process/execAsync";
 import type { FileConfig, HttpLoadBalancerService } from "./file-types";
 import { extractPortFromCommand } from "../builders/runtime-resolver";
+import { loadDeploymentPlanSync } from "../builders/deployment-plan";
+import { detectFrameworkFromDirectorySync } from "../../services/app-detector";
 
 export const createTraefikConfig = (appName: string, port?: number) => {
 	const defaultPort = port && port > 0 ? port : 80;
@@ -365,57 +367,48 @@ export const resolveDomainUpstreamPort = (
 		}
 	}
 
-	// 5. App has suggestedPort from framework detection (e.g. 4173 for Vite preview)
+	// 5. App has suggestedPort from framework detection (e.g. 4173 for Vite preview, 8000 for FastAPI, 8080 for Go)
 	if (
 		app?.suggestedPort &&
 		app.suggestedPort > 0 &&
+		app.suggestedPort !== 3000 &&
 		(app.buildType !== "nixpacks" || app.suggestedPort !== 80)
 	) {
 		return app.suggestedPort;
 	}
 
 	// 6. Inspect saved deployment plan or application build directory
-	if (!app?.suggestedPort && app?.appName) {
+	if (app?.appName) {
 		try {
-			let loadDeploymentPlanSync: any;
-			try {
-				loadDeploymentPlanSync = require("../builders/deployment-plan").loadDeploymentPlanSync;
-			} catch {
-				try {
-					loadDeploymentPlanSync = require("@dokploy/server/utils/builders/deployment-plan").loadDeploymentPlanSync;
-				} catch {}
-			}
-			if (loadDeploymentPlanSync) {
-				const plan = loadDeploymentPlanSync(app.appName);
-				if (plan?.port?.value && (app.buildType !== "nixpacks" || plan.port.value !== 80)) {
-					return plan.port.value;
-				}
+			const plan = loadDeploymentPlanSync(app.appName, (app as any).serverId);
+			if (plan?.port?.value && (app.buildType !== "nixpacks" || plan.port.value !== 80)) {
+				return plan.port.value;
 			}
 		} catch {}
 
 		try {
-			const { APPLICATIONS_PATH } = paths();
-			const codeDir = path.join(APPLICATIONS_PATH, app.appName, "code");
+			const { APPLICATIONS_PATH } = paths(!!(app as any).serverId);
+			const codeDir = path.join(
+				APPLICATIONS_PATH,
+				app.appName,
+				"code",
+				(app as any).buildPath || "",
+			);
 			if (fs.existsSync(codeDir)) {
-				let detectFrameworkFromDirectorySync: any;
-				try {
-					detectFrameworkFromDirectorySync = require("../../services/app-detector").detectFrameworkFromDirectorySync;
-				} catch {
-					try {
-						detectFrameworkFromDirectorySync = require("@dokploy/server/services/app-detector").detectFrameworkFromDirectorySync;
-					} catch {}
-				}
-				if (detectFrameworkFromDirectorySync) {
-					const det = detectFrameworkFromDirectorySync(codeDir);
-					if (
-						det?.suggestedPort &&
-						(app.buildType !== "nixpacks" || det.suggestedPort !== 80)
-					) {
-						return det.suggestedPort;
-					}
+				const det = detectFrameworkFromDirectorySync(codeDir);
+				if (
+					det?.suggestedPort &&
+					(app.buildType !== "nixpacks" || det.suggestedPort !== 80)
+				) {
+					return det.suggestedPort;
 				}
 			}
 		} catch {}
+	}
+
+	// If suggestedPort was explicitly provided as 3000 and confirmed by plan/detector
+	if (app?.suggestedPort && app.suggestedPort > 0) {
+		return app.suggestedPort;
 	}
 
 	// 7. If domain has an explicit customer-configured port that is not default 3000
@@ -423,7 +416,7 @@ export const resolveDomainUpstreamPort = (
 		return domain.port;
 	}
 
-	// 7. Default port: 3000 (standard for Node.js, Next.js, Rails)
+	// 8. Default port: 3000 (standard for Node.js, Next.js, Rails)
 	return domain.port && domain.port > 0 ? domain.port : 3000;
 };
 

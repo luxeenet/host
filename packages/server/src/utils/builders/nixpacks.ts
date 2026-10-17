@@ -285,7 +285,11 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		if (preResolvedPort) {
 			effectivePort = preResolvedPort;
 		} else if (effectiveProvider === "python") {
-			effectivePort = 8501;
+			effectivePort = activeStartCommand?.includes("streamlit")
+				? 8501
+				: activeStartCommand?.includes("flask")
+					? 5000
+					: 8000;
 		} else if (activeStartCommand && /\bpreview\b/i.test(activeStartCommand)) {
 			effectivePort = 4173;
 		} else {
@@ -296,7 +300,11 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	} else if (preResolvedPort) {
 		effectivePort = preResolvedPort;
 	} else if (effectiveProvider === "python") {
-		effectivePort = 8501;
+		effectivePort = activeStartCommand?.includes("streamlit")
+			? 8501
+			: activeStartCommand?.includes("flask")
+				? 5000
+				: 8000;
 	} else if (activeStartCommand && /\bpreview\b/i.test(activeStartCommand)) {
 		effectivePort = 4173;
 	} else {
@@ -440,14 +448,30 @@ if [ -d ${quote([buildAppDirectory])} ]; then
         fi
       fi
       if [ -z "$NIXPACKS_START_CMD" ]; then
+        HAS_FASTAPI=$(grep -E -qi "fastapi|uvicorn" "${buildAppDirectory}/requirements.txt" "${buildAppDirectory}/pyproject.toml" "${buildAppDirectory}/Pipfile" 2>/dev/null && echo "true" || echo "false")
+        HAS_FLASK=$(grep -E -qi "flask" "${buildAppDirectory}/requirements.txt" "${buildAppDirectory}/pyproject.toml" "${buildAppDirectory}/Pipfile" 2>/dev/null && echo "true" || echo "false")
+        HAS_GUNICORN=$(grep -E -qi "gunicorn" "${buildAppDirectory}/requirements.txt" "${buildAppDirectory}/pyproject.toml" "${buildAppDirectory}/Pipfile" 2>/dev/null && echo "true" || echo "false")
+
         if [ -f "${buildAppDirectory}/streamlit_app.py" ]; then
           export NIXPACKS_START_CMD="streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0" ;
-        elif [ -f "${buildAppDirectory}/app.py" ] && grep -qi "streamlit" "${buildAppDirectory}/requirements.txt" 2>/dev/null; then
+        elif [ -f "${buildAppDirectory}/app.py" ] && (grep -qi "streamlit" "${buildAppDirectory}/requirements.txt" 2>/dev/null || grep -qi "streamlit" "${buildAppDirectory}/app.py" 2>/dev/null); then
           export NIXPACKS_START_CMD="streamlit run app.py --server.port=8501 --server.address=0.0.0.0" ;
-        elif [ -f "${buildAppDirectory}/app.py" ] && grep -qi "streamlit" "${buildAppDirectory}/app.py" 2>/dev/null; then
-          export NIXPACKS_START_CMD="streamlit run app.py --server.port=8501 --server.address=0.0.0.0" ;
+        elif [ "$HAS_FASTAPI" = "true" ]; then
+          if [ -f "${buildAppDirectory}/main.py" ]; then
+            export NIXPACKS_START_CMD="uvicorn main:app --host 0.0.0.0 --port \${PORT:-8000}" ;
+          elif [ -f "${buildAppDirectory}/app.py" ]; then
+            export NIXPACKS_START_CMD="uvicorn app:app --host 0.0.0.0 --port \${PORT:-8000}" ;
+          else
+            export NIXPACKS_START_CMD="uvicorn main:app --host 0.0.0.0 --port \${PORT:-8000}" ;
+          fi
         elif [ -f "${buildAppDirectory}/manage.py" ]; then
           export NIXPACKS_START_CMD="python manage.py runserver 0.0.0.0:8000" ;
+        elif [ "$HAS_GUNICORN" = "true" ] && [ -f "${buildAppDirectory}/wsgi.py" ]; then
+          export NIXPACKS_START_CMD="gunicorn wsgi:application --bind 0.0.0.0:\${PORT:-8000}" ;
+        elif [ "$HAS_GUNICORN" = "true" ] && [ -f "${buildAppDirectory}/app.py" ]; then
+          export NIXPACKS_START_CMD="gunicorn app:app --bind 0.0.0.0:\${PORT:-8000}" ;
+        elif [ "$HAS_FLASK" = "true" ]; then
+          export NIXPACKS_START_CMD="flask run --host=0.0.0.0 --port=\${PORT:-5000}" ;
         elif [ -f "${buildAppDirectory}/main.py" ]; then
           export NIXPACKS_START_CMD="python main.py" ;
         elif [ -f "${buildAppDirectory}/app.py" ]; then
@@ -702,9 +726,15 @@ if [ -d ${quote([buildAppDirectory])} ]; then
           const isViteSpa = Boolean((p.dependencies && p.dependencies.vite) || (p.devDependencies && p.devDependencies.vite));
           const start = s.start || '';
           const isViteDev = /vite(\s|$)/.test(start) && !start.includes('preview');
-          if (isViteSpa && s.preview) {
+          const isDevStart = /^(?:nest\s+start|ts-node|nodemon|tsx|concurrently)\b/i.test(start) || /\b(?:--watch|-w)\b/i.test(start);
+          const isNest = Boolean((p.dependencies && p.dependencies['@nestjs/core']) || (p.devDependencies && p.devDependencies['@nestjs/core']));
+          if (isNest && s['start:prod']) {
+            console.log('npm run start:prod');
+          } else if (s['start:prod'] && (isDevStart || !s.start)) {
+            console.log('npm run start:prod');
+          } else if (isViteSpa && s.preview) {
             console.log('npm run preview -- --host 0.0.0.0 --port 4173');
-          } else if (s.start && !isViteDev) {
+          } else if (s.start && !isViteDev && !isDevStart) {
             console.log('npm start');
           } else if (s['start:prod']) {
             console.log('npm run start:prod');

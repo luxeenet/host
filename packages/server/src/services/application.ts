@@ -45,6 +45,7 @@ import { getBuildAppDirectory } from "../utils/filesystem/directory";
 import {
 	resolveDeploymentPlan,
 	saveDeploymentPlanSync,
+	loadDeploymentPlanSync,
 	formatDeploymentPlanLog,
 } from "../utils/builders/deployment-plan";
 import { sanitizeLogContent } from "../utils/deployment/logging-boundary";
@@ -100,11 +101,14 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 		explicitPort = application.ports[0].targetPort;
 	}
 
-	let detectedPort = explicitPort ?? 3000;
+	const plan = loadDeploymentPlanSync(application.appName, application.serverId);
+	let detectedPort = explicitPort ?? plan?.port?.value ?? 3000;
 	if (!explicitPort) {
 		const cmdPort = extractPortFromCommand(application.command);
 		if (cmdPort) {
 			detectedPort = cmdPort;
+		} else if (plan?.port?.value) {
+			detectedPort = plan.port.value;
 		} else if (application.buildType === "static") {
 			detectedPort = 80;
 		} else {
@@ -552,89 +556,28 @@ Actionable Diagnostic:
 		}
 
 		// Stage 7: Routing & Upstream Reachability
-		const stage7Log = `
-================================================================================
-Stage 7/7: Public URL & Upstream Reachability Verification
---------------------------------------------------------------------------------
-Testing HTTP upstream reachability through routing layer...
-`;
-		await appendDeploymentLog(deployment.logPath, stage7Log, serverId);
-
-		const verifyResult = await verifyApplicationLiveUrl(applicationId, {
-			maxRetries: 3,
-			retryDelayMs: 2000,
-		});
-
-		// Check if Traefik returned 502 Bad Gateway
-		if (
-			!verifyResult.isLive &&
-			verifyResult.checks.deploymentHealthy &&
-			!verifyResult.checks.appResponding &&
-			verifyResult.details?.includes("502")
-		) {
-			let diagnosticDetails = "";
-			try {
-				const remoteDocker = await getRemoteDocker(serverId);
-				const tasks = await remoteDocker.listTasks({
-					filters: JSON.stringify({ service: [application.appName] }),
-				});
-				const latestTask = tasks[0];
-				const taskState = latestTask?.Status?.State;
-				const exitCode = (latestTask?.Status as any)?.ContainerStatus?.ExitCode;
-				if (taskState && taskState !== "running") {
-					diagnosticDetails += `  • Container State: Task is currently '${taskState}' (Exit Code: ${exitCode ?? "N/A"}). The server process exited or failed to start.\n`;
-				} else {
-					diagnosticDetails += "  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
-				}
-			} catch {}
-
-			const fail502Log = `
-❌ HTTP 502 Bad Gateway: Upstream Unreachable
-Test URL: ${verifyResult.testUrl}
-Evidence & Diagnostic:
-${diagnosticDetails || "  • Container is running in Docker Swarm, but upstream TCP connection was refused.\n"}
-Probable root causes:
-  1. Port Mismatch: Application is listening on a port different from the configured Traefik upstream port.
-  2. Loopback Binding: Application server is bound to 127.0.0.1 (localhost) instead of 0.0.0.0 (all interfaces).
-  3. Slow Initialization: Application server took longer to start than the readiness retry deadline.
-Remediation:
-  • Verify Application > Ports or Application > Settings > Start Command.
-  • For Vite apps, ensure preview script runs with '--host 0.0.0.0 --port 4173'.
-  • For Node.js/Express, ensure process binds to '0.0.0.0' and uses process.env.PORT.
-================================================================================
-`;
-			await appendDeploymentLog(deployment.logPath, fail502Log, serverId);
-			await updateDeploymentStatus(deployment.deploymentId, "error");
-			await updateApplicationStatus(applicationId, "error");
-			throw new DeploymentReadinessError(
-				"HTTP 502 Bad Gateway: Application container is running but upstream port is unreachable",
+		const activePlan = plan || loadDeploymentPlanSync(application.appName, serverId);
+		const isWorkerWorkload =
+			activePlan?.isHttpWorkload === false ||
+			Boolean(
+				application.command &&
+					/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer|bullmq)\b/i.test(
+						application.command,
+					),
 			);
-		}
 
-		let verifyLog = "\n================================================================================\n";
-		if (verifyResult.isLive) {
-			verifyLog += "🎉 Public URL Reachability: Verified Live\n";
-			verifyLog += "--------------------------------------------------------------------------------\n";
-			verifyLog += `Test URL:    ${verifyResult.testUrl}\n`;
-			if (verifyResult.statusCode) {
-				verifyLog += `HTTP Status: ${verifyResult.statusCode}\n`;
-			}
-			if (verifyResult.responseTimeMs) {
-				verifyLog += `Latency:     ${verifyResult.responseTimeMs}ms\n`;
-			}
-			verifyLog += "\nVerification Summary:\n";
-			verifyLog += "  ✓ Container running and healthy in Docker Swarm\n";
-			verifyLog += "  ✓ Public DNS resolved to server endpoint\n";
-			verifyLog += "  ✓ Application responded successfully to HTTP request\n";
-			if (verifyResult.checks.httpsActive) {
-				verifyLog += "  ✓ HTTPS active with valid TLS certificate\n";
-			} else if (verifyResult.details?.includes("HTTPS")) {
-				verifyLog += "  ⏳ HTTPS certificate provisioning in progress\n";
-			}
-			verifyLog += `\nYour application is live and accessible at:\n${verifyResult.testUrl}\n`;
-			verifyLog += "================================================================================\n";
-			await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
-
+		if (isWorkerWorkload) {
+			const workerLog = `
+================================================================================
+Stage 7/7: Workload Verification (Background Worker)
+--------------------------------------------------------------------------------
+Workload Classification: Background Worker / Queue Consumer (Non-HTTP)
+Verification Summary:
+  ✓ Container running and task converged in Docker Swarm
+  ✓ Background process active (HTTP ingress check bypassed for non-HTTP worker)
+================================================================================
+`;
+			await appendDeploymentLog(deployment.logPath, workerLog, serverId);
 			await updateDeploymentStatus(deployment.deploymentId, "done");
 			await updateApplicationStatus(applicationId, "done");
 
@@ -648,18 +591,135 @@ Remediation:
 				environmentName: application.environment.name,
 			});
 		} else {
-			const isWorker = Boolean(
-				application.command &&
-					/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer)\b/i.test(
-						application.command,
-					),
-			);
-			if (isWorker) {
-				verifyLog += "✓ Non-HTTP workload verified (background worker/queue converged in Docker Swarm).\n";
+			const stage7Log = `
+================================================================================
+Stage 7/7: Public URL & Upstream Reachability Verification
+--------------------------------------------------------------------------------
+Testing HTTP upstream reachability through routing layer...
+`;
+			await appendDeploymentLog(deployment.logPath, stage7Log, serverId);
+
+			const verifyResult = await verifyApplicationLiveUrl(applicationId, {
+				maxRetries: 5,
+				retryDelayMs: 2500,
+			});
+
+			// Check if Traefik returned 502 Bad Gateway or 504 Gateway Timeout
+			if (
+				!verifyResult.isLive &&
+				verifyResult.checks.deploymentHealthy &&
+				!verifyResult.checks.appResponding &&
+				(verifyResult.details?.includes("502") ||
+					verifyResult.statusCode === 502 ||
+					verifyResult.statusCode === 504 ||
+					verifyResult.details?.includes("504"))
+			) {
+				let diagnosticDetails = "";
+				let containerLogs = "";
+				try {
+					const remoteDocker = await getRemoteDocker(serverId);
+					const tasks = await remoteDocker.listTasks({
+						filters: JSON.stringify({ service: [application.appName] }),
+					});
+					const latestTask = tasks[0];
+					const taskState = latestTask?.Status?.State;
+					const exitCode = (latestTask?.Status as any)?.ContainerStatus?.ExitCode;
+					if (taskState && taskState !== "running") {
+						diagnosticDetails += `  • Container State: Task is currently '${taskState}' (Exit Code: ${exitCode ?? "N/A"}). The server process exited or failed to start.\n`;
+					} else {
+						diagnosticDetails += "  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
+					}
+
+					// Fetch recent runtime logs from active container
+					const containers = await remoteDocker.listContainers({
+						filters: JSON.stringify({
+							label: [`com.docker.swarm.service.name=${application.appName}`],
+						}),
+					});
+					if (containers.length > 0 && containers[0]?.Id) {
+						const container = remoteDocker.getContainer(containers[0].Id);
+						const rawBuffer = await container.logs({
+							stdout: true,
+							stderr: true,
+							tail: 25,
+							timestamps: false,
+						});
+						const logStr = (
+							Buffer.isBuffer(rawBuffer)
+								? rawBuffer.toString("utf8")
+								: String(rawBuffer)
+						)
+							.replace(/[\u0000-\u0008\u000B-\u001F]/g, "")
+							.trim();
+						if (logStr) {
+							containerLogs = `\nRecent Container Runtime Logs (last 25 lines):\n--------------------------------------------------\n${logStr}\n--------------------------------------------------\n`;
+						}
+					}
+				} catch {}
+
+				const configuredPort = activePlan?.port?.value || "3000 (default)";
+				const fail502Log = `
+❌ HTTP ${verifyResult.statusCode || 502} Bad Gateway: Upstream Unreachable
+Test URL: ${verifyResult.testUrl}
+Target Upstream Port: ${configuredPort}
+Evidence & Diagnostic:
+${diagnosticDetails || "  • Container is running in Docker Swarm, but upstream TCP connection was refused.\n"}${containerLogs}
+Probable root causes:
+  1. Port Mismatch: Application process is listening on a port different from Traefik upstream port (${configuredPort}).
+  2. Loopback Binding: Application server bound to 127.0.0.1 (localhost) instead of 0.0.0.0 (all interfaces).
+  3. Runtime Crash: Application threw an uncaught error or missing dependency during startup.
+  4. Missing Environment Variables: Database URL, secret keys, or required config missing at runtime.
+Remediation:
+  • Verify Application > Ports or Application > Settings > Start Command.
+  • Ensure your server process listens on '0.0.0.0' and uses process.env.PORT or the configured port.
+  • For Fastify: set address to '0.0.0.0' (e.g. fastify.listen({ port, host: '0.0.0.0' })).
+  • For Python (FastAPI/Flask): run uvicorn with '--host 0.0.0.0 --port \${PORT:-8000}'.
+================================================================================
+`;
+				await appendDeploymentLog(deployment.logPath, fail502Log, serverId);
+				await updateDeploymentStatus(deployment.deploymentId, "error");
+				await updateApplicationStatus(applicationId, "error");
+				throw new DeploymentReadinessError(
+					`HTTP ${verifyResult.statusCode || 502} Bad Gateway: Application container is running but upstream port is unreachable`,
+				);
+			}
+
+			let verifyLog = "\n================================================================================\n";
+			if (verifyResult.isLive) {
+				verifyLog += "🎉 Public URL Reachability: Verified Live\n";
+				verifyLog += "--------------------------------------------------------------------------------\n";
+				verifyLog += `Test URL:    ${verifyResult.testUrl}\n`;
+				if (verifyResult.statusCode) {
+					verifyLog += `HTTP Status: ${verifyResult.statusCode}\n`;
+				}
+				if (verifyResult.responseTimeMs) {
+					verifyLog += `Latency:     ${verifyResult.responseTimeMs}ms\n`;
+				}
+				verifyLog += "\nVerification Summary:\n";
+				verifyLog += "  ✓ Container running and healthy in Docker Swarm\n";
+				verifyLog += "  ✓ Public DNS resolved to server endpoint\n";
+				verifyLog += "  ✓ Application responded successfully to HTTP request\n";
+				if (verifyResult.checks.httpsActive) {
+					verifyLog += "  ✓ HTTPS active with valid TLS certificate\n";
+				} else if (verifyResult.details?.includes("HTTPS")) {
+					verifyLog += "  ⏳ HTTPS certificate provisioning in progress\n";
+				}
+				verifyLog += `\nYour application is live and accessible at:\n${verifyResult.testUrl}\n`;
 				verifyLog += "================================================================================\n";
 				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+
 				await updateDeploymentStatus(deployment.deploymentId, "done");
 				await updateApplicationStatus(applicationId, "done");
+
+				await sendBuildSuccessNotifications({
+					projectName: application.environment.project.name,
+					applicationName: application.name,
+					applicationType: "application",
+					buildLink,
+					organizationId: application.environment.project.organizationId,
+					domains: application.domains,
+					environmentName: application.environment.name,
+				});
 			} else {
 				verifyLog += "❌ Public URL Reachability: Verification Failed\n";
 				verifyLog += "--------------------------------------------------------------------------------\n";
@@ -834,89 +894,28 @@ Actionable Diagnostic:
 		}
 
 		// Stage 7: Routing & Upstream Reachability
-		const stage7Log = `
-================================================================================
-Stage 7/7: Public URL & Upstream Reachability Verification
---------------------------------------------------------------------------------
-Testing HTTP upstream reachability through routing layer...
-`;
-		await appendDeploymentLog(deployment.logPath, stage7Log, serverId);
-
-		const verifyResult = await verifyApplicationLiveUrl(applicationId, {
-			maxRetries: 3,
-			retryDelayMs: 2000,
-		});
-
-		// Check if Traefik returned 502 Bad Gateway
-		if (
-			!verifyResult.isLive &&
-			verifyResult.checks.deploymentHealthy &&
-			!verifyResult.checks.appResponding &&
-			verifyResult.details?.includes("502")
-		) {
-			let diagnosticDetails = "";
-			try {
-				const remoteDocker = await getRemoteDocker(serverId);
-				const tasks = await remoteDocker.listTasks({
-					filters: JSON.stringify({ service: [application.appName] }),
-				});
-				const latestTask = tasks[0];
-				const taskState = latestTask?.Status?.State;
-				const exitCode = (latestTask?.Status as any)?.ContainerStatus?.ExitCode;
-				if (taskState && taskState !== "running") {
-					diagnosticDetails += `  • Container State: Task is currently '${taskState}' (Exit Code: ${exitCode ?? "N/A"}). The server process exited or failed to start.\n`;
-				} else {
-					diagnosticDetails += "  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
-				}
-			} catch {}
-
-			const fail502Log = `
-❌ HTTP 502 Bad Gateway: Upstream Unreachable
-Test URL: ${verifyResult.testUrl}
-Evidence & Diagnostic:
-${diagnosticDetails || "  • Container is running in Docker Swarm, but upstream TCP connection was refused.\n"}
-Probable root causes:
-  1. Port Mismatch: Application is listening on a port different from the configured Traefik upstream port.
-  2. Loopback Binding: Application server is bound to 127.0.0.1 (localhost) instead of 0.0.0.0 (all interfaces).
-  3. Slow Initialization: Application server took longer to start than the readiness retry deadline.
-Remediation:
-  • Verify Application > Ports or Application > Settings > Start Command.
-  • For Vite apps, ensure preview script runs with '--host 0.0.0.0 --port 4173'.
-  • For Node.js/Express, ensure process binds to '0.0.0.0' and uses process.env.PORT.
-================================================================================
-`;
-			await appendDeploymentLog(deployment.logPath, fail502Log, serverId);
-			await updateDeploymentStatus(deployment.deploymentId, "error");
-			await updateApplicationStatus(applicationId, "error");
-			throw new DeploymentReadinessError(
-				"HTTP 502 Bad Gateway: Application container is running but upstream port is unreachable",
+		const activePlan = plan || loadDeploymentPlanSync(application.appName, serverId);
+		const isWorkerWorkload =
+			activePlan?.isHttpWorkload === false ||
+			Boolean(
+				application.command &&
+					/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer|bullmq)\b/i.test(
+						application.command,
+					),
 			);
-		}
 
-		let verifyLog = "\n================================================================================\n";
-		if (verifyResult.isLive) {
-			verifyLog += "🎉 Public URL Reachability: Verified Live\n";
-			verifyLog += "--------------------------------------------------------------------------------\n";
-			verifyLog += `Test URL:    ${verifyResult.testUrl}\n`;
-			if (verifyResult.statusCode) {
-				verifyLog += `HTTP Status: ${verifyResult.statusCode}\n`;
-			}
-			if (verifyResult.responseTimeMs) {
-				verifyLog += `Latency:     ${verifyResult.responseTimeMs}ms\n`;
-			}
-			verifyLog += "\nVerification Summary:\n";
-			verifyLog += "  ✓ Container running and healthy in Docker Swarm\n";
-			verifyLog += "  ✓ Public DNS resolved to server endpoint\n";
-			verifyLog += "  ✓ Application responded successfully to HTTP request\n";
-			if (verifyResult.checks.httpsActive) {
-				verifyLog += "  ✓ HTTPS active with valid TLS certificate\n";
-			} else if (verifyResult.details?.includes("HTTPS")) {
-				verifyLog += "  ⏳ HTTPS certificate provisioning in progress\n";
-			}
-			verifyLog += `\nYour application is live and accessible at:\n${verifyResult.testUrl}\n`;
-			verifyLog += "================================================================================\n";
-			await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
-
+		if (isWorkerWorkload) {
+			const workerLog = `
+================================================================================
+Stage 7/7: Workload Verification (Background Worker)
+--------------------------------------------------------------------------------
+Workload Classification: Background Worker / Queue Consumer (Non-HTTP)
+Verification Summary:
+  ✓ Container running and task converged in Docker Swarm
+  ✓ Background process active (HTTP ingress check bypassed for non-HTTP worker)
+================================================================================
+`;
+			await appendDeploymentLog(deployment.logPath, workerLog, serverId);
 			await updateDeploymentStatus(deployment.deploymentId, "done");
 			await updateApplicationStatus(applicationId, "done");
 
@@ -930,18 +929,135 @@ Remediation:
 				environmentName: application.environment.name,
 			});
 		} else {
-			const isWorker = Boolean(
-				application.command &&
-					/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer)\b/i.test(
-						application.command,
-					),
-			);
-			if (isWorker) {
-				verifyLog += "✓ Non-HTTP workload verified (background worker/queue converged in Docker Swarm).\n";
+			const stage7Log = `
+================================================================================
+Stage 7/7: Public URL & Upstream Reachability Verification
+--------------------------------------------------------------------------------
+Testing HTTP upstream reachability through routing layer...
+`;
+			await appendDeploymentLog(deployment.logPath, stage7Log, serverId);
+
+			const verifyResult = await verifyApplicationLiveUrl(applicationId, {
+				maxRetries: 5,
+				retryDelayMs: 2500,
+			});
+
+			// Check if Traefik returned 502 Bad Gateway or 504 Gateway Timeout
+			if (
+				!verifyResult.isLive &&
+				verifyResult.checks.deploymentHealthy &&
+				!verifyResult.checks.appResponding &&
+				(verifyResult.details?.includes("502") ||
+					verifyResult.statusCode === 502 ||
+					verifyResult.statusCode === 504 ||
+					verifyResult.details?.includes("504"))
+			) {
+				let diagnosticDetails = "";
+				let containerLogs = "";
+				try {
+					const remoteDocker = await getRemoteDocker(serverId);
+					const tasks = await remoteDocker.listTasks({
+						filters: JSON.stringify({ service: [application.appName] }),
+					});
+					const latestTask = tasks[0];
+					const taskState = latestTask?.Status?.State;
+					const exitCode = (latestTask?.Status as any)?.ContainerStatus?.ExitCode;
+					if (taskState && taskState !== "running") {
+						diagnosticDetails += `  • Container State: Task is currently '${taskState}' (Exit Code: ${exitCode ?? "N/A"}). The server process exited or failed to start.\n`;
+					} else {
+						diagnosticDetails += "  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
+					}
+
+					// Fetch recent runtime logs from active container
+					const containers = await remoteDocker.listContainers({
+						filters: JSON.stringify({
+							label: [`com.docker.swarm.service.name=${application.appName}`],
+						}),
+					});
+					if (containers.length > 0 && containers[0]?.Id) {
+						const container = remoteDocker.getContainer(containers[0].Id);
+						const rawBuffer = await container.logs({
+							stdout: true,
+							stderr: true,
+							tail: 25,
+							timestamps: false,
+						});
+						const logStr = (
+							Buffer.isBuffer(rawBuffer)
+								? rawBuffer.toString("utf8")
+								: String(rawBuffer)
+						)
+							.replace(/[\u0000-\u0008\u000B-\u001F]/g, "")
+							.trim();
+						if (logStr) {
+							containerLogs = `\nRecent Container Runtime Logs (last 25 lines):\n--------------------------------------------------\n${logStr}\n--------------------------------------------------\n`;
+						}
+					}
+				} catch {}
+
+				const configuredPort = activePlan?.port?.value || "3000 (default)";
+				const fail502Log = `
+❌ HTTP ${verifyResult.statusCode || 502} Bad Gateway: Upstream Unreachable
+Test URL: ${verifyResult.testUrl}
+Target Upstream Port: ${configuredPort}
+Evidence & Diagnostic:
+${diagnosticDetails || "  • Container is running in Docker Swarm, but upstream TCP connection was refused.\n"}${containerLogs}
+Probable root causes:
+  1. Port Mismatch: Application process is listening on a port different from Traefik upstream port (${configuredPort}).
+  2. Loopback Binding: Application server bound to 127.0.0.1 (localhost) instead of 0.0.0.0 (all interfaces).
+  3. Runtime Crash: Application threw an uncaught error or missing dependency during startup.
+  4. Missing Environment Variables: Database URL, secret keys, or required config missing at runtime.
+Remediation:
+  • Verify Application > Ports or Application > Settings > Start Command.
+  • Ensure your server process listens on '0.0.0.0' and uses process.env.PORT or the configured port.
+  • For Fastify: set address to '0.0.0.0' (e.g. fastify.listen({ port, host: '0.0.0.0' })).
+  • For Python (FastAPI/Flask): run uvicorn with '--host 0.0.0.0 --port \${PORT:-8000}'.
+================================================================================
+`;
+				await appendDeploymentLog(deployment.logPath, fail502Log, serverId);
+				await updateDeploymentStatus(deployment.deploymentId, "error");
+				await updateApplicationStatus(applicationId, "error");
+				throw new DeploymentReadinessError(
+					`HTTP ${verifyResult.statusCode || 502} Bad Gateway: Application container is running but upstream port is unreachable`,
+				);
+			}
+
+			let verifyLog = "\n================================================================================\n";
+			if (verifyResult.isLive) {
+				verifyLog += "🎉 Public URL Reachability: Verified Live\n";
+				verifyLog += "--------------------------------------------------------------------------------\n";
+				verifyLog += `Test URL:    ${verifyResult.testUrl}\n`;
+				if (verifyResult.statusCode) {
+					verifyLog += `HTTP Status: ${verifyResult.statusCode}\n`;
+				}
+				if (verifyResult.responseTimeMs) {
+					verifyLog += `Latency:     ${verifyResult.responseTimeMs}ms\n`;
+				}
+				verifyLog += "\nVerification Summary:\n";
+				verifyLog += "  ✓ Container running and healthy in Docker Swarm\n";
+				verifyLog += "  ✓ Public DNS resolved to server endpoint\n";
+				verifyLog += "  ✓ Application responded successfully to HTTP request\n";
+				if (verifyResult.checks.httpsActive) {
+					verifyLog += "  ✓ HTTPS active with valid TLS certificate\n";
+				} else if (verifyResult.details?.includes("HTTPS")) {
+					verifyLog += "  ⏳ HTTPS certificate provisioning in progress\n";
+				}
+				verifyLog += `\nYour application is live and accessible at:\n${verifyResult.testUrl}\n`;
 				verifyLog += "================================================================================\n";
 				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
+
 				await updateDeploymentStatus(deployment.deploymentId, "done");
 				await updateApplicationStatus(applicationId, "done");
+
+				await sendBuildSuccessNotifications({
+					projectName: application.environment.project.name,
+					applicationName: application.name,
+					applicationType: "application",
+					buildLink,
+					organizationId: application.environment.project.organizationId,
+					domains: application.domains,
+					environmentName: application.environment.name,
+				});
 			} else {
 				verifyLog += "❌ Public URL Reachability: Verification Failed\n";
 				verifyLog += "--------------------------------------------------------------------------------\n";

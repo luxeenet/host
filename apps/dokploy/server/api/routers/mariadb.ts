@@ -27,6 +27,7 @@ import {
 	stopService,
 	stopServiceRemote,
 	updateMariadbById,
+	verifyDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -35,16 +36,16 @@ import {
 	checkServicePermissionAndAccess,
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
+import {
+	assertEntitlement,
+	PlanEntitlementService,
+} from "@dokploy/server/services/plan-entitlement";
 import { TRPCError } from "@trpc/server";
 import { observable } from "@trpc/server/observable";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
-import {
-	PlanEntitlementService,
-	assertEntitlement,
-} from "@dokploy/server/services/plan-entitlement";
 import {
 	apiChangeMariaDBStatus,
 	apiCreateMariaDB,
@@ -90,31 +91,23 @@ export const mariadbRouter = createTRPCRouter({
 						) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You need to use a server to create a Mariadb",
+								message: "You need to use a server to create a Mariadb",
 							});
 						}
 
-						if (
-							project.organizationId !==
-							ctx.session.activeOrganizationId
-						) {
+						if (project.organizationId !== ctx.session.activeOrganizationId) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You are not authorized to access this project",
+								message: "You are not authorized to access this project",
 							});
 						}
 
 						if (input.serverId) {
-							const accessibleIds = await getAccessibleServerIds(
-								ctx.session,
-							);
+							const accessibleIds = await getAccessibleServerIds(ctx.session);
 							if (!accessibleIds.has(input.serverId)) {
 								throw new TRPCError({
 									code: "UNAUTHORIZED",
-									message:
-										"You are not authorized to access this server",
+									message: "You are not authorized to access this server",
 								});
 							}
 						}
@@ -202,6 +195,34 @@ export const mariadbRouter = createTRPCRouter({
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+		}),
+	verifyConnectivity: protectedProcedure
+		.input(apiFindOneMariaDB)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mariadbId, "read");
+			const mariadb = await findMariadbById(input.mariadbId);
+			if (
+				mariadb.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Mariadb",
+				});
+			}
+			const publicHostInfo = await getPublicDatabaseHost(
+				mariadb.serverId || undefined,
+				mariadb.appName || undefined,
+			);
+			return await verifyDatabaseConnectivity({
+				type: "mariadb",
+				host: publicHostInfo.host,
+				port: mariadb.externalPort,
+				user: mariadb.databaseUser,
+				password: mariadb.databasePassword,
+				databaseName: mariadb.databaseName || undefined,
+				serverId: mariadb.serverId || undefined,
+			});
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(
@@ -579,9 +600,7 @@ export const mariadbRouter = createTRPCRouter({
 							? rest.memoryReservation
 							: current.memoryReservation,
 					cpuLimit:
-						rest.cpuLimit !== undefined
-							? rest.cpuLimit
-							: current.cpuLimit,
+						rest.cpuLimit !== undefined ? rest.cpuLimit : current.cpuLimit,
 					cpuReservation:
 						rest.cpuReservation !== undefined
 							? rest.cpuReservation

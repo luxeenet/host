@@ -28,6 +28,7 @@ import {
 	stopService,
 	stopServiceRemote,
 	updatePostgresById,
+	verifyDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -202,6 +203,34 @@ export const postgresRouter = createTRPCRouter({
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+		}),
+	verifyConnectivity: protectedProcedure
+		.input(apiFindOnePostgres)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.postgresId, "read");
+			const postgres = await findPostgresById(input.postgresId);
+			if (
+				postgres.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Postgres",
+				});
+			}
+			const publicHostInfo = await getPublicDatabaseHost(
+				postgres.serverId || undefined,
+				postgres.appName || undefined,
+			);
+			return await verifyDatabaseConnectivity({
+				type: "postgres",
+				host: publicHostInfo.host,
+				port: postgres.externalPort,
+				user: postgres.databaseUser,
+				password: postgres.databasePassword,
+				databaseName: postgres.databaseName || undefined,
+				serverId: postgres.serverId || undefined,
+			});
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(

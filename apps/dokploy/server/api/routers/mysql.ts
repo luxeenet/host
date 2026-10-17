@@ -27,6 +27,7 @@ import {
 	stopService,
 	stopServiceRemote,
 	updateMySqlById,
+	verifyDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -35,15 +36,15 @@ import {
 	checkServicePermissionAndAccess,
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
+import {
+	assertEntitlement,
+	PlanEntitlementService,
+} from "@dokploy/server/services/plan-entitlement";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
-import {
-	PlanEntitlementService,
-	assertEntitlement,
-} from "@dokploy/server/services/plan-entitlement";
 import {
 	apiChangeMySqlStatus,
 	apiCreateMySql,
@@ -90,31 +91,23 @@ export const mysqlRouter = createTRPCRouter({
 						) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You need to use a server to create a MySQL",
+								message: "You need to use a server to create a MySQL",
 							});
 						}
 
-						if (
-							project.organizationId !==
-							ctx.session.activeOrganizationId
-						) {
+						if (project.organizationId !== ctx.session.activeOrganizationId) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You are not authorized to access this project",
+								message: "You are not authorized to access this project",
 							});
 						}
 
 						if (input.serverId) {
-							const accessibleIds = await getAccessibleServerIds(
-								ctx.session,
-							);
+							const accessibleIds = await getAccessibleServerIds(ctx.session);
 							if (!accessibleIds.has(input.serverId)) {
 								throw new TRPCError({
 									code: "UNAUTHORIZED",
-									message:
-										"You are not authorized to access this server",
+									message: "You are not authorized to access this server",
 								});
 							}
 						}
@@ -206,6 +199,34 @@ export const mysqlRouter = createTRPCRouter({
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+		}),
+	verifyConnectivity: protectedProcedure
+		.input(apiFindOneMySql)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mysqlId, "read");
+			const mysql = await findMySqlById(input.mysqlId);
+			if (
+				mysql.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this MySQL",
+				});
+			}
+			const publicHostInfo = await getPublicDatabaseHost(
+				mysql.serverId || undefined,
+				mysql.appName || undefined,
+			);
+			return await verifyDatabaseConnectivity({
+				type: "mysql",
+				host: publicHostInfo.host,
+				port: mysql.externalPort,
+				user: mysql.databaseUser,
+				password: mysql.databasePassword,
+				databaseName: mysql.databaseName || undefined,
+				serverId: mysql.serverId || undefined,
+			});
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(
@@ -597,9 +618,7 @@ export const mysqlRouter = createTRPCRouter({
 							? rest.memoryReservation
 							: current.memoryReservation,
 					cpuLimit:
-						rest.cpuLimit !== undefined
-							? rest.cpuLimit
-							: current.cpuLimit,
+						rest.cpuLimit !== undefined ? rest.cpuLimit : current.cpuLimit,
 					cpuReservation:
 						rest.cpuReservation !== undefined
 							? rest.cpuReservation

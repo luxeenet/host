@@ -102,22 +102,29 @@ export const ShowExternalLibsqlCredentials = ({ libsqlId }: Props) => {
 
 	useEffect(() => {
 		const port = form.watch("externalPort") || data?.externalPort;
-		setConnectionUrl(
-			`http://${data?.databaseUser}:${data?.databasePassword}@${getIp}:${port}`,
-		);
+		const encodedUser = encodeURIComponent(data?.databaseUser || "");
+		const encodedPassword = encodeURIComponent(data?.databasePassword || "");
+		const host = data?.publicHost || getIp;
+		const auth =
+			data?.databaseUser || data?.databasePassword
+				? `${encodedUser}:${encodedPassword}@`
+				: "";
+
+		setConnectionUrl(`http://${auth}${host}:${port}`);
 
 		if (data?.sqldNode !== "replica") {
 			const grpcPort = form.watch("externalGRPCPort") || data?.externalGRPCPort;
-			setGRPCConnectionUrl(
-				`http://${data?.databaseUser}:${data?.databasePassword}@${getIp}:${grpcPort}`,
-			);
+			setGRPCConnectionUrl(`http://${auth}${host}:${grpcPort}`);
 		}
 	}, [
 		data?.externalGRPCPort,
+		data?.externalPort,
 		data?.databasePassword,
-		form,
 		data?.databaseUser,
+		data?.publicHost,
+		form,
 		getIp,
+		data?.sqldNode,
 	]);
 
 	return (

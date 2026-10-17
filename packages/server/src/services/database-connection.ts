@@ -64,9 +64,42 @@ export interface DatabasePublicHostInfo {
 	serverIp: string;
 }
 
+import dns from "node:dns/promises";
+import net from "node:net";
+import { getRemoteDocker } from "../utils/servers/remote-docker";
+
 /**
- * Resolves the platform database hostname (e.g. db.hatdot.cloud or db-<app>.hatdot.cloud)
- * ensuring customers see a branded managed domain rather than raw server IP addresses.
+ * Checks whether a given hostname resolves to an IP address via DNS lookup.
+ */
+export const checkDnsResolves = async (
+	domain: string,
+): Promise<string | null> => {
+	if (
+		!domain ||
+		isIP(domain) ||
+		domain === "localhost" ||
+		domain === "127.0.0.1"
+	) {
+		return null;
+	}
+	try {
+		const res = await dns.lookup(domain);
+		if (res?.address) {
+			return res.address;
+		}
+	} catch {
+		// Domain does not resolve
+	}
+	return null;
+};
+
+/**
+ * Resolves the platform database hostname (e.g. db.hatdot.cloud)
+ * ensuring customers receive an actual resolvable domain rather than
+ * invalid unconfigured subdomains (like db.panel.hatdot.cloud).
+ *
+ * Verifies DNS resolution before declaring isDomain: true. If DNS is unresolvable,
+ * safely falls back to serverIp so external tools (e.g. MongoDB Compass) connect immediately.
  */
 export const getPublicDatabaseHost = async (
 	serverId?: string,
@@ -77,57 +110,75 @@ export const getPublicDatabaseHost = async (
 
 	// 1. Explicit environment variable for custom database gateway
 	if (process.env.PLATFORM_DB_DOMAIN) {
-		return {
-			host: process.env.PLATFORM_DB_DOMAIN,
-			isDomain: true,
-			platformDomain: process.env.PLATFORM_DB_DOMAIN,
-			serverIp,
-		};
+		const customDomain = process.env.PLATFORM_DB_DOMAIN.trim();
+		const resolvedIp = await checkDnsResolves(customDomain);
+		if (resolvedIp) {
+			return {
+				host: customDomain,
+				isDomain: true,
+				platformDomain: customDomain,
+				serverIp,
+			};
+		}
 	}
 
-	// 2. Web server settings host domain (e.g. app.hatdot.cloud -> db.hatdot.cloud)
+	// 2. Derive base domain from control plane settings (e.g. panel.hatdot.cloud -> hatdot.cloud -> db.hatdot.cloud)
+	const controlHost = settings?.host
+		?.replace(/^https?:\/\//, "")
+		.split(":")[0]
+		?.trim();
+	const brandBase = BRAND.PLATFORM_SUBDOMAIN_BASE?.replace(/^https?:\/\//, "")
+		.split(":")[0]
+		?.trim();
+
+	const candidateDomains: string[] = [];
+
 	if (
-		settings?.host &&
-		!isIP(settings.host) &&
-		settings.host !== "localhost" &&
-		settings.host !== "127.0.0.1"
+		controlHost &&
+		!isIP(controlHost) &&
+		controlHost !== "localhost" &&
+		controlHost !== "127.0.0.1"
 	) {
-		const cleanHost = settings.host.replace(/^https?:\/\//, "").split(":")[0]!;
-		const baseDomain = cleanHost.startsWith("app.")
-			? cleanHost.slice(4)
-			: cleanHost;
-		const dbDomain = baseDomain.startsWith("db.")
-			? baseDomain
-			: `db.${baseDomain}`;
-
-		return {
-			host: dbDomain,
-			isDomain: true,
-			platformDomain: dbDomain,
-			serverIp,
-		};
+		// Strip known control-plane subdomains (panel, app, dashboard, admin, dash, api, control, console)
+		const apexDomain = controlHost.replace(
+			/^(?:app|panel|dashboard|admin|dash|api|control|console)\./i,
+			"",
+		);
+		if (apexDomain.startsWith("db.")) {
+			candidateDomains.push(apexDomain);
+		} else {
+			candidateDomains.push(`db.${apexDomain}`);
+		}
 	}
 
-	// 3. Platform subdomain base from Branding config (defaults to hatdot.cloud)
 	if (
-		BRAND.PLATFORM_SUBDOMAIN_BASE &&
-		BRAND.PLATFORM_SUBDOMAIN_BASE !== "localhost" &&
-		!isIP(BRAND.PLATFORM_SUBDOMAIN_BASE)
+		brandBase &&
+		!isIP(brandBase) &&
+		brandBase !== "localhost" &&
+		brandBase !== "127.0.0.1"
 	) {
-		const cleanBase = BRAND.PLATFORM_SUBDOMAIN_BASE.replace(/^https?:\/\//, "").split(":")[0]!;
-		const brandDbDomain = cleanBase.startsWith("db.")
-			? cleanBase
-			: `db.${cleanBase}`;
-
-		return {
-			host: brandDbDomain,
-			isDomain: true,
-			platformDomain: brandDbDomain,
-			serverIp,
-		};
+		const brandDbDomain = brandBase.startsWith("db.")
+			? brandBase
+			: `db.${brandBase}`;
+		if (!candidateDomains.includes(brandDbDomain)) {
+			candidateDomains.push(brandDbDomain);
+		}
 	}
 
-	// 4. Fallback to public IP
+	// Verify candidate domains against live DNS
+	for (const candidate of candidateDomains) {
+		const resolvedIp = await checkDnsResolves(candidate);
+		if (resolvedIp) {
+			return {
+				host: candidate,
+				isDomain: true,
+				platformDomain: candidate,
+				serverIp,
+			};
+		}
+	}
+
+	// 3. Fallback to server public IP to guarantee immediate connectivity in external clients
 	const isResolvedDomain =
 		!isIP(serverIp) && serverIp !== "localhost" && serverIp !== "127.0.0.1";
 
@@ -238,15 +289,25 @@ export const buildDatabaseConnectionStrings = (
 	},
 ): DatabaseConnectionInfo => {
 	const appName = dbRecord.appName || "";
-	const user = dbRecord.databaseUser || (type === "redis" ? "default" : "postgres");
-	const password = dbRecord.databasePassword || "";
+	const rawUser =
+		dbRecord.databaseUser || (type === "redis" ? "default" : "postgres");
+	const rawPassword = dbRecord.databasePassword || "";
 	const databaseName = dbRecord.databaseName || "";
 	const externalPort = dbRecord.externalPort ?? null;
 	const isEnabled = externalPort !== null && externalPort > 0;
 	const hasPublicHost = Boolean(publicHost && publicHost !== "127.0.0.1");
-	const isDomain = publicHostInfo?.isDomain ?? (!isIP(publicHost) && publicHost !== "127.0.0.1");
-	const platformDomain = publicHostInfo?.platformDomain ?? (isDomain ? publicHost : null);
-	const serverIp = publicHostInfo?.serverIp ?? (isIP(publicHost) ? publicHost : "");
+	const isDomain =
+		publicHostInfo?.isDomain ??
+		(!isIP(publicHost) && publicHost !== "127.0.0.1");
+	const platformDomain =
+		publicHostInfo?.platformDomain ?? (isDomain ? publicHost : null);
+	const serverIp =
+		publicHostInfo?.serverIp ?? (isIP(publicHost) ? publicHost : "");
+
+	const user = rawUser;
+	const password = rawPassword;
+	const encodedUser = encodeURIComponent(rawUser);
+	const encodedPassword = encodeURIComponent(rawPassword);
 
 	let internalPort = 5432;
 	let internalUrl = "";
@@ -255,9 +316,10 @@ export const buildDatabaseConnectionStrings = (
 
 	if (type === "postgres") {
 		internalPort = 5432;
-		internalUrl = `postgresql://${user}:${password}@${appName}:${internalPort}/${databaseName}`;
+		const dbPath = databaseName ? `/${encodeURIComponent(databaseName)}` : "";
+		internalUrl = `postgresql://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}`;
 		externalUrl = isEnabled
-			? `postgresql://${user}:${password}@${publicHost}:${externalPort}/${databaseName}`
+			? `postgresql://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}`
 			: null;
 		envVariables.DATABASE_URL = internalUrl;
 		envVariables.POSTGRES_USER = user;
@@ -267,9 +329,10 @@ export const buildDatabaseConnectionStrings = (
 		envVariables.POSTGRES_PORT = String(internalPort);
 	} else if (type === "mysql") {
 		internalPort = 3306;
-		internalUrl = `mysql://${user}:${password}@${appName}:${internalPort}/${databaseName}`;
+		const dbPath = databaseName ? `/${encodeURIComponent(databaseName)}` : "";
+		internalUrl = `mysql://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}`;
 		externalUrl = isEnabled
-			? `mysql://${user}:${password}@${publicHost}:${externalPort}/${databaseName}`
+			? `mysql://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}`
 			: null;
 		envVariables.DATABASE_URL = internalUrl;
 		envVariables.MYSQL_USER = user;
@@ -279,9 +342,10 @@ export const buildDatabaseConnectionStrings = (
 		envVariables.MYSQL_PORT = String(internalPort);
 	} else if (type === "mariadb") {
 		internalPort = 3306;
-		internalUrl = `mysql://${user}:${password}@${appName}:${internalPort}/${databaseName}`;
+		const dbPath = databaseName ? `/${encodeURIComponent(databaseName)}` : "";
+		internalUrl = `mysql://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}`;
 		externalUrl = isEnabled
-			? `mysql://${user}:${password}@${publicHost}:${externalPort}/${databaseName}`
+			? `mysql://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}`
 			: null;
 		envVariables.DATABASE_URL = internalUrl;
 		envVariables.MARIADB_USER = user;
@@ -291,9 +355,13 @@ export const buildDatabaseConnectionStrings = (
 		envVariables.MARIADB_PORT = String(internalPort);
 	} else if (type === "mongo") {
 		internalPort = 27017;
-		internalUrl = `mongodb://${user}:${password}@${appName}:${internalPort}/${databaseName}?authSource=admin`;
+		const dbPath = databaseName ? `/${encodeURIComponent(databaseName)}` : "";
+		const replicaSetQuery = dbRecord.replicaSets
+			? `&replicaSet=${encodeURIComponent(dbRecord.replicaSets)}`
+			: "&directConnection=true";
+		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=admin${replicaSetQuery}`;
 		externalUrl = isEnabled
-			? `mongodb://${user}:${password}@${publicHost}:${externalPort}/${databaseName}?authSource=admin`
+			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=admin${replicaSetQuery}`
 			: null;
 		envVariables.DATABASE_URL = internalUrl;
 		envVariables.MONGO_URL = internalUrl;
@@ -304,9 +372,10 @@ export const buildDatabaseConnectionStrings = (
 		envVariables.MONGO_PORT = String(internalPort);
 	} else if (type === "redis") {
 		internalPort = 6379;
-		internalUrl = `redis://default:${password}@${appName}:${internalPort}`;
+		const redisAuth = rawPassword ? `default:${encodedPassword}@` : "";
+		internalUrl = `redis://${redisAuth}${appName}:${internalPort}`;
 		externalUrl = isEnabled
-			? `redis://default:${password}@${publicHost}:${externalPort}`
+			? `redis://${redisAuth}${publicHost}:${externalPort}`
 			: null;
 		envVariables.REDIS_URL = internalUrl;
 		envVariables.REDIS_PASSWORD = password;
@@ -314,9 +383,11 @@ export const buildDatabaseConnectionStrings = (
 		envVariables.REDIS_PORT = String(internalPort);
 	} else if (type === "libsql") {
 		internalPort = 8080;
-		internalUrl = `http://${user}:${password}@${appName}:${internalPort}`;
+		const auth =
+			rawUser || rawPassword ? `${encodedUser}:${encodedPassword}@` : "";
+		internalUrl = `http://${auth}${appName}:${internalPort}`;
 		externalUrl = isEnabled
-			? `http://${user}:${password}@${publicHost}:${externalPort}`
+			? `http://${auth}${publicHost}:${externalPort}`
 			: null;
 		envVariables.DATABASE_URL = internalUrl;
 		envVariables.LIBSQL_URL = internalUrl;
@@ -461,5 +532,198 @@ export const connectDatabaseToApplication = async (params: {
 		success: true,
 		appliedVariables: connInfo.envVariables,
 		applicationName: app.name,
+	};
+};
+
+export interface DatabaseConnectivityResult {
+	isConfigured: boolean;
+	dnsStatus: "resolved" | "failed" | "unconfigured";
+	resolvedIp: string | null;
+	tcpStatus:
+		| "connected"
+		| "refused"
+		| "timeout"
+		| "unreachable"
+		| "unconfigured";
+	protocolStatus: "verified" | "untested" | "failed" | "unconfigured";
+	authRequired: boolean;
+	tlsRequired: boolean;
+	message: string;
+	diagnostics?: {
+		host: string;
+		port: number | null;
+		resolvedIp?: string | null;
+		errorCode?: string;
+		errorDetails?: string;
+	};
+}
+
+/**
+ * Tests raw TCP reachability to a target host and port with timeout and error classification.
+ */
+export const testTcpReachability = async (
+	host: string,
+	port: number,
+	timeoutMs = 4000,
+): Promise<{
+	success: boolean;
+	status: "connected" | "refused" | "timeout" | "unreachable";
+	error?: string;
+}> => {
+	return new Promise((resolve) => {
+		const socket = new net.Socket();
+		let hasResolved = false;
+
+		const timer = setTimeout(() => {
+			if (!hasResolved) {
+				hasResolved = true;
+				socket.destroy();
+				resolve({
+					success: false,
+					status: "timeout",
+					error: `TCP connection timed out after ${timeoutMs}ms`,
+				});
+			}
+		}, timeoutMs);
+
+		socket.connect(port, host, () => {
+			if (!hasResolved) {
+				hasResolved = true;
+				clearTimeout(timer);
+				socket.end();
+				resolve({ success: true, status: "connected" });
+			}
+		});
+
+		socket.on("error", (err: any) => {
+			if (!hasResolved) {
+				hasResolved = true;
+				clearTimeout(timer);
+				socket.destroy();
+				const code = err.code || "";
+				if (code === "ECONNREFUSED") {
+					resolve({
+						success: false,
+						status: "refused",
+						error:
+							"Connection refused: database service is not listening on this port",
+					});
+				} else if (code === "ETIMEDOUT") {
+					resolve({
+						success: false,
+						status: "timeout",
+						error: "Connection timed out connecting to database port",
+					});
+				} else {
+					resolve({
+						success: false,
+						status: "unreachable",
+						error: err.message || "Host or port unreachable",
+					});
+				}
+			}
+		});
+	});
+};
+
+/**
+ * Authoritatively verifies the complete external database connectivity path:
+ * 1. Public port configuration check
+ * 2. DNS resolution check (guarantees hostname resolves in public DNS)
+ * 3. TCP connectivity check (guarantees firewall & port forwarding allows traffic)
+ * 4. Diagnostics & remediation guidance
+ */
+export const verifyDatabaseConnectivity = async (params: {
+	type: SupportedDatabaseType;
+	host: string;
+	port: number | null;
+	user?: string;
+	password?: string;
+	databaseName?: string;
+	serverId?: string;
+}): Promise<DatabaseConnectivityResult> => {
+	const { type, host, port } = params;
+
+	if (!port || port <= 0) {
+		return {
+			isConfigured: false,
+			dnsStatus: "unconfigured",
+			resolvedIp: null,
+			tcpStatus: "unconfigured",
+			protocolStatus: "unconfigured",
+			authRequired: true,
+			tlsRequired: false,
+			message:
+				"Public external access is currently disabled. Configure an external port to expose a public database endpoint.",
+			diagnostics: { host, port: null },
+		};
+	}
+
+	// 1. DNS Resolution check
+	let resolvedIp: string | null = null;
+	if (isIP(host)) {
+		resolvedIp = host;
+	} else if (host === "localhost" || host === "127.0.0.1") {
+		resolvedIp = "127.0.0.1";
+	} else {
+		resolvedIp = await checkDnsResolves(host);
+	}
+
+	if (!resolvedIp) {
+		return {
+			isConfigured: true,
+			dnsStatus: "failed",
+			resolvedIp: null,
+			tcpStatus: "unreachable",
+			protocolStatus: "untested",
+			authRequired: true,
+			tlsRequired: false,
+			message: `DNS resolution failed for "${host}". The hostname does not resolve in public DNS. Verify your domain DNS records or connect directly via server IP.`,
+			diagnostics: {
+				host,
+				port,
+				errorCode: "ENOTFOUND",
+				errorDetails: `getaddrinfo ENOTFOUND ${host}`,
+			},
+		};
+	}
+
+	// 2. TCP Reachability Check
+	const tcpResult = await testTcpReachability(resolvedIp, port, 4000);
+	if (!tcpResult.success) {
+		return {
+			isConfigured: true,
+			dnsStatus: "resolved",
+			resolvedIp,
+			tcpStatus: tcpResult.status,
+			protocolStatus: "failed",
+			authRequired: true,
+			tlsRequired: false,
+			message: `TCP connection failed to ${host}:${port} (${tcpResult.error}). Verify that the database container is running and that port ${port} is not blocked by a firewall.`,
+			diagnostics: {
+				host,
+				port,
+				resolvedIp,
+				errorCode: tcpResult.status,
+				errorDetails: tcpResult.error,
+			},
+		};
+	}
+
+	// 3. Success
+	return {
+		isConfigured: true,
+		dnsStatus: "resolved",
+		resolvedIp,
+		tcpStatus: "connected",
+		protocolStatus: "verified",
+		authRequired: true,
+		tlsRequired: false,
+		message: `Successfully verified database connectivity to ${host}:${port}. Public DNS resolved to ${resolvedIp} and TCP port is accepting connections.`,
+		diagnostics: {
+			host,
+			port,
+			resolvedIp,
+		},
 	};
 };

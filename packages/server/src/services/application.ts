@@ -2,8 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { docker, paths } from "@dokploy/server/constants";
 import { db } from "@dokploy/server/db";
-import { parse } from "yaml";
-import { getRemoteDocker } from "../utils/servers/remote-docker";
 import {
 	type apiCreateApplication,
 	applications,
@@ -34,21 +32,23 @@ import { createTraefikConfig } from "@dokploy/server/utils/traefik/application";
 import { manageDomain } from "@dokploy/server/utils/traefik/domain";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
+import { parse } from "yaml";
 import type { z } from "zod";
+import {
+	formatDeploymentPlanLog,
+	loadDeploymentPlanSync,
+	resolveDeploymentPlan,
+	saveDeploymentPlanSync,
+} from "../utils/builders/deployment-plan";
+import { sanitizeLogContent } from "../utils/deployment/logging-boundary";
 import { encodeBase64 } from "../utils/docker/utils";
+import { getBuildAppDirectory } from "../utils/filesystem/directory";
+import { getRemoteDocker } from "../utils/servers/remote-docker";
 import { getDokployUrl } from "./admin";
 import {
 	detectFrameworkFromDirectory,
 	extractPortFromCommand,
 } from "./app-detector";
-import { getBuildAppDirectory } from "../utils/filesystem/directory";
-import {
-	resolveDeploymentPlan,
-	saveDeploymentPlanSync,
-	loadDeploymentPlanSync,
-	formatDeploymentPlanLog,
-} from "../utils/builders/deployment-plan";
-import { sanitizeLogContent } from "../utils/deployment/logging-boundary";
 import {
 	createDeployment,
 	createDeploymentPreview,
@@ -58,10 +58,10 @@ import {
 import {
 	type Domain,
 	findDomainsByApplicationId,
+	getConfiguredPlatformDomain,
 	getDomainHost,
 	updateDomainById,
 	verifyApplicationLiveUrl,
-	getConfiguredPlatformDomain,
 } from "./domain";
 import {
 	createPreviewDeploymentComment,
@@ -101,7 +101,10 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 		explicitPort = application.ports[0].targetPort;
 	}
 
-	const plan = loadDeploymentPlanSync(application.appName, application.serverId);
+	const plan = loadDeploymentPlanSync(
+		application.appName,
+		application.serverId,
+	);
 	let detectedPort = explicitPort ?? plan?.port?.value ?? 3000;
 	if (!explicitPort) {
 		const cmdPort = extractPortFromCommand(application.command);
@@ -186,8 +189,7 @@ export const verifyContainerReadiness = async (
 	serverId?: string | null,
 	options?: { timeoutMs?: number; intervalMs?: number },
 ): Promise<
-	| { status: "running"; taskCount: number }
-	| { status: "failed"; error: string }
+	{ status: "running"; taskCount: number } | { status: "failed"; error: string }
 > => {
 	// Guard: avoid hanging in unit tests unless explicit timeout is provided for readiness testing
 	if (process.env.NODE_ENV === "test" && !options?.timeoutMs) {
@@ -215,7 +217,8 @@ export const verifyContainerReadiness = async (
 				);
 
 				if (failedTask) {
-					const exitCode = (failedTask.Status as any)?.ContainerStatus?.ExitCode;
+					const exitCode = (failedTask.Status as any)?.ContainerStatus
+						?.ExitCode;
 					const errMsg =
 						failedTask.Status?.Err ||
 						(exitCode !== undefined
@@ -552,13 +555,18 @@ Actionable Diagnostic:
 		try {
 			await syncApplicationDomainsTraefik(applicationId);
 		} catch (syncErr) {
-			console.error(`Error syncing domains for ${application.appName}:`, syncErr);
+			console.error(
+				`Error syncing domains for ${application.appName}:`,
+				syncErr,
+			);
 		}
 
 		// Stage 7: Routing & Upstream Reachability
-		const activePlan = plan || loadDeploymentPlanSync(application.appName, serverId);
+		const activePlan =
+			plan || loadDeploymentPlanSync(application.appName, serverId);
 		const isWorkerWorkload =
 			activePlan?.isHttpWorkload === false ||
+			activePlan?.deploymentStrategy === "worker" ||
 			Boolean(
 				application.command &&
 					/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer|bullmq)\b/i.test(
@@ -600,7 +608,7 @@ Testing HTTP upstream reachability through routing layer...
 			await appendDeploymentLog(deployment.logPath, stage7Log, serverId);
 
 			const verifyResult = await verifyApplicationLiveUrl(applicationId, {
-				maxRetries: 5,
+				maxRetries: 8,
 				retryDelayMs: 2500,
 			});
 
@@ -623,11 +631,13 @@ Testing HTTP upstream reachability through routing layer...
 					});
 					const latestTask = tasks[0];
 					const taskState = latestTask?.Status?.State;
-					const exitCode = (latestTask?.Status as any)?.ContainerStatus?.ExitCode;
+					const exitCode = (latestTask?.Status as any)?.ContainerStatus
+						?.ExitCode;
 					if (taskState && taskState !== "running") {
 						diagnosticDetails += `  • Container State: Task is currently '${taskState}' (Exit Code: ${exitCode ?? "N/A"}). The server process exited or failed to start.\n`;
 					} else {
-						diagnosticDetails += "  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
+						diagnosticDetails +=
+							"  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
 					}
 
 					// Fetch recent runtime logs from active container
@@ -684,10 +694,12 @@ Remediation:
 				);
 			}
 
-			let verifyLog = "\n================================================================================\n";
+			let verifyLog =
+				"\n================================================================================\n";
 			if (verifyResult.isLive) {
 				verifyLog += "🎉 Public URL Reachability: Verified Live\n";
-				verifyLog += "--------------------------------------------------------------------------------\n";
+				verifyLog +=
+					"--------------------------------------------------------------------------------\n";
 				verifyLog += `Test URL:    ${verifyResult.testUrl}\n`;
 				if (verifyResult.statusCode) {
 					verifyLog += `HTTP Status: ${verifyResult.statusCode}\n`;
@@ -699,13 +711,18 @@ Remediation:
 				verifyLog += "  ✓ Container running and healthy in Docker Swarm\n";
 				verifyLog += "  ✓ Public DNS resolved to server endpoint\n";
 				verifyLog += "  ✓ Application responded successfully to HTTP request\n";
+				if (verifyResult.hadTransient502) {
+					verifyLog +=
+						"  ⚠️ Note: Initial probe encountered transient HTTP 502/timeout during container warmup before recovering.\n";
+				}
 				if (verifyResult.checks.httpsActive) {
 					verifyLog += "  ✓ HTTPS active with valid TLS certificate\n";
 				} else if (verifyResult.details?.includes("HTTPS")) {
 					verifyLog += "  ⏳ HTTPS certificate provisioning in progress\n";
 				}
 				verifyLog += `\nYour application is live and accessible at:\n${verifyResult.testUrl}\n`;
-				verifyLog += "================================================================================\n";
+				verifyLog +=
+					"================================================================================\n";
 				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
 
 				await updateDeploymentStatus(deployment.deploymentId, "done");
@@ -722,10 +739,12 @@ Remediation:
 				});
 			} else {
 				verifyLog += "❌ Public URL Reachability: Verification Failed\n";
-				verifyLog += "--------------------------------------------------------------------------------\n";
+				verifyLog +=
+					"--------------------------------------------------------------------------------\n";
 				verifyLog += `Test URL: ${verifyResult.testUrl}\n\n`;
 				verifyLog += "Deployment Health Status:\n";
-				verifyLog += "  ✓ Container running and task converged in Docker Swarm\n";
+				verifyLog +=
+					"  ✓ Container running and task converged in Docker Swarm\n";
 				verifyLog += `  ${verifyResult.checks.dnsResolves ? "✓" : "❌"} Public DNS resolution: ${verifyResult.checks.dnsResolves ? "Resolved" : "Pending or unconfigured"}\n`;
 				verifyLog += `  ${verifyResult.checks.appResponding ? "✓" : "❌"} Application reachability: ${verifyResult.checks.appResponding ? "Responded" : "No response"}\n`;
 				verifyLog += `  ${verifyResult.checks.httpsActive ? "✓" : "⏳"} HTTPS status: ${verifyResult.checks.httpsActive ? "Active" : "Pending certificate issuance"}\n\n`;
@@ -733,12 +752,17 @@ Remediation:
 					verifyLog += `Diagnostic:\n  ${verifyResult.details}\n\n`;
 				}
 				verifyLog += "Actionable Remediation:\n";
-				verifyLog += "  1. DNS Propagation: If you just configured this domain, please allow 1-3 minutes for global DNS caches to refresh.\n";
-				verifyLog += "  2. SSL/TLS Issuance: Let's Encrypt requires active DNS resolution before issuing production TLS certificates.\n";
-				verifyLog += "  3. Host Validation: For Vite applications, ensure the assigned hostname is allowed in preview.allowedHosts.\n";
-				verifyLog += "  4. Ingress & Firewall: Ensure server firewall allows incoming connections on ports 80 (HTTP) and 443 (HTTPS).\n";
+				verifyLog +=
+					"  1. DNS Propagation: If you just configured this domain, please allow 1-3 minutes for global DNS caches to refresh.\n";
+				verifyLog +=
+					"  2. SSL/TLS Issuance: Let's Encrypt requires active DNS resolution before issuing production TLS certificates.\n";
+				verifyLog +=
+					"  3. Host Validation: For Vite applications, ensure the assigned hostname is allowed in preview.allowedHosts.\n";
+				verifyLog +=
+					"  4. Ingress & Firewall: Ensure server firewall allows incoming connections on ports 80 (HTTP) and 443 (HTTPS).\n";
 				verifyLog += `  5. Direct Test: Test connectivity from your machine using: curl -Iv ${verifyResult.testUrl}\n`;
-				verifyLog += "================================================================================\n";
+				verifyLog +=
+					"================================================================================\n";
 				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
 				await updateDeploymentStatus(deployment.deploymentId, "error");
 				await updateApplicationStatus(applicationId, "error");
@@ -770,7 +794,7 @@ Remediation:
 			projectName: application.environment.project.name,
 			applicationName: application.name,
 			applicationType: "application",
-			// @ts-ignore
+			// @ts-expect-error
 			errorMessage: error?.message || "Error building",
 			buildLink,
 			organizationId: application.environment.project.organizationId,
@@ -890,13 +914,18 @@ Actionable Diagnostic:
 		try {
 			await syncApplicationDomainsTraefik(applicationId);
 		} catch (syncErr) {
-			console.error(`Error syncing domains for ${application.appName}:`, syncErr);
+			console.error(
+				`Error syncing domains for ${application.appName}:`,
+				syncErr,
+			);
 		}
 
 		// Stage 7: Routing & Upstream Reachability
-		const activePlan = plan || loadDeploymentPlanSync(application.appName, serverId);
+		const activePlan =
+			plan || loadDeploymentPlanSync(application.appName, serverId);
 		const isWorkerWorkload =
 			activePlan?.isHttpWorkload === false ||
+			activePlan?.deploymentStrategy === "worker" ||
 			Boolean(
 				application.command &&
 					/\b(celery|worker|sidekiq|queue:work|resque|cron|consumer|bullmq)\b/i.test(
@@ -938,7 +967,7 @@ Testing HTTP upstream reachability through routing layer...
 			await appendDeploymentLog(deployment.logPath, stage7Log, serverId);
 
 			const verifyResult = await verifyApplicationLiveUrl(applicationId, {
-				maxRetries: 5,
+				maxRetries: 8,
 				retryDelayMs: 2500,
 			});
 
@@ -961,11 +990,13 @@ Testing HTTP upstream reachability through routing layer...
 					});
 					const latestTask = tasks[0];
 					const taskState = latestTask?.Status?.State;
-					const exitCode = (latestTask?.Status as any)?.ContainerStatus?.ExitCode;
+					const exitCode = (latestTask?.Status as any)?.ContainerStatus
+						?.ExitCode;
 					if (taskState && taskState !== "running") {
 						diagnosticDetails += `  • Container State: Task is currently '${taskState}' (Exit Code: ${exitCode ?? "N/A"}). The server process exited or failed to start.\n`;
 					} else {
-						diagnosticDetails += "  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
+						diagnosticDetails +=
+							"  • Container State: Task is running in Docker Swarm, but not responding on the configured upstream port.\n";
 					}
 
 					// Fetch recent runtime logs from active container
@@ -1022,10 +1053,12 @@ Remediation:
 				);
 			}
 
-			let verifyLog = "\n================================================================================\n";
+			let verifyLog =
+				"\n================================================================================\n";
 			if (verifyResult.isLive) {
 				verifyLog += "🎉 Public URL Reachability: Verified Live\n";
-				verifyLog += "--------------------------------------------------------------------------------\n";
+				verifyLog +=
+					"--------------------------------------------------------------------------------\n";
 				verifyLog += `Test URL:    ${verifyResult.testUrl}\n`;
 				if (verifyResult.statusCode) {
 					verifyLog += `HTTP Status: ${verifyResult.statusCode}\n`;
@@ -1037,13 +1070,18 @@ Remediation:
 				verifyLog += "  ✓ Container running and healthy in Docker Swarm\n";
 				verifyLog += "  ✓ Public DNS resolved to server endpoint\n";
 				verifyLog += "  ✓ Application responded successfully to HTTP request\n";
+				if (verifyResult.hadTransient502) {
+					verifyLog +=
+						"  ⚠️ Note: Initial probe encountered transient HTTP 502/timeout during container warmup before recovering.\n";
+				}
 				if (verifyResult.checks.httpsActive) {
 					verifyLog += "  ✓ HTTPS active with valid TLS certificate\n";
 				} else if (verifyResult.details?.includes("HTTPS")) {
 					verifyLog += "  ⏳ HTTPS certificate provisioning in progress\n";
 				}
 				verifyLog += `\nYour application is live and accessible at:\n${verifyResult.testUrl}\n`;
-				verifyLog += "================================================================================\n";
+				verifyLog +=
+					"================================================================================\n";
 				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
 
 				await updateDeploymentStatus(deployment.deploymentId, "done");
@@ -1060,10 +1098,12 @@ Remediation:
 				});
 			} else {
 				verifyLog += "❌ Public URL Reachability: Verification Failed\n";
-				verifyLog += "--------------------------------------------------------------------------------\n";
+				verifyLog +=
+					"--------------------------------------------------------------------------------\n";
 				verifyLog += `Test URL: ${verifyResult.testUrl}\n\n`;
 				verifyLog += "Deployment Health Status:\n";
-				verifyLog += "  ✓ Container running and task converged in Docker Swarm\n";
+				verifyLog +=
+					"  ✓ Container running and task converged in Docker Swarm\n";
 				verifyLog += `  ${verifyResult.checks.dnsResolves ? "✓" : "❌"} Public DNS resolution: ${verifyResult.checks.dnsResolves ? "Resolved" : "Pending or unconfigured"}\n`;
 				verifyLog += `  ${verifyResult.checks.appResponding ? "✓" : "❌"} Application reachability: ${verifyResult.checks.appResponding ? "Responded" : "No response"}\n`;
 				verifyLog += `  ${verifyResult.checks.httpsActive ? "✓" : "⏳"} HTTPS status: ${verifyResult.checks.httpsActive ? "Active" : "Pending certificate issuance"}\n\n`;
@@ -1071,12 +1111,17 @@ Remediation:
 					verifyLog += `Diagnostic:\n  ${verifyResult.details}\n\n`;
 				}
 				verifyLog += "Actionable Remediation:\n";
-				verifyLog += "  1. DNS Propagation: If you just configured this domain, please allow 1-3 minutes for global DNS caches to refresh.\n";
-				verifyLog += "  2. SSL/TLS Issuance: Let's Encrypt requires active DNS resolution before issuing production TLS certificates.\n";
-				verifyLog += "  3. Host Validation: For Vite applications, ensure the assigned hostname is allowed in preview.allowedHosts.\n";
-				verifyLog += "  4. Ingress & Firewall: Ensure server firewall allows incoming connections on ports 80 (HTTP) and 443 (HTTPS).\n";
+				verifyLog +=
+					"  1. DNS Propagation: If you just configured this domain, please allow 1-3 minutes for global DNS caches to refresh.\n";
+				verifyLog +=
+					"  2. SSL/TLS Issuance: Let's Encrypt requires active DNS resolution before issuing production TLS certificates.\n";
+				verifyLog +=
+					"  3. Host Validation: For Vite applications, ensure the assigned hostname is allowed in preview.allowedHosts.\n";
+				verifyLog +=
+					"  4. Ingress & Firewall: Ensure server firewall allows incoming connections on ports 80 (HTTP) and 443 (HTTPS).\n";
 				verifyLog += `  5. Direct Test: Test connectivity from your machine using: curl -Iv ${verifyResult.testUrl}\n`;
-				verifyLog += "================================================================================\n";
+				verifyLog +=
+					"================================================================================\n";
 				await appendDeploymentLog(deployment.logPath, verifyLog, serverId);
 				await updateDeploymentStatus(deployment.deploymentId, "error");
 				await updateApplicationStatus(applicationId, "error");

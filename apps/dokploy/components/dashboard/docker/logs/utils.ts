@@ -174,9 +174,33 @@ export const getLogType = (message: string): LogStyle => {
 		/(?:^|\s)(?:info|inf|information):?\s/i.test(lowerMessage) ||
 		/\[(?:info|information)\]/i.test(lowerMessage) ||
 		/\b(?:status|state|current|progress)\b:?\s/i.test(lowerMessage) ||
-		/\b(?:processing|executing|performing)\b/i.test(lowerMessage)
+		/\b(?:processing|executing|performing)\b/i.test(lowerMessage) ||
+		/\b\d+\s+packages?\s+(?:are\s+)?looking\s+for\s+funding\b/i.test(
+			lowerMessage,
+		) ||
+		/\brun\s+`?npm\s+fund`?/i.test(lowerMessage) ||
+		/\bnpm\s+notice\b/i.test(lowerMessage) ||
+		/\b\[notice\]\b/i.test(lowerMessage) ||
+		/\badded\s+\d+\s+packages?\b/i.test(lowerMessage) ||
+		/\baudited\s+\d+\s+packages?\b/i.test(lowerMessage)
 	) {
 		return LOG_STYLES.info;
+	}
+
+	// Security and advisory warnings must be classified as warning rather than error
+	if (
+		/\bsecretsusedinargonenv\b/i.test(lowerMessage) ||
+		/\bsensitive\s+data\s+should\s+not\s+be\s+used\s+in\b/i.test(
+			lowerMessage,
+		) ||
+		/\bfound\s+\d+\s+vulnerabilit(?:y|ies)\b/i.test(lowerMessage) ||
+		/\bnpm\s+audit\b/i.test(lowerMessage) ||
+		/\btransient\s+http\s+502\b/i.test(lowerMessage) ||
+		/\bwaiting\s+for\s+(?:service|container|upstream)\s+warmup\b/i.test(
+			lowerMessage,
+		)
+	) {
+		return LOG_STYLES.warning;
 	}
 
 	// Key/value pairs that explicitly report a non-error (e.g. "error: none",

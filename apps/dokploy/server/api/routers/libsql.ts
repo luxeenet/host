@@ -23,21 +23,22 @@ import {
 	stopService,
 	stopServiceRemote,
 	updateLibsqlById,
+	verifyDatabaseConnectivity,
 } from "@dokploy/server";
 import {
 	addNewService,
 	checkServiceAccess,
 	checkServicePermissionAndAccess,
 } from "@dokploy/server/services/permission";
+import {
+	assertEntitlement,
+	PlanEntitlementService,
+} from "@dokploy/server/services/plan-entitlement";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
-import {
-	PlanEntitlementService,
-	assertEntitlement,
-} from "@dokploy/server/services/plan-entitlement";
 import { db } from "@/server/db";
 import {
 	apiChangeLibsqlStatus,
@@ -188,6 +189,33 @@ export const libsqlRouter = createTRPCRouter({
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+		}),
+	verifyConnectivity: protectedProcedure
+		.input(apiFindOneLibsql)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.libsqlId, "read");
+			const libsql = await findLibsqlById(input.libsqlId);
+			if (
+				libsql.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this LibSQL",
+				});
+			}
+			const publicHostInfo = await getPublicDatabaseHost(
+				libsql.serverId || undefined,
+				libsql.appName || undefined,
+			);
+			return await verifyDatabaseConnectivity({
+				type: "libsql",
+				host: publicHostInfo.host,
+				port: libsql.externalPort,
+				user: libsql.databaseUser,
+				password: libsql.databasePassword,
+				serverId: libsql.serverId || undefined,
+			});
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(
@@ -608,9 +636,7 @@ export const libsqlRouter = createTRPCRouter({
 							? rest.memoryReservation
 							: current.memoryReservation,
 					cpuLimit:
-						rest.cpuLimit !== undefined
-							? rest.cpuLimit
-							: current.cpuLimit,
+						rest.cpuLimit !== undefined ? rest.cpuLimit : current.cpuLimit,
 					cpuReservation:
 						rest.cpuReservation !== undefined
 							? rest.cpuReservation

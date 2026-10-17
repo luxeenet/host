@@ -26,6 +26,7 @@ import {
 	stopService,
 	stopServiceRemote,
 	updateRedisById,
+	verifyDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -34,15 +35,15 @@ import {
 	checkServicePermissionAndAccess,
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
+import {
+	assertEntitlement,
+	PlanEntitlementService,
+} from "@dokploy/server/services/plan-entitlement";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
-import {
-	PlanEntitlementService,
-	assertEntitlement,
-} from "@dokploy/server/services/plan-entitlement";
 import {
 	apiChangeRedisStatus,
 	apiCreateRedis,
@@ -87,31 +88,23 @@ export const redisRouter = createTRPCRouter({
 						) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You need to use a server to create a Redis",
+								message: "You need to use a server to create a Redis",
 							});
 						}
 
-						if (
-							project.organizationId !==
-							ctx.session.activeOrganizationId
-						) {
+						if (project.organizationId !== ctx.session.activeOrganizationId) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You are not authorized to access this project",
+								message: "You are not authorized to access this project",
 							});
 						}
 
 						if (input.serverId) {
-							const accessibleIds = await getAccessibleServerIds(
-								ctx.session,
-							);
+							const accessibleIds = await getAccessibleServerIds(ctx.session);
 							if (!accessibleIds.has(input.serverId)) {
 								throw new TRPCError({
 									code: "UNAUTHORIZED",
-									message:
-										"You are not authorized to access this server",
+									message: "You are not authorized to access this server",
 								});
 							}
 						}
@@ -197,6 +190,33 @@ export const redisRouter = createTRPCRouter({
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+		}),
+	verifyConnectivity: protectedProcedure
+		.input(apiFindOneRedis)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.redisId, "read");
+			const redis = await findRedisById(input.redisId);
+			if (
+				redis.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Redis",
+				});
+			}
+			const publicHostInfo = await getPublicDatabaseHost(
+				redis.serverId || undefined,
+				redis.appName || undefined,
+			);
+			return await verifyDatabaseConnectivity({
+				type: "redis",
+				host: publicHostInfo.host,
+				port: redis.externalPort,
+				user: "default",
+				password: redis.databasePassword,
+				serverId: redis.serverId || undefined,
+			});
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(
@@ -588,9 +608,7 @@ export const redisRouter = createTRPCRouter({
 							? rest.memoryReservation
 							: current.memoryReservation,
 					cpuLimit:
-						rest.cpuLimit !== undefined
-							? rest.cpuLimit
-							: current.cpuLimit,
+						rest.cpuLimit !== undefined ? rest.cpuLimit : current.cpuLimit,
 					cpuReservation:
 						rest.cpuReservation !== undefined
 							? rest.cpuReservation

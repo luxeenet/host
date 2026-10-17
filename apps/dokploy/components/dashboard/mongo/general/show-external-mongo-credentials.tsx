@@ -81,9 +81,11 @@ export const ShowExternalMongoCredentials = ({ mongoId }: Props) => {
 	useEffect(() => {
 		const buildConnectionUrl = () => {
 			const port = form.watch("externalPort") || data?.externalPort;
-
-			const params = `authSource=admin${data?.replicaSets ? "" : "&directConnection=true"}`;
-			return `mongodb://${data?.databaseUser}:${data?.databasePassword}@${getIp}:${port}/?${params}`;
+			const encodedUser = encodeURIComponent(data?.databaseUser || "");
+			const encodedPassword = encodeURIComponent(data?.databasePassword || "");
+			const host = data?.publicHost || getIp;
+			const params = `authSource=admin${data?.replicaSets ? `&replicaSet=${encodeURIComponent(data.replicaSets)}` : "&directConnection=true"}`;
+			return `mongodb://${encodedUser}:${encodedPassword}@${host}:${port}/?${params}`;
 		};
 
 		setConnectionUrl(buildConnectionUrl());
@@ -93,7 +95,9 @@ export const ShowExternalMongoCredentials = ({ mongoId }: Props) => {
 		data?.databasePassword,
 		form,
 		data?.databaseUser,
+		data?.publicHost,
 		getIp,
+		data?.replicaSets,
 	]);
 
 	return (

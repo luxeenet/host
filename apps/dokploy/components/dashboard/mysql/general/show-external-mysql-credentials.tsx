@@ -81,8 +81,14 @@ export const ShowExternalMysqlCredentials = ({ mysqlId }: Props) => {
 	useEffect(() => {
 		const buildConnectionUrl = () => {
 			const port = form.watch("externalPort") || data?.externalPort;
+			const encodedUser = encodeURIComponent(data?.databaseUser || "");
+			const encodedPassword = encodeURIComponent(data?.databasePassword || "");
+			const host = data?.publicHost || getIp;
+			const dbPath = data?.databaseName
+				? `/${encodeURIComponent(data.databaseName)}`
+				: "";
 
-			return `mysql://${data?.databaseUser}:${data?.databasePassword}@${getIp}:${port}/${data?.databaseName}`;
+			return `mysql://${encodedUser}:${encodedPassword}@${host}:${port}${dbPath}`;
 		};
 
 		setConnectionUrl(buildConnectionUrl());
@@ -92,6 +98,7 @@ export const ShowExternalMysqlCredentials = ({ mysqlId }: Props) => {
 		data?.databasePassword,
 		data?.databaseName,
 		data?.databaseUser,
+		data?.publicHost,
 		form,
 		getIp,
 	]);

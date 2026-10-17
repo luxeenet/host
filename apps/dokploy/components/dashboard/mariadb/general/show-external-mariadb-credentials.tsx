@@ -81,8 +81,14 @@ export const ShowExternalMariadbCredentials = ({ mariadbId }: Props) => {
 	useEffect(() => {
 		const buildConnectionUrl = () => {
 			const port = form.watch("externalPort") || data?.externalPort;
+			const encodedUser = encodeURIComponent(data?.databaseUser || "");
+			const encodedPassword = encodeURIComponent(data?.databasePassword || "");
+			const host = data?.publicHost || getIp;
+			const dbPath = data?.databaseName
+				? `/${encodeURIComponent(data.databaseName)}`
+				: "";
 
-			return `mariadb://${data?.databaseUser}:${data?.databasePassword}@${getIp}:${port}/${data?.databaseName}`;
+			return `mariadb://${encodedUser}:${encodedPassword}@${host}:${port}${dbPath}`;
 		};
 
 		setConnectionUrl(buildConnectionUrl());
@@ -93,6 +99,7 @@ export const ShowExternalMariadbCredentials = ({ mariadbId }: Props) => {
 		form,
 		data?.databaseName,
 		data?.databaseUser,
+		data?.publicHost,
 		getIp,
 	]);
 	return (

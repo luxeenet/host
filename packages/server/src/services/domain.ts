@@ -2,31 +2,31 @@ import dns from "node:dns";
 import { isIP } from "node:net";
 import os from "node:os";
 import { promisify } from "node:util";
-import { BRAND } from "@paas/branding";
 import { db } from "@dokploy/server/db";
 import { getWebServerSettings } from "@dokploy/server/services/web-server-settings";
 import { generateRandomDomain } from "@dokploy/server/templates";
 import { execAsyncRemote } from "@dokploy/server/utils/process/execAsync";
 import { manageDomain } from "@dokploy/server/utils/traefik/domain";
 import { getPublicIpWithFallback } from "@dokploy/server/wss/utils";
+import { BRAND } from "@paas/branding";
 import { TRPCError } from "@trpc/server";
 import { and, eq, ne, sql } from "drizzle-orm";
 import type { z } from "zod";
 import {
 	type apiCreateDomain,
-	domains,
 	applications,
 	compose,
+	domains,
 	environments,
-	projects,
 	previewDeployments,
+	projects,
 } from "../db/schema";
+import { loadDeploymentPlanSync } from "../utils/builders/deployment-plan";
+import { detectHostRejection } from "../utils/builders/host-validation";
 import { findApplicationById } from "./application";
 import { detectCDNProvider } from "./cdn";
 import { findComposeById } from "./compose";
 import { findServerById } from "./server";
-import { detectHostRejection } from "../utils/builders/host-validation";
-import { loadDeploymentPlanSync } from "../utils/builders/deployment-plan";
 
 export type Domain = typeof domains.$inferSelect;
 
@@ -80,10 +80,7 @@ export const getServiceOrganizationId = async (
 			)
 			.innerJoin(projects, eq(environments.projectId, projects.projectId))
 			.where(
-				eq(
-					previewDeployments.previewDeploymentId,
-					options.previewDeploymentId,
-				),
+				eq(previewDeployments.previewDeploymentId, options.previewDeploymentId),
 			)
 			.limit(1);
 		return prev[0]?.organizationId || null;
@@ -212,11 +209,12 @@ export const checkDomainTenantConflict = async (
 };
 
 export const isPrivateOrLocalAddress = (ipOrHost: string): boolean => {
-	const cleaned = ipOrHost
-		.replace(/^https?:\/\//, "")
-		.split(/[/:]/)[0]
-		?.trim()
-		.toLowerCase() || "";
+	const cleaned =
+		ipOrHost
+			.replace(/^https?:\/\//, "")
+			.split(/[/:]/)[0]
+			?.trim()
+			.toLowerCase() || "";
 	if (!cleaned) return true;
 
 	if (
@@ -510,8 +508,7 @@ export const getConfiguredPlatformDomain = async (): Promise<string | null> => {
 		!isPrivateOrLocalAddress(process.env.BRAND_DOMAIN) &&
 		!isIP(process.env.BRAND_DOMAIN)
 	) {
-		const clean = process.env.BRAND_DOMAIN
-			.replace(/^https?:\/\//, "")
+		const clean = process.env.BRAND_DOMAIN.replace(/^https?:\/\//, "")
 			.split(/[/:]/)[0]!
 			.trim()
 			.toLowerCase();
@@ -525,8 +522,7 @@ export const getConfiguredPlatformDomain = async (): Promise<string | null> => {
 		!isIP(BRAND.PLATFORM_SUBDOMAIN_BASE) &&
 		!isPrivateOrLocalAddress(BRAND.PLATFORM_SUBDOMAIN_BASE)
 	) {
-		const clean = BRAND.PLATFORM_SUBDOMAIN_BASE
-			.replace(/^https?:\/\//, "")
+		const clean = BRAND.PLATFORM_SUBDOMAIN_BASE.replace(/^https?:\/\//, "")
 			.split(/[/:]/)[0]!
 			.trim()
 			.toLowerCase();
@@ -601,8 +597,7 @@ export const resolveGeneratedApplicationDomain = async (
 		const wildcardSupported = await checkWildcardDnsSupport(platformDomain);
 		if (wildcardSupported || process.env.ENABLE_PLATFORM_WILDCARD === "true") {
 			const supportsHttps =
-				settings?.certificateType === "letsencrypt" ||
-				Boolean(settings?.https);
+				settings?.certificateType === "letsencrypt" || Boolean(settings?.https);
 			return {
 				host: `${appName}.${platformDomain}`,
 				isPlatformDomain: true,
@@ -656,7 +651,8 @@ export const findDomainById = async (domainId: string) => {
 		});
 	}
 
-	let app: { applicationId: string; appName: string; name: string } | null = null;
+	let app: { applicationId: string; appName: string; name: string } | null =
+		null;
 	if (domain.applicationId) {
 		try {
 			const fullApp = await findApplicationById(domain.applicationId);
@@ -693,7 +689,8 @@ export const findDomainsByApplicationId = async (applicationId: string) => {
 		.from(domains)
 		.where(eq(domains.applicationId, applicationId));
 
-	let app: { applicationId: string; appName: string; name: string } | null = null;
+	let app: { applicationId: string; appName: string; name: string } | null =
+		null;
 	try {
 		const fullApp = await findApplicationById(applicationId);
 		app = {
@@ -1036,14 +1033,21 @@ export const getDnsInstructionsForDomain = async (
 	host: string,
 	serverId?: string | null,
 ): Promise<DnsInstructions> => {
-	const cleanHost = host.replace(/^https?:\/\//, "").split("/")[0]?.trim().toLowerCase() || "";
+	const cleanHost =
+		host
+			.replace(/^https?:\/\//, "")
+			.split("/")[0]
+			?.trim()
+			.toLowerCase() || "";
 	const serverCandidates = await getServerIpCandidates(serverId);
 	const settings = await getWebServerSettings();
 	const expectedIp = serverCandidates?.[0] || settings?.serverIp || "127.0.0.1";
 
 	const parts = cleanHost.split(".");
 	const isSubdomain = parts.length > 2;
-	const recordName = isSubdomain ? parts.slice(0, parts.length - 2).join(".") : "@";
+	const recordName = isSubdomain
+		? parts.slice(0, parts.length - 2).join(".")
+		: "@";
 
 	const validation = await validateDomain(cleanHost, [expectedIp]);
 
@@ -1085,14 +1089,16 @@ export interface LiveReachabilityResult {
 	responseTimeMs?: number;
 	message: string;
 	details?: string;
+	hadTransient502?: boolean;
+	transientWarnings?: string[];
 }
 
 export const verifyApplicationLiveUrl = async (
 	applicationId: string,
 	options: { maxRetries?: number; retryDelayMs?: number } = {},
 ): Promise<LiveReachabilityResult> => {
-	const maxRetries = options.maxRetries ?? 3;
-	const retryDelayMs = options.retryDelayMs ?? 1500;
+	const maxRetries = options.maxRetries ?? 6;
+	const retryDelayMs = options.retryDelayMs ?? 2000;
 
 	const application = await findApplicationById(applicationId);
 	const appDomains = await findDomainsByApplicationId(applicationId);
@@ -1143,9 +1149,7 @@ export const verifyApplicationLiveUrl = async (
 	try {
 		const cleanDnsHost = (host.split("/")[0] || host).trim();
 		resolvedIps = await resolveDns(cleanDnsHost);
-		const hasPublicIp = resolvedIps.some(
-			(ip) => !isPrivateOrLocalAddress(ip),
-		);
+		const hasPublicIp = resolvedIps.some((ip) => !isPrivateOrLocalAddress(ip));
 		dnsResolves = resolvedIps.length > 0 && hasPublicIp;
 		if (resolvedIps.length > 0 && !hasPublicIp) {
 			return {
@@ -1172,6 +1176,8 @@ export const verifyApplicationLiveUrl = async (
 	let appResponding = false;
 	let httpsActive = false;
 	let sslError: string | undefined;
+	let hadTransient502 = false;
+	const transientWarnings: string[] = [];
 
 	for (let attempt = 1; attempt <= maxRetries; attempt++) {
 		const startTime = Date.now();
@@ -1206,21 +1212,20 @@ export const verifyApplicationLiveUrl = async (
 				}
 			} catch {}
 
-			const hostRejection = detectHostRejection({
-				status: response.status,
-				body: bodyText,
-			}) || (
-				bodyText.includes("Blocked request. This host") ||
+			const hostRejection =
+				detectHostRejection({
+					status: response.status,
+					body: bodyText,
+				}) ||
+				(bodyText.includes("Blocked request. This host") ||
 				(bodyText.includes("is not allowed") &&
-					(bodyText.includes("allowedHosts") ||
-						bodyText.includes("Host (")))
+					(bodyText.includes("allowedHosts") || bodyText.includes("Host (")))
 					? {
 							framework: "vite" as const,
 							message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
 							remediation: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
 						}
-					: null
-			);
+					: null);
 
 			if (hostRejection) {
 				return {
@@ -1233,10 +1238,13 @@ export const verifyApplicationLiveUrl = async (
 						appResponding: false,
 					},
 					statusCode: response.status === 400 ? 400 : 403,
-					message: hostRejection.framework === "vite"
-						? `Vite rejected host header: ${host} is not in preview.allowedHosts.`
-						: `${hostRejection.framework.toUpperCase()} host validation rejected the request: ${hostRejection.message}`,
-					details: hostRejection.remediation || `Host validation blocked the request for "${host}".`,
+					message:
+						hostRejection.framework === "vite"
+							? `Vite rejected host header: ${host} is not in preview.allowedHosts.`
+							: `${hostRejection.framework.toUpperCase()} host validation rejected the request: ${hostRejection.message}`,
+					details:
+						hostRejection.remediation ||
+						`Host validation blocked the request for "${host}".`,
 				};
 			}
 
@@ -1248,7 +1256,14 @@ export const verifyApplicationLiveUrl = async (
 			) {
 				appResponding = true;
 				break;
-			} else if (response.status >= 500 && attempt < maxRetries) {
+			}
+			if (response.status >= 500 && attempt < maxRetries) {
+				if (response.status === 502 || response.status === 504) {
+					hadTransient502 = true;
+					transientWarnings.push(
+						`Probe attempt ${attempt}/${maxRetries}: Upstream returned HTTP ${response.status} (container warming up).`,
+					);
+				}
 				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
 			}
 		} catch (err: any) {
@@ -1269,7 +1284,8 @@ export const verifyApplicationLiveUrl = async (
 				fullErr.includes("SSL") ||
 				fullErr.includes("TLS")
 			) {
-				sslError = causeMsg || causeCode || "TLS certificate validation pending";
+				sslError =
+					causeMsg || causeCode || "TLS certificate validation pending";
 			}
 
 			if (causeCode === "ECONNREFUSED" || fullErr.includes("ECONNREFUSED")) {
@@ -1317,11 +1333,12 @@ export const verifyApplicationLiveUrl = async (
 							}
 						} catch {}
 
-						const fallbackRejection = detectHostRejection({
-							status: httpRes.status,
-							body: httpBody,
-						}) || (
-							httpBody.includes("Blocked request. This host") ||
+						const fallbackRejection =
+							detectHostRejection({
+								status: httpRes.status,
+								body: httpBody,
+							}) ||
+							(httpBody.includes("Blocked request. This host") ||
 							(httpBody.includes("is not allowed") &&
 								(httpBody.includes("allowedHosts") ||
 									httpBody.includes("Host (")))
@@ -1330,8 +1347,7 @@ export const verifyApplicationLiveUrl = async (
 										message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
 										remediation: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
 									}
-								: null
-						);
+								: null);
 
 						if (fallbackRejection) {
 							return {
@@ -1344,10 +1360,13 @@ export const verifyApplicationLiveUrl = async (
 									appResponding: false,
 								},
 								statusCode: httpRes.status === 400 ? 400 : 403,
-								message: fallbackRejection.framework === "vite"
-									? `Vite rejected host header: ${host} is not in preview.allowedHosts.`
-									: `${fallbackRejection.framework.toUpperCase()} host validation rejected the request: ${fallbackRejection.message}`,
-								details: fallbackRejection.remediation || `Host validation blocked the request for "${host}".`,
+								message:
+									fallbackRejection.framework === "vite"
+										? `Vite rejected host header: ${host} is not in preview.allowedHosts.`
+										: `${fallbackRejection.framework.toUpperCase()} host validation rejected the request: ${fallbackRejection.message}`,
+								details:
+									fallbackRejection.remediation ||
+									`Host validation blocked the request for "${host}".`,
 							};
 						}
 
@@ -1423,6 +1442,8 @@ export const verifyApplicationLiveUrl = async (
 		responseTimeMs: responseTimeMs > 0 ? responseTimeMs : undefined,
 		message,
 		details: details || undefined,
+		hadTransient502,
+		transientWarnings:
+			transientWarnings.length > 0 ? transientWarnings : undefined,
 	};
 };
-

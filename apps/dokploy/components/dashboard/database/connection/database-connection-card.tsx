@@ -54,7 +54,9 @@ export const DatabaseConnectionCard = ({
 	environmentId,
 }: Props) => {
 	const utils = api.useUtils();
-	const [activeTab, setActiveTab] = useState<"internal" | "external">("internal");
+	const [activeTab, setActiveTab] = useState<"internal" | "external">(
+		"internal",
+	);
 	const [customPort, setCustomPort] = useState<string>("");
 	const [isCustomPortOpen, setIsCustomPortOpen] = useState(false);
 
@@ -236,34 +238,45 @@ export const DatabaseConnectionCard = ({
 	const externalPort = data?.externalPort || null;
 	const isExternalEnabled = Boolean(externalPort && externalPort > 0);
 
+	const encodedUser = encodeURIComponent(user);
+	const encodedPassword = encodeURIComponent(password);
+
 	// Build connection URLs
 	let internalUrl = "";
 	let externalUrl = "";
 
 	if (databaseType === "postgres") {
-		internalUrl = `postgresql://${user}:${password}@${appName}:${internalPort}/${dbName}`;
+		const dbPath = dbName ? `/${encodeURIComponent(dbName)}` : "";
+		internalUrl = `postgresql://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}`;
 		externalUrl = isExternalEnabled
-			? `postgresql://${user}:${password}@${publicHost}:${externalPort}/${dbName}`
+			? `postgresql://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}`
 			: "";
 	} else if (databaseType === "mysql" || databaseType === "mariadb") {
-		internalUrl = `mysql://${user}:${password}@${appName}:${internalPort}/${dbName}`;
+		const dbPath = dbName ? `/${encodeURIComponent(dbName)}` : "";
+		internalUrl = `mysql://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}`;
 		externalUrl = isExternalEnabled
-			? `mysql://${user}:${password}@${publicHost}:${externalPort}/${dbName}`
+			? `mysql://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}`
 			: "";
 	} else if (databaseType === "mongo") {
-		internalUrl = `mongodb://${user}:${password}@${appName}:${internalPort}/${dbName}?authSource=admin`;
+		const dbPath = dbName ? `/${encodeURIComponent(dbName)}` : "";
+		const replicaSetQuery = data?.replicaSets
+			? `&replicaSet=${encodeURIComponent(data.replicaSets)}`
+			: "&directConnection=true";
+		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=admin${replicaSetQuery}`;
 		externalUrl = isExternalEnabled
-			? `mongodb://${user}:${password}@${publicHost}:${externalPort}/${dbName}?authSource=admin`
+			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=admin${replicaSetQuery}`
 			: "";
 	} else if (databaseType === "redis") {
-		internalUrl = `redis://default:${password}@${appName}:${internalPort}`;
+		const redisAuth = password ? `default:${encodedPassword}@` : "";
+		internalUrl = `redis://${redisAuth}${appName}:${internalPort}`;
 		externalUrl = isExternalEnabled
-			? `redis://default:${password}@${publicHost}:${externalPort}`
+			? `redis://${redisAuth}${publicHost}:${externalPort}`
 			: "";
 	} else if (databaseType === "libsql") {
-		internalUrl = `http://${user}:${password}@${appName}:${internalPort}`;
+		const auth = user || password ? `${encodedUser}:${encodedPassword}@` : "";
+		internalUrl = `http://${auth}${appName}:${internalPort}`;
 		externalUrl = isExternalEnabled
-			? `http://${user}:${password}@${publicHost}:${externalPort}`
+			? `http://${auth}${publicHost}:${externalPort}`
 			: "";
 	}
 
@@ -355,11 +368,7 @@ export const DatabaseConnectionCard = ({
 								<Label className="text-xs text-muted-foreground uppercase font-semibold">
 									Port
 								</Label>
-								<Input
-									enableCopyButton
-									disabled
-									value={String(internalPort)}
-								/>
+								<Input enableCopyButton disabled value={String(internalPort)} />
 							</div>
 
 							{databaseType !== "redis" && (
@@ -404,10 +413,11 @@ export const DatabaseConnectionCard = ({
 										Public External Access is Disabled
 									</h4>
 									<p className="text-xs text-muted-foreground leading-relaxed">
-										Enable external access to connect to your database from
-										local development machines, external servers, or BI
-										tools. HatDot will automatically provision a public endpoint
-										without requiring server configuration.
+										This database is running in private mode on the internal
+										overlay network. External traffic is blocked by default.
+										Enable external access to allocate a dedicated public port
+										and connect securely with external tools (such as MongoDB
+										Compass, TablePlus, or DBeaver).
 									</p>
 								</div>
 								<Button
@@ -436,12 +446,17 @@ export const DatabaseConnectionCard = ({
 													variant="outline"
 													className="text-[10px] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
 												>
-													Platform Domain
+													{data?.publicHostInfo?.isDomain
+														? "Public DNS"
+														: "Public Host"}
 												</Badge>
 											</div>
 											<span className="text-xs text-muted-foreground">
 												Reachable via {publicHost || "Platform Gateway"}:
-												{externalPort}
+												{externalPort} • Auth: admin •{" "}
+												{databaseType === "mongo"
+													? "directConnection=true"
+													: "Direct TCP"}
 											</span>
 										</div>
 									</div>
@@ -531,7 +546,8 @@ export const DatabaseConnectionCard = ({
 											value={
 												databaseType === "postgres"
 													? `psql "${externalUrl || ""}"`
-													: databaseType === "mysql" || databaseType === "mariadb"
+													: databaseType === "mysql" ||
+															databaseType === "mariadb"
 														? `mysql -h ${publicHost} -P ${externalPort} -u ${user} -p ${dbName}`
 														: databaseType === "mongo"
 															? `mongosh "${externalUrl || ""}"`

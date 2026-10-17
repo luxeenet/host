@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
 import {
 	buildDatabaseConnectionStrings,
 	mergeEnvironmentVariables,
 	type SupportedDatabaseType,
 } from "@dokploy/server";
+import { describe, expect, it, vi } from "vitest";
 
 describe("Simplified Database Management & Automated Connections", () => {
 	describe("buildDatabaseConnectionStrings for all 6 database types", () => {
@@ -112,14 +112,14 @@ describe("Simplified Database Management & Automated Connections", () => {
 			expect(conn.type).toBe("mongo");
 			expect(conn.internal.port).toBe(27017);
 			expect(conn.internal.url).toBe(
-				"mongodb://mongo_admin:mongo_password_123@mongo-app1:27017/cluster_data?authSource=admin",
+				"mongodb://mongo_admin:mongo_password_123@mongo-app1:27017/cluster_data?authSource=admin&directConnection=true",
 			);
 			expect(conn.external.isEnabled).toBe(true);
 			expect(conn.external.url).toBe(
-				"mongodb://mongo_admin:mongo_password_123@198.51.100.2:27017/cluster_data?authSource=admin",
+				"mongodb://mongo_admin:mongo_password_123@198.51.100.2:27017/cluster_data?authSource=admin&directConnection=true",
 			);
 			expect(conn.envVariables.MONGO_URL).toBe(
-				"mongodb://mongo_admin:mongo_password_123@mongo-app1:27017/cluster_data?authSource=admin",
+				"mongodb://mongo_admin:mongo_password_123@mongo-app1:27017/cluster_data?authSource=admin&directConnection=true",
 			);
 		});
 
@@ -241,7 +241,9 @@ APP_NAME=my-web-app
 
 			const merged = mergeEnvironmentVariables(null, newVars);
 
-			expect(merged).toContain('REDIS_URL="redis://default:pass@redis-cache:6379"');
+			expect(merged).toContain(
+				'REDIS_URL="redis://default:pass@redis-cache:6379"',
+			);
 			expect(merged).toContain('REDIS_PORT="6379"');
 		});
 	});

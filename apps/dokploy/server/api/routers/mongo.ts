@@ -27,6 +27,7 @@ import {
 	stopService,
 	stopServiceRemote,
 	updateMongoById,
+	verifyDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -35,15 +36,15 @@ import {
 	checkServicePermissionAndAccess,
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
+import {
+	assertEntitlement,
+	PlanEntitlementService,
+} from "@dokploy/server/services/plan-entitlement";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
-import {
-	PlanEntitlementService,
-	assertEntitlement,
-} from "@dokploy/server/services/plan-entitlement";
 import {
 	apiChangeMongoStatus,
 	apiCreateMongo,
@@ -89,31 +90,23 @@ export const mongoRouter = createTRPCRouter({
 						) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You need to use a server to create a mongo",
+								message: "You need to use a server to create a mongo",
 							});
 						}
 
-						if (
-							project.organizationId !==
-							ctx.session.activeOrganizationId
-						) {
+						if (project.organizationId !== ctx.session.activeOrganizationId) {
 							throw new TRPCError({
 								code: "UNAUTHORIZED",
-								message:
-									"You are not authorized to access this project",
+								message: "You are not authorized to access this project",
 							});
 						}
 
 						if (input.serverId) {
-							const accessibleIds = await getAccessibleServerIds(
-								ctx.session,
-							);
+							const accessibleIds = await getAccessibleServerIds(ctx.session);
 							if (!accessibleIds.has(input.serverId)) {
 								throw new TRPCError({
 									code: "UNAUTHORIZED",
-									message:
-										"You are not authorized to access this server",
+									message: "You are not authorized to access this server",
 								});
 							}
 						}
@@ -206,6 +199,33 @@ export const mongoRouter = createTRPCRouter({
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+		}),
+	verifyConnectivity: protectedProcedure
+		.input(apiFindOneMongo)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mongoId, "read");
+			const mongo = await findMongoById(input.mongoId);
+			if (
+				mongo.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this mongo",
+				});
+			}
+			const publicHostInfo = await getPublicDatabaseHost(
+				mongo.serverId || undefined,
+				mongo.appName || undefined,
+			);
+			return await verifyDatabaseConnectivity({
+				type: "mongo",
+				host: publicHostInfo.host,
+				port: mongo.externalPort,
+				user: mongo.databaseUser,
+				password: mongo.databasePassword,
+				serverId: mongo.serverId || undefined,
+			});
 		}),
 	enableExternalAccess: protectedProcedure
 		.input(
@@ -601,9 +621,7 @@ export const mongoRouter = createTRPCRouter({
 							? rest.memoryReservation
 							: current.memoryReservation,
 					cpuLimit:
-						rest.cpuLimit !== undefined
-							? rest.cpuLimit
-							: current.cpuLimit,
+						rest.cpuLimit !== undefined ? rest.cpuLimit : current.cpuLimit,
 					cpuReservation:
 						rest.cpuReservation !== undefined
 							? rest.cpuReservation

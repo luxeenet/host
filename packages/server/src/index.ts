@@ -114,6 +114,10 @@ export {
 	validateDatabaseImage,
 } from "./utils/databases/image-resolution";
 export * from "./utils/databases/rebuild";
+export * from "./utils/deployment/classification";
+export * from "./utils/deployment/diagnostics";
+export * from "./utils/deployment/logging-boundary";
+export * from "./utils/deployment/verification";
 export * from "./utils/docker/collision";
 export * from "./utils/docker/compose";
 export * from "./utils/docker/compose/configs";
@@ -166,6 +170,3 @@ export * from "./utils/volume-backups/index";
 export * from "./utils/watch-paths/should-deploy";
 export * from "./verification/send-verification-email";
 export * from "./wss/utils";
-export * from "./utils/deployment/diagnostics";
-export * from "./utils/deployment/logging-boundary";
-export * from "./utils/deployment/verification";

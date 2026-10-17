@@ -83,8 +83,14 @@ export const ShowExternalPostgresCredentials = ({ postgresId }: Props) => {
 	useEffect(() => {
 		const buildConnectionUrl = () => {
 			const port = form.watch("externalPort") || data?.externalPort;
+			const encodedUser = encodeURIComponent(data?.databaseUser || "");
+			const encodedPassword = encodeURIComponent(data?.databasePassword || "");
+			const host = data?.publicHost || getIp;
+			const dbPath = data?.databaseName
+				? `/${encodeURIComponent(data.databaseName)}`
+				: "";
 
-			return `postgresql://${data?.databaseUser}:${data?.databasePassword}@${getIp}:${port}/${data?.databaseName}`;
+			return `postgresql://${encodedUser}:${encodedPassword}@${host}:${port}${dbPath}`;
 		};
 
 		setConnectionUrl(buildConnectionUrl());
@@ -92,6 +98,8 @@ export const ShowExternalPostgresCredentials = ({ postgresId }: Props) => {
 		data?.appName,
 		data?.externalPort,
 		data?.databasePassword,
+		data?.databaseUser,
+		data?.publicHost,
 		form,
 		data?.databaseName,
 		getIp,

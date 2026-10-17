@@ -1,30 +1,26 @@
 import type { ApplicationNested, Domain } from "@dokploy/server";
 import {
 	detectFrameworkFromFiles,
-	extractPortFromCommand,
 	extractPortFromSourceCode,
 	type FileEntry,
 } from "@dokploy/server/services/app-detector";
-import {
-	resolveApplicationRuntimeConfig,
-	resolvePackageManagerAndCommands,
-} from "@dokploy/server/utils/builders/runtime-resolver";
-import {
-	resolveDeploymentPlan,
-	saveDeploymentPlanSync,
-	loadDeploymentPlanSync,
-} from "@dokploy/server/utils/builders/deployment-plan";
+import { resolveDeploymentPlan } from "@dokploy/server/utils/builders/deployment-plan";
+import { buildContainerEnvironmentVariables } from "@dokploy/server/utils/builders/index";
+import { resolvePackageManagerAndCommands } from "@dokploy/server/utils/builders/runtime-resolver";
 import {
 	createServiceConfig,
 	resolveDomainUpstreamPort,
 } from "@dokploy/server/utils/traefik/application";
-import { buildContainerEnvironmentVariables } from "@dokploy/server/utils/builders";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
+
+type MockApp = ApplicationNested & {
+	suggestedPort?: number | null;
+};
 
 const createMockApp = (
 	appName: string,
-	overrides: Partial<ApplicationNested> = {},
-): ApplicationNested =>
+	overrides: Partial<MockApp> = {},
+): MockApp =>
 	({
 		applicationId: `app-${appName}`,
 		appName,
@@ -102,7 +98,7 @@ const createMockApp = (
 			},
 		},
 		...overrides,
-	}) as unknown as ApplicationNested;
+	}) as unknown as MockApp;
 
 const createMockDomain = (
 	host: string,
@@ -160,7 +156,11 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 						},
 					}),
 				},
-				{ path: "src/main.ts", name: "main.ts", content: "await app.listen(3000);" },
+				{
+					path: "src/main.ts",
+					name: "main.ts",
+					content: "await app.listen(3000);",
+				},
 			];
 
 			const detection = detectFrameworkFromFiles(files);
@@ -190,7 +190,11 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 						},
 					}),
 				},
-				{ path: "src/server.ts", name: "server.ts", content: "app.listen(8080);" },
+				{
+					path: "src/server.ts",
+					name: "server.ts",
+					content: "app.listen(8080);",
+				},
 			];
 
 			const detection = detectFrameworkFromFiles(files);
@@ -211,12 +215,14 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 		});
 
 		it("extracts port from python uvicorn.run", () => {
-			const code = 'if __name__ == "__main__":\n    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)';
+			const code =
+				'if __name__ == "__main__":\n    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)';
 			expect(extractPortFromSourceCode(code)).toBe(8000);
 		});
 
 		it("extracts port from python Flask app.run", () => {
-			const code = 'if __name__ == "__main__":\n    app.run(host="0.0.0.0", port=5000)';
+			const code =
+				'if __name__ == "__main__":\n    app.run(host="0.0.0.0", port=5000)';
 			expect(extractPortFromSourceCode(code)).toBe(5000);
 		});
 	});
@@ -224,8 +230,16 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 	describe("3. Non-Node Backend Framework Default Ports (No Blind Port 3000)", () => {
 		it("assigns port 8000 to Python FastAPI/Django applications", () => {
 			const files: FileEntry[] = [
-				{ path: "main.py", name: "main.py", content: "from fastapi import FastAPI\napp = FastAPI()" },
-				{ path: "requirements.txt", name: "requirements.txt", content: "fastapi\nuvicorn" },
+				{
+					path: "main.py",
+					name: "main.py",
+					content: "from fastapi import FastAPI\napp = FastAPI()",
+				},
+				{
+					path: "requirements.txt",
+					name: "requirements.txt",
+					content: "fastapi\nuvicorn",
+				},
 			];
 			const detection = detectFrameworkFromFiles(files);
 			expect(detection?.suggestedPort).toBe(8000);
@@ -234,8 +248,16 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 
 		it("assigns port 5000 to Python Flask applications", () => {
 			const files: FileEntry[] = [
-				{ path: "app.py", name: "app.py", content: "from flask import Flask\napp = Flask(__name__)" },
-				{ path: "requirements.txt", name: "requirements.txt", content: "flask" },
+				{
+					path: "app.py",
+					name: "app.py",
+					content: "from flask import Flask\napp = Flask(__name__)",
+				},
+				{
+					path: "requirements.txt",
+					name: "requirements.txt",
+					content: "flask",
+				},
 			];
 			const detection = detectFrameworkFromFiles(files);
 			expect(detection?.suggestedPort).toBe(5000);
@@ -243,8 +265,16 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 
 		it("assigns port 8501 to Streamlit applications", () => {
 			const files: FileEntry[] = [
-				{ path: "app.py", name: "app.py", content: "import streamlit as st\nst.write('Hello')" },
-				{ path: "requirements.txt", name: "requirements.txt", content: "streamlit" },
+				{
+					path: "app.py",
+					name: "app.py",
+					content: "import streamlit as st\nst.write('Hello')",
+				},
+				{
+					path: "requirements.txt",
+					name: "requirements.txt",
+					content: "streamlit",
+				},
 			];
 			const detection = detectFrameworkFromFiles(files);
 			expect(detection?.suggestedPort).toBe(8501);
@@ -253,7 +283,11 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 		it("assigns port 8080 to Go applications", () => {
 			const files: FileEntry[] = [
 				{ path: "go.mod", name: "go.mod", content: "module myapp\ngo 1.22" },
-				{ path: "main.go", name: "main.go", content: "package main\nfunc main() {}" },
+				{
+					path: "main.go",
+					name: "main.go",
+					content: "package main\nfunc main() {}",
+				},
 			];
 			const detection = detectFrameworkFromFiles(files);
 			expect(detection?.suggestedPort).toBe(8080);
@@ -261,7 +295,11 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 
 		it("assigns port 8080 to Rust applications", () => {
 			const files: FileEntry[] = [
-				{ path: "Cargo.toml", name: "Cargo.toml", content: '[package]\nname = "rust-api"\nversion = "0.1.0"' },
+				{
+					path: "Cargo.toml",
+					name: "Cargo.toml",
+					content: '[package]\nname = "rust-api"\nversion = "0.1.0"',
+				},
 				{ path: "src/main.rs", name: "main.rs", content: "fn main() {}" },
 			];
 			const detection = detectFrameworkFromFiles(files);
@@ -270,8 +308,16 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 
 		it("assigns port 5000 to .NET applications", () => {
 			const files: FileEntry[] = [
-				{ path: "Program.cs", name: "Program.cs", content: "var builder = WebApplication.CreateBuilder(args);" },
-				{ path: "App.csproj", name: "App.csproj", content: '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>' },
+				{
+					path: "Program.cs",
+					name: "Program.cs",
+					content: "var builder = WebApplication.CreateBuilder(args);",
+				},
+				{
+					path: "App.csproj",
+					name: "App.csproj",
+					content: '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>',
+				},
 			];
 			const detection = detectFrameworkFromFiles(files);
 			expect(detection?.suggestedPort).toBe(5000);
@@ -308,7 +354,9 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 			expect(targetPort).toBe(8000);
 
 			const service = createServiceConfig(app.appName, domain, app);
-			expect(service.loadBalancer.servers[0]?.url).toBe("http://fastapi-app:8000");
+			expect(service.loadBalancer.servers[0]?.url).toBe(
+				"http://fastapi-app:8000",
+			);
 		});
 
 		it("routes Traefik traffic to detected port 8080 for Go backend instead of default 3000", () => {

@@ -936,22 +936,38 @@ export const resolvePackageManagerAndCommands = (params: {
 		selectedPm = "dotnet";
 	}
 
-	// Generate frozen / reproducible install command
-	let installCommand = "npm install";
+	// Check if this is a frontend SPA or requires a build phase
+	const allDeps = {
+		...(pkgJson.dependencies || {}),
+		...(pkgJson.devDependencies || {}),
+	};
+	const isViteSpa = Boolean(allDeps.vite);
+	const isReactCra = Boolean(allDeps["react-scripts"]);
+	const isVueCli = Boolean(allDeps["@vue/cli-service"]);
+	const isAngular = Boolean(allDeps["@angular/core"] || allDeps["@angular/cli"]);
+	const isSvelteSpa = Boolean(allDeps.svelte && !allDeps["@sveltejs/kit"]);
+	const isFrontendSpa =
+		isViteSpa || isReactCra || isVueCli || isAngular || isSvelteSpa;
+	const requiresBuild = hasBuildScript || isFrontendSpa;
+
+	// Generate frozen / reproducible install command retaining development dependencies for build
+	let installCommand = "npm install --include=dev --include=optional";
 	if (selectedPm === "pnpm") {
 		installCommand = hasPnpmLock
-			? "pnpm install --frozen-lockfile"
-			: "pnpm install";
+			? (requiresBuild ? "pnpm install --frozen-lockfile --prod=false" : "pnpm install --frozen-lockfile")
+			: (requiresBuild ? "pnpm install --prod=false" : "pnpm install");
 	} else if (selectedPm === "bun") {
 		installCommand = hasBunLock
 			? "bun install --frozen-lockfile"
 			: "bun install";
 	} else if (selectedPm === "yarn") {
 		installCommand = hasYarnLock
-			? "yarn install --frozen-lockfile"
-			: "yarn install";
+			? (requiresBuild ? "yarn install --frozen-lockfile --production=false" : "yarn install --frozen-lockfile")
+			: (requiresBuild ? "yarn install --production=false" : "yarn install");
 	} else if (selectedPm === "npm") {
-		installCommand = hasNpmLock ? "npm ci" : "npm install";
+		installCommand = hasNpmLock
+			? "npm ci --include=dev --include=optional"
+			: "npm install --include=dev --include=optional";
 	} else if (selectedPm === "uv") {
 		installCommand = "uv sync";
 	} else if (selectedPm === "poetry") {
@@ -997,19 +1013,6 @@ export const resolvePackageManagerAndCommands = (params: {
 		}
 	}
 
-	// Check if this is a frontend SPA
-	const allDeps = {
-		...(pkgJson.dependencies || {}),
-		...(pkgJson.devDependencies || {}),
-	};
-	const isViteSpa = Boolean(allDeps.vite);
-	const isReactCra = Boolean(allDeps["react-scripts"]);
-	const isVueCli = Boolean(allDeps["@vue/cli-service"]);
-	const isAngular = Boolean(allDeps["@angular/core"] || allDeps["@angular/cli"]);
-	const isSvelteSpa = Boolean(allDeps.svelte && !allDeps["@sveltejs/kit"]);
-
-	const isFrontendSpa =
-		isViteSpa || isReactCra || isVueCli || isAngular || isSvelteSpa;
 	const suggestedPublishDirectory = isFrontendSpa
 		? isReactCra
 			? "build"
@@ -1770,3 +1773,190 @@ export const resolveApplicationRuntimeConfig = (
 		diagnostics: diagnostics.length > 0 ? diagnostics : undefined,
 	};
 };
+
+export interface BuildDependencyDiagnostic {
+	code: "UNDECLARED_BUILD_DEPENDENCY";
+	packageName: string;
+	configFile: string;
+	message: string;
+	severity: "error";
+	remediation: string;
+}
+
+export interface BuildDependencyInspectionResult {
+	diagnostics: BuildDependencyDiagnostic[];
+	missingDependencies: string[];
+	checkedFiles: string[];
+}
+
+const KNOWN_NODE_BUILTINS = new Set([
+	"assert",
+	"async_hooks",
+	"buffer",
+	"child_process",
+	"cluster",
+	"console",
+	"constants",
+	"crypto",
+	"dgram",
+	"diagnostics_channel",
+	"dns",
+	"domain",
+	"events",
+	"fs",
+	"fs/promises",
+	"http",
+	"http2",
+	"https",
+	"inspector",
+	"module",
+	"net",
+	"os",
+	"path",
+	"path/posix",
+	"path/win32",
+	"perf_hooks",
+	"process",
+	"punycode",
+	"querystring",
+	"readline",
+	"repl",
+	"stream",
+	"stream/consumers",
+	"stream/promises",
+	"stream/web",
+	"string_decoder",
+	"sys",
+	"timers",
+	"timers/promises",
+	"tls",
+	"trace_events",
+	"tty",
+	"url",
+	"util",
+	"util/types",
+	"v8",
+	"vm",
+	"wasi",
+	"worker_threads",
+	"zlib",
+]);
+
+/**
+ * Inspect project configuration files (e.g. vite.config.js, next.config.js)
+ * to verify that imported plugins and build-time packages are declared in package.json.
+ * If a required build-time dependency is missing from the customer's manifest,
+ * returns an actionable diagnostic rather than failing with an obscure module error.
+ */
+export const inspectBuildDependencies = (params: {
+	files: FileItem[];
+	packageJsonContent?: string;
+}): BuildDependencyInspectionResult => {
+	const diagnostics: BuildDependencyDiagnostic[] = [];
+	const missingDependencies: string[] = [];
+	const checkedFiles: string[] = [];
+
+	let declaredDeps: Set<string> = new Set();
+	if (params.packageJsonContent) {
+		try {
+			const parsed = JSON.parse(params.packageJsonContent);
+			const allDeps = {
+				...(parsed.dependencies || {}),
+				...(parsed.devDependencies || {}),
+				...(parsed.peerDependencies || {}),
+				...(parsed.optionalDependencies || {}),
+			};
+			for (const dep of Object.keys(allDeps)) {
+				declaredDeps.add(dep);
+			}
+		} catch {}
+	}
+
+	// Supported build configuration files
+	const buildConfigFiles = params.files.filter((f) => {
+		const base = (f.name || path.basename(f.path)).toLowerCase();
+		return (
+			base.startsWith("vite.config.") ||
+			base.startsWith("next.config.") ||
+			base.startsWith("nuxt.config.") ||
+			base.startsWith("astro.config.") ||
+			base.startsWith("svelte.config.") ||
+			base.startsWith("webpack.config.") ||
+			base.startsWith("rollup.config.")
+		);
+	});
+
+	for (const configFile of buildConfigFiles) {
+		const configName = configFile.name || path.basename(configFile.path);
+		let content = configFile.content;
+		if (!content && configFile.path) {
+			try {
+				if (fs.existsSync(configFile.path)) {
+					content = fs.readFileSync(configFile.path, "utf-8");
+				}
+			} catch {}
+		}
+
+		if (!content) continue;
+		checkedFiles.push(configName);
+
+		// Strip comments to avoid false matches in commented code
+		const stripped = content
+			.replace(/\/\*[\s\S]*?\*\//g, "")
+			.replace(/\/\/.*/g, "");
+
+		// Match static imports, dynamic imports, and require statements
+		const importRegex =
+			/(?:import\s+(?:[\w*\s{},]*\s+from\s+)?|require\s*\(\s*|import\s*\(\s*)['"]([^'"]+)['"]/g;
+
+		let match: RegExpExecArray | null;
+		while ((match = importRegex.exec(stripped)) !== null) {
+			const specifier = match[1]?.trim();
+			if (!specifier) continue;
+
+			// Skip relative or absolute paths and Node built-in protocol
+			if (
+				specifier.startsWith(".") ||
+				specifier.startsWith("/") ||
+				specifier.startsWith("\\") ||
+				specifier.startsWith("node:")
+			) {
+				continue;
+			}
+
+			// Extract root package name
+			const parts = specifier.split("/");
+			let pkgName = parts[0];
+			if (!pkgName) continue;
+			if (specifier.startsWith("@") && parts.length > 1 && parts[1]) {
+				pkgName = `${parts[0]}/${parts[1]}`;
+			}
+
+			if (KNOWN_NODE_BUILTINS.has(pkgName)) {
+				continue;
+			}
+
+			// If the manifest has dependencies declared but omits this imported plugin/package
+			if (declaredDeps.size > 0 && !declaredDeps.has(pkgName)) {
+				if (!missingDependencies.includes(pkgName)) {
+					missingDependencies.push(pkgName);
+					diagnostics.push({
+						code: "UNDECLARED_BUILD_DEPENDENCY",
+						packageName: pkgName,
+						configFile: configName,
+						message: `Configuration file '${configName}' imports '${pkgName}', but this package is not declared in package.json (neither in 'dependencies' nor 'devDependencies').`,
+						severity: "error",
+						remediation: `Add '${pkgName}' to 'devDependencies' in package.json (e.g. npm install -D ${pkgName}) and re-commit your lockfile before deploying.`,
+					});
+				}
+			}
+		}
+	}
+
+	return {
+		diagnostics,
+		missingDependencies,
+		checkedFiles,
+	};
+};
+

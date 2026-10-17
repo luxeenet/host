@@ -212,7 +212,7 @@ describe("Universal Deployment Engine — Comprehensive Compatibility Suite", ()
 			});
 			expect(pm.hasConflictingLockfiles).toBe(true);
 			expect(pm.packageManager).toBe("npm");
-			expect(pm.installCommand).toBe("npm ci");
+			expect(pm.installCommand).toBe("npm ci --include=dev --include=optional");
 		});
 	});
 

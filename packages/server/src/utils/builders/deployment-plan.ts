@@ -8,6 +8,7 @@ import {
 } from "../../services/app-detector";
 import {
 	extractPortFromCommand,
+	inspectBuildDependencies,
 	resolveNodeRuntime,
 	resolvePackageManagerAndCommands,
 	type SupportedPackageManager,
@@ -209,7 +210,12 @@ export const resolveDeploymentPlan = (
 					name === "requirements.txt" ||
 					name === "runtime.txt" ||
 					name === ".nvmrc" ||
-					name === ".node-version"
+					name === ".node-version" ||
+					name.startsWith("vite.config.") ||
+					name.startsWith("next.config.") ||
+					name.startsWith("astro.config.") ||
+					name.startsWith("nuxt.config.") ||
+					name.startsWith("svelte.config.")
 				) {
 					try {
 						content = fs.readFileSync(full, "utf-8");
@@ -291,6 +297,7 @@ export const resolveDeploymentPlan = (
 
 	// 3. Package Manager & Runtime Resolution
 	let pm: SupportedPackageManager = "npm";
+	let resolvedInstallCommand: string | undefined;
 	let runtimeInfo = {
 		name: language === "Python" ? "Python" : "Node.js",
 		version: "standard",
@@ -313,6 +320,7 @@ export const resolveDeploymentPlan = (
 			packageJsonContent: pkgContent,
 		});
 		pm = pmRes.packageManager;
+		resolvedInstallCommand = pmRes.installCommand;
 
 		const nvmrc = files.find((f) => f.name === ".nvmrc")?.content;
 		const nodeVer = files.find((f) => f.name === ".node-version")?.content;
@@ -330,6 +338,20 @@ export const resolveDeploymentPlan = (
 			archive: nodeRes.nixpkgsArchive,
 			warning: nodeRes.warning,
 		};
+	}
+
+	// Validate build configuration dependencies (e.g. Vite plugins declared in config vs manifest)
+	const buildDepResult = inspectBuildDependencies({
+		files,
+		packageJsonContent: pkgContent,
+	});
+	for (const diag of buildDepResult.diagnostics) {
+		diagnostics.push({
+			code: diag.code,
+			message: diag.message,
+			severity: diag.severity,
+			remediation: diag.remediation,
+		});
 	}
 
 	// 4. Deployment Strategy
@@ -616,8 +638,11 @@ export const resolveDeploymentPlan = (
 		publishDirectory: app.publishDirectory || undefined,
 		runtime: runtimeInfo,
 		packageManager: pm,
-		installCommand: detectedInstall
-			? { command: detectedInstall, source: "detected" }
+		installCommand: (detectedInstall || resolvedInstallCommand)
+			? {
+					command: detectedInstall || resolvedInstallCommand!,
+					source: detectedInstall ? "detected" : "package_manager",
+				}
 			: undefined,
 		buildCommand: detectedBuild
 			? { command: detectedBuild, source: "detected" }

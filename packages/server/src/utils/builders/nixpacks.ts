@@ -604,12 +604,12 @@ if [ -d ${quote([buildAppDirectory])} ]; then
         export NIXPACKS_BUILD_CMD="bun run build" ;
       fi
     elif [ -f "${buildAppDirectory}/pnpm-lock.yaml" ]; then
-      export NIXPACKS_INSTALL_CMD="pnpm install --frozen-lockfile" ;
+      export NIXPACKS_INSTALL_CMD="pnpm install --frozen-lockfile --prod=false" ;
       if [ "$HAS_BUILD_SCRIPT" = "true" ] && [ -z "$NIXPACKS_BUILD_CMD" ]; then
         export NIXPACKS_BUILD_CMD="pnpm run build" ;
       fi
     elif [ -f "${buildAppDirectory}/yarn.lock" ]; then
-      export NIXPACKS_INSTALL_CMD="yarn install --frozen-lockfile" ;
+      export NIXPACKS_INSTALL_CMD="yarn install --frozen-lockfile --production=false" ;
       if [ "$HAS_BUILD_SCRIPT" = "true" ] && [ -z "$NIXPACKS_BUILD_CMD" ]; then
         export NIXPACKS_BUILD_CMD="yarn build" ;
       fi
@@ -623,6 +623,55 @@ if [ -d ${quote([buildAppDirectory])} ]; then
       if [ "$HAS_BUILD_SCRIPT" = "true" ] && [ -z "$NIXPACKS_BUILD_CMD" ]; then
         export NIXPACKS_BUILD_CMD="npm run build" ;
       fi
+    fi
+  fi
+
+  # Preflight check for undeclared build dependencies imported in configuration files
+  if [ -f "${buildAppDirectory}/package.json" ]; then
+    MISSING_BUILD_DEP=$(node -e "
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const p = JSON.parse(fs.readFileSync('${buildAppDirectory}/package.json', 'utf8'));
+        const allDeps = {
+          ...(p.dependencies || {}),
+          ...(p.devDependencies || {}),
+          ...(p.peerDependencies || {}),
+          ...(p.optionalDependencies || {})
+        };
+        const configs = ['vite.config.js', 'vite.config.ts', 'vite.config.mjs', 'vite.config.cjs', 'vite.config.mts', 'vite.config.cts'];
+        for (const cf of configs) {
+          const cp = path.join('${buildAppDirectory}', cf);
+          if (fs.existsSync(cp)) {
+            const content = fs.readFileSync(cp, 'utf8')
+              .replace(/\\/\\*[\\s\\S]*?\\*\\//g, '')
+              .replace(/\\/\\/.*/g, '');
+            const re = /(?:import\\s+(?:[\\w*\\s{},]*\\s+from\\s+)?|require\\s*\\(\\s*|import\\s*\\(\\s*)['\\\"]([^'\\\"]+)['\\\"]/g;
+            let m;
+            while ((m = re.exec(content)) !== null) {
+              const spec = m[1];
+              if (!spec || spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('node:')) continue;
+              const parts = spec.split('/');
+              const pkgName = spec.startsWith('@') && parts.length > 1 ? parts[0] + '/' + parts[1] : parts[0];
+              if (['path', 'fs', 'url', 'os', 'crypto', 'http', 'https', 'child_process', 'util', 'events', 'stream', 'buffer'].includes(pkgName)) continue;
+              if (pkgName.startsWith('@vitejs/plugin-') || pkgName.startsWith('vite-plugin-')) {
+                if (!allDeps[pkgName]) {
+                  console.log(cf + ':::' + pkgName);
+                  process.exit(0);
+                }
+              }
+            }
+          }
+        }
+      } catch(e) {}
+    " 2>/dev/null || true)
+
+    if [ -n "$MISSING_BUILD_DEP" ]; then
+      CFG_FILE=$(echo "$MISSING_BUILD_DEP" | cut -d: -f1)
+      CFG_PKG=$(echo "$MISSING_BUILD_DEP" | cut -d: -f4)
+      echo "❌ Configuration Error [UNDECLARED_BUILD_DEPENDENCY]: Build configuration '$CFG_FILE' imports '$CFG_PKG', but it is not declared in package.json (neither in 'dependencies' nor 'devDependencies')." >&2 ;
+      echo "💡 Remediation: Declare '$CFG_PKG' in your package.json devDependencies (e.g. npm i -D $CFG_PKG) and re-commit your lockfile before deploying." >&2 ;
+      exit 1;
     fi
   fi
 
@@ -729,6 +778,13 @@ if [ "$NIX_STATUS" != "0" ]; then
       echo "❌ Start Command Error: No start command could be found for this application." ;
       echo "💡 Remediation: Add a 'start' script to your package.json (e.g. 'node server.js' or 'next start'), configure a Custom Start Command in Application Settings, or configure a Publish Directory if deploying a static web app." ;
     fi
+  elif grep -qi "Cannot find package" "$TMP_LOG" 2>/dev/null; then
+    MISSING_PKG=$(grep -o "Cannot find package '[^']*'" "$TMP_LOG" 2>/dev/null | head -n1 | sed "s/Cannot find package '//;s/'//")
+    if [ -z "$MISSING_PKG" ]; then
+      MISSING_PKG=$(grep -o "Cannot find module '[^']*'" "$TMP_LOG" 2>/dev/null | head -n1 | sed "s/Cannot find module '//;s/'//")
+    fi
+    echo "❌ Build Dependency Error: Node.js cannot resolve package '$MISSING_PKG'." ;
+    echo "💡 Remediation: Ensure '$MISSING_PKG' is declared in your package.json dependencies or devDependencies and committed to your lockfile." ;
   else
     echo "❌ Nixpacks build failed with exit code $NIX_STATUS" ;
   fi

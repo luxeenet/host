@@ -19,6 +19,7 @@ import {
 	getWebServerSettings,
 	IS_CLOUD,
 	rebuildDatabase,
+	reconcileDatabaseSecurity,
 	removeRedisById,
 	removeService,
 	startService,
@@ -165,6 +166,33 @@ export const redisRouter = createTRPCRouter({
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+		}),
+	reconcileSecurity: protectedProcedure
+		.input(apiFindOneRedis)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.redisId, "create");
+			const redis = await findRedisById(input.redisId);
+			if (
+				redis.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Redis",
+				});
+			}
+			const result = await reconcileDatabaseSecurity(
+				input.redisId,
+				"redis",
+				redis.serverId,
+			);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: redis.redisId,
+				resourceName: redis.appName,
+			});
+			return result;
 		}),
 	getConnectionDetails: protectedProcedure
 		.input(apiFindOneRedis)

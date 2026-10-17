@@ -16,6 +16,7 @@ import {
 	getWebServerSettings,
 	IS_CLOUD,
 	rebuildDatabase,
+	reconcileDatabaseSecurity,
 	removeLibsqlById,
 	removeService,
 	startService,
@@ -164,6 +165,33 @@ export const libsqlRouter = createTRPCRouter({
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+		}),
+	reconcileSecurity: protectedProcedure
+		.input(apiFindOneLibsql)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.libsqlId, "create");
+			const l = await findLibsqlById(input.libsqlId);
+			if (
+				l.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this LibSQL",
+				});
+			}
+			const result = await reconcileDatabaseSecurity(
+				input.libsqlId,
+				"libsql",
+				l.serverId,
+			);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: l.libsqlId,
+				resourceName: l.appName,
+			});
+			return result;
 		}),
 	getConnectionDetails: protectedProcedure
 		.input(apiFindOneLibsql)

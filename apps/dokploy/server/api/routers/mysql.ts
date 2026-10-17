@@ -20,6 +20,7 @@ import {
 	getWebServerSettings,
 	IS_CLOUD,
 	rebuildDatabase,
+	reconcileDatabaseSecurity,
 	removeMySqlById,
 	removeService,
 	startService,
@@ -169,11 +170,43 @@ export const mysqlRouter = createTRPCRouter({
 				mysql.serverId || undefined,
 				mysql.appName || undefined,
 			);
+			const isPlatformAdmin =
+				ctx.user.role === "admin" || ctx.user.role === "owner";
 			return {
 				...mysql,
+				databaseRootPassword: isPlatformAdmin
+					? mysql.databaseRootPassword
+					: "****************",
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+		}),
+	reconcileSecurity: protectedProcedure
+		.input(apiFindOneMySql)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mysqlId, "create");
+			const mysql = await findMySqlById(input.mysqlId);
+			if (
+				mysql.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this MySQL",
+				});
+			}
+			const result = await reconcileDatabaseSecurity(
+				input.mysqlId,
+				"mysql",
+				mysql.serverId,
+			);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: mysql.mysqlId,
+				resourceName: mysql.appName,
+			});
+			return result;
 		}),
 	getConnectionDetails: protectedProcedure
 		.input(apiFindOneMySql)

@@ -21,6 +21,7 @@ import {
 	resolveDatabaseImage,
 	validateDatabaseImage,
 } from "../utils/databases/image-resolution";
+import { reconcileDatabaseSecurity } from "./database-security";
 import { validUniqueServerAppName } from "./project";
 
 export type Mongo = typeof mongo.$inferSelect;
@@ -201,6 +202,18 @@ export const deployMongo = async (
 			dockerImage: resolvedImage,
 		});
 		await waitForSwarmServiceConvergence(mongo.appName, mongo.serverId);
+		onData?.("Enforcing per-database user isolation and least-privilege roles...");
+		try {
+			const secResult = await reconcileDatabaseSecurity(mongoId, "mongo", mongo.serverId);
+			if (secResult.appliedRules.length > 0) {
+				onData?.(`Applied security rules: ${secResult.appliedRules.join("; ")}`);
+			}
+			if (secResult.warnings.length > 0) {
+				onData?.(`Security notices: ${secResult.warnings.join("; ")}`);
+			}
+		} catch (secErr) {
+			onData?.(`Warning: Security reconciliation deferred: ${secErr}`);
+		}
 		await updateMongoById(mongoId, {
 			applicationStatus: "done",
 			...(mongo.dockerImage !== resolvedImage

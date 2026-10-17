@@ -21,6 +21,7 @@ import {
 	getWebServerSettings,
 	IS_CLOUD,
 	rebuildDatabase,
+	reconcileDatabaseSecurity,
 	removePostgresById,
 	removeService,
 	startService,
@@ -178,6 +179,33 @@ export const postgresRouter = createTRPCRouter({
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+		}),
+	reconcileSecurity: protectedProcedure
+		.input(apiFindOnePostgres)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.postgresId, "create");
+			const postgres = await findPostgresById(input.postgresId);
+			if (
+				postgres.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Postgres",
+				});
+			}
+			const result = await reconcileDatabaseSecurity(
+				input.postgresId,
+				"postgres",
+				postgres.serverId,
+			);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: postgres.postgresId,
+				resourceName: postgres.appName,
+			});
+			return result;
 		}),
 	getConnectionDetails: protectedProcedure
 		.input(apiFindOnePostgres)

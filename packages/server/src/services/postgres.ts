@@ -21,6 +21,7 @@ import {
 	resolveDatabaseImage,
 	validateDatabaseImage,
 } from "../utils/databases/image-resolution";
+import { reconcileDatabaseSecurity } from "./database-security";
 import { validUniqueServerAppName } from "./project";
 
 export function getMountPath(dockerImage?: string | null): string {
@@ -189,7 +190,18 @@ export const deployPostgres = async (
 		});
 
 		await waitForSwarmServiceConvergence(postgres.appName, postgres.serverId);
-
+		onData?.("Enforcing per-database user isolation and least-privilege roles...");
+		try {
+			const secResult = await reconcileDatabaseSecurity(postgresId, "postgres", postgres.serverId);
+			if (secResult.appliedRules.length > 0) {
+				onData?.(`Applied security rules: ${secResult.appliedRules.join("; ")}`);
+			}
+			if (secResult.warnings.length > 0) {
+				onData?.(`Security notices: ${secResult.warnings.join("; ")}`);
+			}
+		} catch (secErr) {
+			onData?.(`Warning: Security reconciliation deferred: ${secErr}`);
+		}
 		await updatePostgresById(postgresId, {
 			applicationStatus: "done",
 			...(postgres.dockerImage !== resolvedImage

@@ -20,6 +20,7 @@ import {
 	getWebServerSettings,
 	IS_CLOUD,
 	rebuildDatabase,
+	reconcileDatabaseSecurity,
 	removeMariadbById,
 	removeService,
 	startService,
@@ -165,11 +166,43 @@ export const mariadbRouter = createTRPCRouter({
 				mariadb.serverId || undefined,
 				mariadb.appName || undefined,
 			);
+			const isPlatformAdmin =
+				ctx.user.role === "admin" || ctx.user.role === "owner";
 			return {
 				...mariadb,
+				databaseRootPassword: isPlatformAdmin
+					? mariadb.databaseRootPassword
+					: "****************",
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+		}),
+	reconcileSecurity: protectedProcedure
+		.input(apiFindOneMariaDB)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mariadbId, "create");
+			const m = await findMariadbById(input.mariadbId);
+			if (
+				m.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this MariaDB",
+				});
+			}
+			const result = await reconcileDatabaseSecurity(
+				input.mariadbId,
+				"mariadb",
+				m.serverId,
+			);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: m.mariadbId,
+				resourceName: m.appName,
+			});
+			return result;
 		}),
 	getConnectionDetails: protectedProcedure
 		.input(apiFindOneMariaDB)

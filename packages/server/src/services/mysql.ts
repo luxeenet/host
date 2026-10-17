@@ -20,6 +20,7 @@ import {
 	resolveDatabaseImage,
 	validateDatabaseImage,
 } from "../utils/databases/image-resolution";
+import { reconcileDatabaseSecurity } from "./database-security";
 import { validUniqueServerAppName } from "./project";
 
 export type MySql = typeof mysql.$inferSelect;
@@ -184,6 +185,18 @@ export const deployMySql = async (
 			dockerImage: resolvedImage,
 		});
 		await waitForSwarmServiceConvergence(mysql.appName, mysql.serverId);
+		onData?.("Enforcing per-database user isolation and least-privilege roles...");
+		try {
+			const secResult = await reconcileDatabaseSecurity(mysqlId, "mysql", mysql.serverId);
+			if (secResult.appliedRules.length > 0) {
+				onData?.(`Applied security rules: ${secResult.appliedRules.join("; ")}`);
+			}
+			if (secResult.warnings.length > 0) {
+				onData?.(`Security notices: ${secResult.warnings.join("; ")}`);
+			}
+		} catch (secErr) {
+			onData?.(`Warning: Security reconciliation deferred: ${secErr}`);
+		}
 		await updateMySqlById(mysqlId, {
 			applicationStatus: "done",
 			...(mysql.dockerImage !== resolvedImage

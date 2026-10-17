@@ -13,6 +13,7 @@ import { getRemoteDocker } from "../servers/remote-docker";
 import { withResolvedVaultRefs } from "../vault";
 
 import { resolveDatabaseImage } from "./image-resolution";
+import { sanitizeDatabaseIdentifier } from "../../services/database-security";
 
 export type MongoNested = InferResultType<
 	"mongo",
@@ -38,6 +39,7 @@ export const buildMongo = async (rawMongo: MongoNested) => {
 		replicaSets,
 	} = mongo;
 
+	const targetDbName = sanitizeDatabaseIdentifier((mongo as any).databaseName || appName || "app");
 	const resolvedImage = resolveDatabaseImage("mongo", dockerImage);
 
 	const startupScript = `
@@ -69,12 +71,37 @@ if [ "$REPLICA_STATUS" != "1" ]; then
 		sleep(1000);
 	}
 
-    // Create root user after replica set is initialized and we are primary
-	db.getSiblingDB("admin").createUser({
-		user: "${databaseUser}",
-		pwd: "${databasePassword}",
-		roles: ["root"]
-	});
+    // 1. Create internal administrative user in admin db
+	const adminDb = db.getSiblingDB("admin");
+	if (!adminDb.getUser("hatdot_admin")) {
+		adminDb.createUser({
+			user: "hatdot_admin",
+			pwd: "${databasePassword}",
+			roles: ["root"]
+		});
+	}
+
+    // 2. Create customer user strictly on target database with readWrite
+	const targetDb = db.getSiblingDB("${targetDbName}");
+	if (!targetDb.getUser("${databaseUser}")) {
+		targetDb.createUser({
+			user: "${databaseUser}",
+			pwd: "${databasePassword}",
+			roles: [{ role: "readWrite", db: "${targetDbName}" }]
+		});
+	} else {
+		targetDb.updateUser("${databaseUser}", {
+			pwd: "${databasePassword}",
+			roles: [{ role: "readWrite", db: "${targetDbName}" }]
+		});
+	}
+
+    // 3. Prevent customer user from retaining administrative privileges on admin db
+	try {
+		if (adminDb.getUser("${databaseUser}") && "${databaseUser}" !== "hatdot_admin") {
+			adminDb.dropUser("${databaseUser}");
+		}
+	} catch (e) {}
 	'
 
 else

@@ -22,6 +22,7 @@ import { findPostgresById } from "./postgres";
 import { findRedisById } from "./redis";
 import { checkPortInUse } from "./settings";
 import { getWebServerSettings } from "./web-server-settings";
+import { sanitizeDatabaseIdentifier } from "./database-security";
 
 export type SupportedDatabaseType =
 	| "postgres"
@@ -53,6 +54,13 @@ export interface DatabaseConnectionInfo {
 		isDomain: boolean;
 		platformDomain: string | null;
 		serverIp: string;
+	};
+	isolation?: {
+		isIsolated: boolean;
+		scope: string;
+		role: string;
+		sanitizedDatabaseName: string;
+		authSource?: string;
 	};
 	envVariables: Record<string, string>;
 }
@@ -355,19 +363,27 @@ export const buildDatabaseConnectionStrings = (
 		envVariables.MARIADB_PORT = String(internalPort);
 	} else if (type === "mongo") {
 		internalPort = 27017;
-		const dbPath = databaseName ? `/${encodeURIComponent(databaseName)}` : "";
+		// Least-privilege isolation: target database and authSource must be the assigned database
+		const targetDatabase =
+			databaseName ||
+			sanitizeDatabaseIdentifier(dbRecord.name || dbRecord.appName) ||
+			"app";
+		const dbPath = `/${encodeURIComponent(targetDatabase)}`;
+		const authSource = dbRecord.authSource
+			? encodeURIComponent(dbRecord.authSource)
+			: encodeURIComponent(targetDatabase);
 		const replicaSetQuery = dbRecord.replicaSets
 			? `&replicaSet=${encodeURIComponent(dbRecord.replicaSets)}`
 			: "&directConnection=true";
-		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=admin${replicaSetQuery}`;
+		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=${authSource}${replicaSetQuery}`;
 		externalUrl = isEnabled
-			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=admin${replicaSetQuery}`
+			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=${authSource}${replicaSetQuery}`
 			: null;
 		envVariables.DATABASE_URL = internalUrl;
 		envVariables.MONGO_URL = internalUrl;
 		envVariables.MONGO_USER = user;
 		envVariables.MONGO_PASSWORD = password;
-		envVariables.MONGO_DATABASE = databaseName;
+		envVariables.MONGO_DATABASE = targetDatabase;
 		envVariables.MONGO_HOST = appName;
 		envVariables.MONGO_PORT = String(internalPort);
 	} else if (type === "redis") {
@@ -397,6 +413,41 @@ export const buildDatabaseConnectionStrings = (
 		envVariables.LIBSQL_PORT = String(internalPort);
 	}
 
+	const sanitizedDbName =
+		type === "mongo"
+			? (databaseName || sanitizeDatabaseIdentifier(dbRecord.name || dbRecord.appName) || "app")
+			: (databaseName || "app");
+
+	const isolation = {
+		isIsolated: true,
+		scope:
+			type === "mongo"
+				? `database: ${sanitizedDbName}`
+				: type === "redis"
+					? "instance"
+					: `database: ${databaseName || appName}`,
+		role:
+			type === "mongo"
+				? "readWrite"
+				: type === "postgres"
+					? "owner"
+					: type === "mysql" || type === "mariadb"
+						? "restricted_user"
+						: type === "redis"
+							? "acl_restricted"
+							: "basic_auth",
+		sanitizedDatabaseName: sanitizedDbName,
+		...(type === "mongo"
+			? {
+					authSource:
+						dbRecord.authSource ||
+						databaseName ||
+						sanitizeDatabaseIdentifier(dbRecord.name || dbRecord.appName) ||
+						"app",
+				}
+			: {}),
+	};
+
 	return {
 		type,
 		internal: {
@@ -404,7 +455,7 @@ export const buildDatabaseConnectionStrings = (
 			port: internalPort,
 			user,
 			password,
-			databaseName: databaseName || undefined,
+			databaseName: sanitizedDbName,
 			url: internalUrl,
 		},
 		external: {
@@ -412,7 +463,7 @@ export const buildDatabaseConnectionStrings = (
 			port: externalPort,
 			user,
 			password,
-			databaseName: databaseName || undefined,
+			databaseName: sanitizedDbName,
 			url: externalUrl,
 			isEnabled,
 			hasPublicHost,
@@ -420,6 +471,7 @@ export const buildDatabaseConnectionStrings = (
 			platformDomain,
 			serverIp,
 		},
+		isolation,
 		envVariables,
 	};
 };

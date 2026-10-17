@@ -84,8 +84,9 @@ export const ShowExternalMongoCredentials = ({ mongoId }: Props) => {
 			const encodedUser = encodeURIComponent(data?.databaseUser || "");
 			const encodedPassword = encodeURIComponent(data?.databasePassword || "");
 			const host = data?.publicHost || getIp;
-			const params = `authSource=admin${data?.replicaSets ? `&replicaSet=${encodeURIComponent(data.replicaSets)}` : "&directConnection=true"}`;
-			return `mongodb://${encodedUser}:${encodedPassword}@${host}:${port}/?${params}`;
+			const targetDb = (data as any)?.databaseName || "app";
+			const params = `authSource=${encodeURIComponent(targetDb)}${data?.replicaSets ? `&replicaSet=${encodeURIComponent(data.replicaSets)}` : "&directConnection=true"}`;
+			return `mongodb://${encodedUser}:${encodedPassword}@${host}:${port}/${encodeURIComponent(targetDb)}?${params}`;
 		};
 
 		setConnectionUrl(buildConnectionUrl());

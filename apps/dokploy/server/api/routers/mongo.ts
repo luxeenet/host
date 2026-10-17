@@ -20,6 +20,7 @@ import {
 	getWebServerSettings,
 	IS_CLOUD,
 	rebuildDatabase,
+	reconcileDatabaseSecurity,
 	removeMongoById,
 	removeService,
 	startService,
@@ -174,6 +175,33 @@ export const mongoRouter = createTRPCRouter({
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+		}),
+	reconcileSecurity: protectedProcedure
+		.input(apiFindOneMongo)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mongoId, "create");
+			const mongo = await findMongoById(input.mongoId);
+			if (
+				mongo.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Mongo",
+				});
+			}
+			const result = await reconcileDatabaseSecurity(
+				input.mongoId,
+				"mongo",
+				mongo.serverId,
+			);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "service",
+				resourceId: mongo.mongoId,
+				resourceName: mongo.appName,
+			});
+			return result;
 		}),
 	getConnectionDetails: protectedProcedure
 		.input(apiFindOneMongo)

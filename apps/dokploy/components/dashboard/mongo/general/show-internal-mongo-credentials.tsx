@@ -62,7 +62,7 @@ export const ShowInternalMongoCredentials = ({ mongoId }: Props) => {
 								<Label>Internal Connection URL </Label>
 								<ToggleVisibilityInput
 									disabled
-									value={`mongodb://${data?.databaseUser}:${data?.databasePassword}@${data?.appName}:27017/?authSource=admin${data?.replicaSets ? "" : "&directConnection=true"}`}
+									value={`mongodb://${encodeURIComponent(data?.databaseUser || "")}:${encodeURIComponent(data?.databasePassword || "")}@${data?.appName}:27017/${encodeURIComponent((data as any)?.databaseName || "app")}?authSource=${encodeURIComponent((data as any)?.databaseName || "app")}${data?.replicaSets ? "" : "&directConnection=true"}`}
 								/>
 							</div>
 						</div>

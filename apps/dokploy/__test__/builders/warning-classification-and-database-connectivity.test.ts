@@ -194,7 +194,7 @@ describe("Warning Classification, Backend Readiness, and Database Connectivity",
 			);
 			// MongoDB standalone connections must include directConnection=true for MongoDB Compass
 			expect(conn.external.url).toContain("directConnection=true");
-			expect(conn.external.url).toContain("authSource=admin");
+			expect(conn.external.url).toContain("authSource=customer_db");
 			// Raw password must remain intact for single env variable consumption
 			expect(conn.envVariables.MONGO_PASSWORD).toBe(
 				"p@ssword#with:special?chars&more=1",

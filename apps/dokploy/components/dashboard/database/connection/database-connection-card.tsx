@@ -258,13 +258,15 @@ export const DatabaseConnectionCard = ({
 			? `mysql://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}`
 			: "";
 	} else if (databaseType === "mongo") {
-		const dbPath = dbName ? `/${encodeURIComponent(dbName)}` : "";
+		const targetDb = dbName || (data?.databaseName as string) || "app";
+		const dbPath = `/${encodeURIComponent(targetDb)}`;
+		const authSource = (data?.authSource as string) || targetDb;
 		const replicaSetQuery = data?.replicaSets
 			? `&replicaSet=${encodeURIComponent(data.replicaSets)}`
 			: "&directConnection=true";
-		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=admin${replicaSetQuery}`;
+		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=${encodeURIComponent(authSource)}${replicaSetQuery}`;
 		externalUrl = isExternalEnabled
-			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=admin${replicaSetQuery}`
+			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=${encodeURIComponent(authSource)}${replicaSetQuery}`
 			: "";
 	} else if (databaseType === "redis") {
 		const redisAuth = password ? `default:${encodedPassword}@` : "";

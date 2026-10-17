@@ -55,6 +55,7 @@ export const mongo = pgTable("mongo", {
 		.$defaultFn(() => generateAppName("mongo"))
 		.unique(),
 	description: text("description"),
+	databaseName: text("databaseName"),
 	databaseUser: text("databaseUser").notNull(),
 	databasePassword: text("databasePassword").notNull(),
 	dockerImage: text("dockerImage").notNull().default("mongo:8"),
@@ -121,6 +122,7 @@ const createSchema = createInsertSchema(mongo, {
 	createdAt: z.string(),
 	mongoId: z.string(),
 	name: z.string().min(1),
+	databaseName: z.string().min(1).optional(),
 	databasePassword: z.string().regex(DATABASE_PASSWORD_REGEX, {
 		message: DATABASE_PASSWORD_MESSAGE,
 	}),
@@ -160,6 +162,7 @@ export const apiCreateMongo = createSchema.pick({
 	dockerImage: true,
 	environmentId: true,
 	description: true,
+	databaseName: true,
 	databaseUser: true,
 	databasePassword: true,
 	serverId: true,

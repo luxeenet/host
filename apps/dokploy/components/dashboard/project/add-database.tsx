@@ -130,6 +130,7 @@ const mySchema = z
 			.object({
 				type: z.literal("mongo"),
 				databaseUser: z.string().default("mongo"),
+				databaseName: z.string().default("app").optional(),
 				replicaSets: z.boolean().default(false),
 			})
 			.merge(baseDatabaseSchema),
@@ -302,6 +303,7 @@ export const AddDatabase = ({ environmentId, projectName }: Props) => {
 		} else if (data.type === "mongo") {
 			promise = mongoMutation.mutateAsync({
 				...commonParams,
+				databaseName: data.databaseName || "app",
 				databasePassword: data.databasePassword,
 				databaseUser:
 					data.databaseUser || databasesUserDefaultPlaceholder[data.type],

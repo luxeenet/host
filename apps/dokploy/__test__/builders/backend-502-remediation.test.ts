@@ -126,6 +126,15 @@ const createMockDomain = (
 		...overrides,
 	}) as Domain;
 
+const createMockPort = (targetPort: number, publishedPort = targetPort) => ({
+	portId: `port-${targetPort}`,
+	applicationId: "app-test",
+	publishedPort,
+	targetPort,
+	protocol: "tcp" as const,
+	publishMode: "ingress" as const,
+});
+
 describe("HatDot Backend 502 Remediation Test Suite", () => {
 	describe("1. NestJS and Compiled Backend Startup Resolution", () => {
 		it("selects 'start:prod' over 'nest start' when building NestJS for production", () => {
@@ -272,7 +281,7 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 	describe("4. Container Host Listener Binding (0.0.0.0)", () => {
 		it("injects Fastify, ASP.NET, Python, and generic 0.0.0.0 host binding env vars", () => {
 			const app = createMockApp("fastify-backend", {
-				ports: [{ targetPort: 8080, publishedPort: 8080 }],
+				ports: [createMockPort(8080)],
 			});
 			const envVars = buildContainerEnvironmentVariables(app);
 
@@ -314,7 +323,7 @@ describe("HatDot Backend 502 Remediation Test Suite", () => {
 
 		it("prioritizes customer explicit port override if specified", () => {
 			const app = createMockApp("custom-port-app", {
-				ports: [{ targetPort: 9000, publishedPort: 9000 }],
+				ports: [createMockPort(9000)],
 				suggestedPort: 8080,
 			});
 			const domain = createMockDomain("custom.hatdot.cloud", { port: 3000 });

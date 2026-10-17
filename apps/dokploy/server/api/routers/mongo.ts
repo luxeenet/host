@@ -253,6 +253,7 @@ export const mongoRouter = createTRPCRouter({
 				user: mongo.databaseUser,
 				password: mongo.databasePassword,
 				serverId: mongo.serverId || undefined,
+				appName: mongo.appName,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

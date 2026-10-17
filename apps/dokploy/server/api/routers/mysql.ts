@@ -259,6 +259,7 @@ export const mysqlRouter = createTRPCRouter({
 				password: mysql.databasePassword,
 				databaseName: mysql.databaseName || undefined,
 				serverId: mysql.serverId || undefined,
+				appName: mysql.appName,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

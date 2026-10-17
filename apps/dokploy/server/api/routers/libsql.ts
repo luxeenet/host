@@ -243,6 +243,7 @@ export const libsqlRouter = createTRPCRouter({
 				user: libsql.databaseUser,
 				password: libsql.databasePassword,
 				serverId: libsql.serverId || undefined,
+				appName: libsql.appName,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

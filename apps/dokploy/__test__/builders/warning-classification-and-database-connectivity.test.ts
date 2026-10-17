@@ -201,7 +201,7 @@ describe("Warning Classification, Backend Readiness, and Database Connectivity",
 			);
 		});
 
-		it("includes replicaSet query when configured for MongoDB clusters", () => {
+		it("includes replicaSet query in internal URL and directConnection in external URL for MongoDB clusters", () => {
 			const record = {
 				appName: "mongo-replica",
 				databaseUser: "admin",
@@ -217,8 +217,12 @@ describe("Warning Classification, Backend Readiness, and Database Connectivity",
 				"db.hatdot.cloud",
 			);
 
-			expect(conn.external.url).toContain("replicaSet=rs0");
-			expect(conn.external.url).not.toContain("directConnection=true");
+			// Internal URL (for Swarm containers) includes replicaSet
+			expect(conn.internal.url).toContain("replicaSet=rs0");
+			// External URL (for Compass & external drivers) uses directConnection=true and omits replicaSet
+			// to prevent driver from resolving internal Docker Swarm hostname (e.g. qrcode-qrcode-43muxo)
+			expect(conn.external.url).toContain("directConnection=true");
+			expect(conn.external.url).not.toContain("replicaSet=rs0");
 		});
 
 		it("marks internal-only databases as not externally enabled when externalPort is null", () => {

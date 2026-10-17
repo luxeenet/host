@@ -58,6 +58,8 @@ export const redactCredentials = (text: string | null | undefined): string => {
 	return text
 		// Redact standard URI credentials: schema://user:pass@host
 		.replace(/([a-zA-Z0-9+.-]+:\/\/[^:]+:)([^@]+)(@)/g, "$1***$3")
+		// Redact raw user:pass@host without scheme
+		.replace(/((?:^|[\s"'(])(?:[a-zA-Z0-9_.-]+:))([^@\s/]+)(@)/g, "$1***$3")
 		// Redact basic auth header tokens
 		.replace(/Basic\s+([A-Za-z0-9+/=]+)/gi, "Basic ***")
 		// Redact password query params

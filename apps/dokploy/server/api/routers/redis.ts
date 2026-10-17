@@ -244,6 +244,7 @@ export const redisRouter = createTRPCRouter({
 				user: "default",
 				password: redis.databasePassword,
 				serverId: redis.serverId || undefined,
+				appName: redis.appName,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

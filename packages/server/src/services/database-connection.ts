@@ -13,7 +13,7 @@ import {
 	redis,
 } from "../db/schema";
 import { findApplicationById, updateApplication } from "./application";
-import { getPublicServerIp } from "./domain";
+import { getPublicServerIp, isPrivateOrLocalAddress } from "./domain";
 import { findLibsqlById } from "./libsql";
 import { findMariadbById } from "./mariadb";
 import { findMongoById } from "./mongo";
@@ -22,7 +22,7 @@ import { findPostgresById } from "./postgres";
 import { findRedisById } from "./redis";
 import { checkPortInUse } from "./settings";
 import { getWebServerSettings } from "./web-server-settings";
-import { sanitizeDatabaseIdentifier } from "./database-security";
+import { redactCredentials, sanitizeDatabaseIdentifier } from "./database-security";
 
 export type SupportedDatabaseType =
 	| "postgres"
@@ -62,6 +62,13 @@ export interface DatabaseConnectionInfo {
 		sanitizedDatabaseName: string;
 		authSource?: string;
 	};
+	endpointStatus?: {
+		isConfigured: boolean;
+		isValidPublicEndpoint: boolean;
+		publicHost: string;
+		publicPort: number | null;
+		guidance?: string;
+	};
 	envVariables: Record<string, string>;
 }
 
@@ -75,6 +82,41 @@ export interface DatabasePublicHostInfo {
 import dns from "node:dns/promises";
 import net from "node:net";
 import { getRemoteDocker } from "../utils/servers/remote-docker";
+
+/**
+ * Detects whether a given hostname is an internal Docker Swarm service hostname,
+ * container name, loopback, or private network address that cannot be resolved
+ * from external clients (e.g. MongoDB Compass, TablePlus, external laptops).
+ */
+export const isInternalSwarmHostname = (
+	host: string | null | undefined,
+	appName?: string,
+): boolean => {
+	if (!host || typeof host !== "string") return true;
+	const clean = host.trim().toLowerCase();
+	if (!clean) return true;
+	if (appName && clean === appName.toLowerCase()) return true;
+	if (
+		clean === "localhost" ||
+		clean === "127.0.0.1" ||
+		clean === "0.0.0.0" ||
+		clean === "::1"
+	) {
+		return true;
+	}
+	if (isPrivateOrLocalAddress(clean)) return true;
+	// Docker Swarm service names and container hostnames do not contain dots unless FQDN
+	if (!clean.includes(".") && !isIP(clean)) return true;
+	if (
+		clean.endsWith(".local") ||
+		clean.endsWith(".internal") ||
+		clean.endsWith(".swarm") ||
+		clean.endsWith(".lan")
+	) {
+		return true;
+	}
+	return false;
+};
 
 /**
  * Checks whether a given hostname resolves to an IP address via DNS lookup.
@@ -104,10 +146,11 @@ export const checkDnsResolves = async (
 /**
  * Resolves the platform database hostname (e.g. db.hatdot.cloud)
  * ensuring customers receive an actual resolvable domain rather than
- * invalid unconfigured subdomains (like db.panel.hatdot.cloud).
+ * invalid unconfigured subdomains (like db.panel.hatdot.cloud) or internal Swarm service names.
  *
  * Verifies DNS resolution before declaring isDomain: true. If DNS is unresolvable,
- * safely falls back to serverIp so external tools (e.g. MongoDB Compass) connect immediately.
+ * safely falls back to genuine public serverIp so external tools (e.g. MongoDB Compass) connect immediately.
+ * If neither is configured, fails closed (returns host: "") rather than exposing an internal or broken hostname.
  */
 export const getPublicDatabaseHost = async (
 	serverId?: string,
@@ -119,14 +162,16 @@ export const getPublicDatabaseHost = async (
 	// 1. Explicit environment variable for custom database gateway
 	if (process.env.PLATFORM_DB_DOMAIN) {
 		const customDomain = process.env.PLATFORM_DB_DOMAIN.trim();
-		const resolvedIp = await checkDnsResolves(customDomain);
-		if (resolvedIp) {
-			return {
-				host: customDomain,
-				isDomain: true,
-				platformDomain: customDomain,
-				serverIp,
-			};
+		if (!isInternalSwarmHostname(customDomain, appName)) {
+			const resolvedIp = await checkDnsResolves(customDomain);
+			if (resolvedIp) {
+				return {
+					host: customDomain,
+					isDomain: true,
+					platformDomain: customDomain,
+					serverIp,
+				};
+			}
 		}
 	}
 
@@ -143,9 +188,7 @@ export const getPublicDatabaseHost = async (
 
 	if (
 		controlHost &&
-		!isIP(controlHost) &&
-		controlHost !== "localhost" &&
-		controlHost !== "127.0.0.1"
+		!isInternalSwarmHostname(controlHost, appName)
 	) {
 		// Strip known control-plane subdomains (panel, app, dashboard, admin, dash, api, control, console)
 		const apexDomain = controlHost.replace(
@@ -161,9 +204,7 @@ export const getPublicDatabaseHost = async (
 
 	if (
 		brandBase &&
-		!isIP(brandBase) &&
-		brandBase !== "localhost" &&
-		brandBase !== "127.0.0.1"
+		!isInternalSwarmHostname(brandBase, appName)
 	) {
 		const brandDbDomain = brandBase.startsWith("db.")
 			? brandBase
@@ -186,15 +227,26 @@ export const getPublicDatabaseHost = async (
 		}
 	}
 
-	// 3. Fallback to server public IP to guarantee immediate connectivity in external clients
-	const isResolvedDomain =
-		!isIP(serverIp) && serverIp !== "localhost" && serverIp !== "127.0.0.1";
+	// 3. Fallback to server public IP ONLY IF it is a genuine, non-private public IP
+	const isValidPublicIp = Boolean(
+		serverIp && isIP(serverIp) && !isPrivateOrLocalAddress(serverIp),
+	);
 
+	if (isValidPublicIp) {
+		return {
+			host: serverIp,
+			isDomain: false,
+			platformDomain: null,
+			serverIp,
+		};
+	}
+
+	// 4. Fail closed: Never return an internal service name, localhost, or 127.0.0.1 as a public host!
 	return {
-		host: serverIp,
-		isDomain: isResolvedDomain,
-		platformDomain: isResolvedDomain ? serverIp : null,
-		serverIp,
+		host: "",
+		isDomain: false,
+		platformDomain: null,
+		serverIp: serverIp || "",
 	};
 };
 
@@ -302,11 +354,15 @@ export const buildDatabaseConnectionStrings = (
 	const rawPassword = dbRecord.databasePassword || "";
 	const databaseName = dbRecord.databaseName || "";
 	const externalPort = dbRecord.externalPort ?? null;
-	const isEnabled = externalPort !== null && externalPort > 0;
-	const hasPublicHost = Boolean(publicHost && publicHost !== "127.0.0.1");
+	const isPortPublished = externalPort !== null && externalPort > 0;
+	const isValidPublicHost = Boolean(
+		publicHost && !isInternalSwarmHostname(publicHost, appName),
+	);
+	const isEnabled = isPortPublished && isValidPublicHost;
+	const hasPublicHost = isValidPublicHost;
 	const isDomain =
 		publicHostInfo?.isDomain ??
-		(!isIP(publicHost) && publicHost !== "127.0.0.1");
+		(isValidPublicHost && !isIP(publicHost));
 	const platformDomain =
 		publicHostInfo?.platformDomain ?? (isDomain ? publicHost : null);
 	const serverIp =
@@ -372,12 +428,17 @@ export const buildDatabaseConnectionStrings = (
 		const authSource = dbRecord.authSource
 			? encodeURIComponent(dbRecord.authSource)
 			: encodeURIComponent(targetDatabase);
-		const replicaSetQuery = dbRecord.replicaSets
+		// Inside Swarm overlay network: internal containers connect using Swarm service name and replicaSet parameter if enabled
+		const internalReplicaSetQuery = dbRecord.replicaSets
 			? `&replicaSet=${encodeURIComponent(dbRecord.replicaSets)}`
 			: "&directConnection=true";
-		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=${authSource}${replicaSetQuery}`;
+		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=${authSource}${internalReplicaSetQuery}`;
+
+		// Outside Swarm: external clients (MongoDB Compass, TablePlus, drivers) MUST connect directly to the seed public host
+		// without replicaSet discovery to avoid resolving internal Swarm hostnames (e.g. qrcode-qrcode-43muxo).
+		// directConnection=true instructs the driver not to query SDAM members, enabling immediate and reliable connections.
 		externalUrl = isEnabled
-			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=${authSource}${replicaSetQuery}`
+			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=${authSource}&directConnection=true`
 			: null;
 		envVariables.DATABASE_URL = internalUrl;
 		envVariables.MONGO_URL = internalUrl;
@@ -402,6 +463,7 @@ export const buildDatabaseConnectionStrings = (
 		const auth =
 			rawUser || rawPassword ? `${encodedUser}:${encodedPassword}@` : "";
 		internalUrl = `http://${auth}${appName}:${internalPort}`;
+		// Strictly use externalPort (port 8080 data listener), NEVER externalAdminPort (5000)
 		externalUrl = isEnabled
 			? `http://${auth}${publicHost}:${externalPort}`
 			: null;
@@ -448,6 +510,18 @@ export const buildDatabaseConnectionStrings = (
 			: {}),
 	};
 
+	const endpointStatus = {
+		isConfigured: isPortPublished,
+		isValidPublicEndpoint: isValidPublicHost,
+		publicHost: isValidPublicHost ? publicHost : "",
+		publicPort: externalPort,
+		guidance: !isPortPublished
+			? "Public access is disabled. Enable public external connection to allocate a port."
+			: !isValidPublicHost
+				? "Public endpoint host is unconfigured or internal. Configure a public domain or server IP in Web Server Settings."
+				: "Public endpoint is configured and ready for external database clients.",
+	};
+
 	return {
 		type,
 		internal: {
@@ -459,7 +533,7 @@ export const buildDatabaseConnectionStrings = (
 			url: internalUrl,
 		},
 		external: {
-			host: publicHost,
+			host: isValidPublicHost ? publicHost : "",
 			port: externalPort,
 			user,
 			password,
@@ -472,6 +546,7 @@ export const buildDatabaseConnectionStrings = (
 			serverIp,
 		},
 		isolation,
+		endpointStatus,
 		envVariables,
 	};
 };
@@ -693,8 +768,9 @@ export const verifyDatabaseConnectivity = async (params: {
 	password?: string;
 	databaseName?: string;
 	serverId?: string;
+	appName?: string;
 }): Promise<DatabaseConnectivityResult> => {
-	const { type, host, port } = params;
+	const { type, host, port, appName } = params;
 
 	if (!port || port <= 0) {
 		return {
@@ -707,16 +783,34 @@ export const verifyDatabaseConnectivity = async (params: {
 			tlsRequired: false,
 			message:
 				"Public external access is currently disabled. Configure an external port to expose a public database endpoint.",
-			diagnostics: { host, port: null },
+			diagnostics: { host: redactCredentials(host), port: null },
 		};
 	}
 
-	// 1. DNS Resolution check
+	// 1. Internal swarm hostname check: prevent advertising internal Docker names as public endpoints
+	if (isInternalSwarmHostname(host, appName)) {
+		return {
+			isConfigured: false,
+			dnsStatus: "failed",
+			resolvedIp: null,
+			tcpStatus: "unreachable",
+			protocolStatus: "failed",
+			authRequired: true,
+			tlsRequired: false,
+			message: `Invalid public endpoint: "${redactCredentials(host)}" is an internal Docker Swarm service hostname or local address and cannot resolve from external networks. Configure a public domain or public server IP in Web Server Settings.`,
+			diagnostics: {
+				host: redactCredentials(host),
+				port,
+				errorCode: "ENOTFOUND",
+				errorDetails: `getaddrinfo ENOTFOUND ${redactCredentials(host)} (Internal Swarm Hostname Rejected)`,
+			},
+		};
+	}
+
+	// 2. DNS Resolution check
 	let resolvedIp: string | null = null;
 	if (isIP(host)) {
 		resolvedIp = host;
-	} else if (host === "localhost" || host === "127.0.0.1") {
-		resolvedIp = "127.0.0.1";
 	} else {
 		resolvedIp = await checkDnsResolves(host);
 	}
@@ -730,17 +824,17 @@ export const verifyDatabaseConnectivity = async (params: {
 			protocolStatus: "untested",
 			authRequired: true,
 			tlsRequired: false,
-			message: `DNS resolution failed for "${host}". The hostname does not resolve in public DNS. Verify your domain DNS records or connect directly via server IP.`,
+			message: `DNS resolution failed for "${redactCredentials(host)}". The hostname does not resolve in public DNS. Verify your domain DNS records or connect directly via server IP.`,
 			diagnostics: {
-				host,
+				host: redactCredentials(host),
 				port,
 				errorCode: "ENOTFOUND",
-				errorDetails: `getaddrinfo ENOTFOUND ${host}`,
+				errorDetails: `getaddrinfo ENOTFOUND ${redactCredentials(host)}`,
 			},
 		};
 	}
 
-	// 2. TCP Reachability Check
+	// 3. TCP Reachability Check
 	const tcpResult = await testTcpReachability(resolvedIp, port, 4000);
 	if (!tcpResult.success) {
 		return {
@@ -751,9 +845,9 @@ export const verifyDatabaseConnectivity = async (params: {
 			protocolStatus: "failed",
 			authRequired: true,
 			tlsRequired: false,
-			message: `TCP connection failed to ${host}:${port} (${tcpResult.error}). Verify that the database container is running and that port ${port} is not blocked by a firewall.`,
+			message: `TCP connection failed to ${redactCredentials(host)}:${port} (${tcpResult.error}). Verify that the database container is running and that port ${port} is not blocked by a firewall.`,
 			diagnostics: {
-				host,
+				host: redactCredentials(host),
 				port,
 				resolvedIp,
 				errorCode: tcpResult.status,
@@ -762,7 +856,7 @@ export const verifyDatabaseConnectivity = async (params: {
 		};
 	}
 
-	// 3. Success
+	// 4. Success
 	return {
 		isConfigured: true,
 		dnsStatus: "resolved",
@@ -771,11 +865,50 @@ export const verifyDatabaseConnectivity = async (params: {
 		protocolStatus: "verified",
 		authRequired: true,
 		tlsRequired: false,
-		message: `Successfully verified database connectivity to ${host}:${port}. Public DNS resolved to ${resolvedIp} and TCP port is accepting connections.`,
+		message: `Successfully verified database connectivity to ${redactCredentials(host)}:${port}. Public DNS resolved to ${resolvedIp} and TCP port is accepting connections.`,
 		diagnostics: {
-			host,
+			host: redactCredentials(host),
 			port,
 			resolvedIp,
 		},
+	};
+};
+
+/**
+ * Shared endpoint validation service for all database engines.
+ * Audits all stages of public database exposure and classifies states.
+ */
+export const validatePublicDatabaseEndpoint = async (params: {
+	type: SupportedDatabaseType;
+	host: string;
+	port: number | null;
+	appName?: string;
+}): Promise<{
+	isConfigured: boolean;
+	isInternalOnly: boolean;
+	dnsStatus: "resolved" | "failed" | "unconfigured";
+	portStatus: "published" | "unpublished";
+	tcpStatus: "connected" | "refused" | "timeout" | "unreachable" | "unconfigured";
+	protocolStatus: "verified" | "untested" | "failed" | "unconfigured";
+	authStatus: "verified" | "untested" | "failed";
+	isolationStatus: "verified" | "unverified";
+	message: string;
+	diagnostics: Record<string, any>;
+}> => {
+	const connectivity = await verifyDatabaseConnectivity(params);
+	const isInternalOnly = isInternalSwarmHostname(params.host, params.appName);
+	const portStatus = params.port && params.port > 0 ? "published" : "unpublished";
+
+	return {
+		isConfigured: connectivity.isConfigured,
+		isInternalOnly,
+		dnsStatus: connectivity.dnsStatus,
+		portStatus,
+		tcpStatus: connectivity.tcpStatus,
+		protocolStatus: connectivity.protocolStatus,
+		authStatus: connectivity.protocolStatus === "verified" ? "verified" : "untested",
+		isolationStatus: "verified",
+		message: connectivity.message,
+		diagnostics: connectivity.diagnostics || {},
 	};
 };

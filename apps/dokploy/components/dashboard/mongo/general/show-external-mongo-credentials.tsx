@@ -81,11 +81,20 @@ export const ShowExternalMongoCredentials = ({ mongoId }: Props) => {
 	useEffect(() => {
 		const buildConnectionUrl = () => {
 			const port = form.watch("externalPort") || data?.externalPort;
+			if (!port) return "";
 			const encodedUser = encodeURIComponent(data?.databaseUser || "");
 			const encodedPassword = encodeURIComponent(data?.databasePassword || "");
-			const host = data?.publicHost || getIp;
+			const rawHost = data?.publicHost || getIp || "";
+			const isValidHost =
+				rawHost &&
+				rawHost !== data?.appName &&
+				rawHost !== "localhost" &&
+				rawHost !== "127.0.0.1" &&
+				(rawHost.includes(".") || rawHost.includes(":"));
+			if (!isValidHost) return "";
+			const host = rawHost;
 			const targetDb = (data as any)?.databaseName || "app";
-			const params = `authSource=${encodeURIComponent(targetDb)}${data?.replicaSets ? `&replicaSet=${encodeURIComponent(data.replicaSets)}` : "&directConnection=true"}`;
+			const params = `authSource=${encodeURIComponent(targetDb)}&directConnection=true`;
 			return `mongodb://${encodedUser}:${encodedPassword}@${host}:${port}/${encodeURIComponent(targetDb)}?${params}`;
 		};
 

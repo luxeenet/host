@@ -258,6 +258,7 @@ export const postgresRouter = createTRPCRouter({
 				password: postgres.databasePassword,
 				databaseName: postgres.databaseName || undefined,
 				serverId: postgres.serverId || undefined,
+				appName: postgres.appName,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

@@ -21,7 +21,13 @@ export const ShowInternalMongoCredentials = ({ mongoId }: Props) => {
 					<CardHeader>
 						<CardTitle className="text-xl">Internal Credentials</CardTitle>
 					</CardHeader>
-					<CardContent className="flex w-full flex-row gap-4">
+					<CardContent className="flex w-full flex-col gap-4">
+						<div className="flex flex-col gap-1 text-xs bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 p-3 rounded-lg">
+							<span className="font-semibold">Private Swarm Network Only</span>
+							<p>
+								These credentials and internal URL (using host <code>{data?.appName}</code>) are strictly for services inside HatDot. External desktop clients (MongoDB Compass) cannot resolve this host. Use Public Credentials to connect externally.
+							</p>
+						</div>
 						<div className="grid w-full md:grid-cols-2 gap-4 md:gap-8">
 							<div className="flex flex-col gap-2">
 								<Label>User</Label>

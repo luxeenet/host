@@ -234,9 +234,16 @@ export const DatabaseConnectionCard = ({
 	const password = data?.databasePassword || "";
 	const dbName = data?.databaseName || "";
 	const appName = data?.appName || "";
-	const publicHost = data?.publicHost || data?.server?.ipAddress || "";
 	const externalPort = data?.externalPort || null;
 	const isExternalEnabled = Boolean(externalPort && externalPort > 0);
+	const rawHost = data?.publicHost || data?.server?.ipAddress || "";
+	const isRawHostInternal =
+		!rawHost ||
+		rawHost === appName ||
+		rawHost === "localhost" ||
+		rawHost === "127.0.0.1" ||
+		(!rawHost.includes(".") && !rawHost.includes(":"));
+	const publicHost = isRawHostInternal ? "" : rawHost;
 
 	const encodedUser = encodeURIComponent(user);
 	const encodedPassword = encodeURIComponent(password);
@@ -248,36 +255,39 @@ export const DatabaseConnectionCard = ({
 	if (databaseType === "postgres") {
 		const dbPath = dbName ? `/${encodeURIComponent(dbName)}` : "";
 		internalUrl = `postgresql://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}`;
-		externalUrl = isExternalEnabled
+		externalUrl = isExternalEnabled && publicHost
 			? `postgresql://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}`
 			: "";
 	} else if (databaseType === "mysql" || databaseType === "mariadb") {
 		const dbPath = dbName ? `/${encodeURIComponent(dbName)}` : "";
 		internalUrl = `mysql://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}`;
-		externalUrl = isExternalEnabled
+		externalUrl = isExternalEnabled && publicHost
 			? `mysql://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}`
 			: "";
 	} else if (databaseType === "mongo") {
 		const targetDb = dbName || (data?.databaseName as string) || "app";
 		const dbPath = `/${encodeURIComponent(targetDb)}`;
 		const authSource = (data?.authSource as string) || targetDb;
-		const replicaSetQuery = data?.replicaSets
+		const internalReplicaSetQuery = data?.replicaSets
 			? `&replicaSet=${encodeURIComponent(data.replicaSets)}`
 			: "&directConnection=true";
-		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=${encodeURIComponent(authSource)}${replicaSetQuery}`;
-		externalUrl = isExternalEnabled
-			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=${encodeURIComponent(authSource)}${replicaSetQuery}`
+		internalUrl = `mongodb://${encodedUser}:${encodedPassword}@${appName}:${internalPort}${dbPath}?authSource=${encodeURIComponent(authSource)}${internalReplicaSetQuery}`;
+		// External connections MUST use directConnection=true without replicaSet to prevent Compass from
+		// attempting to discover and connect to the internal Swarm hostname (e.g. qrcode-qrcode-43muxo).
+		externalUrl = isExternalEnabled && publicHost
+			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=${encodeURIComponent(authSource)}&directConnection=true`
 			: "";
 	} else if (databaseType === "redis") {
 		const redisAuth = password ? `default:${encodedPassword}@` : "";
 		internalUrl = `redis://${redisAuth}${appName}:${internalPort}`;
-		externalUrl = isExternalEnabled
+		externalUrl = isExternalEnabled && publicHost
 			? `redis://${redisAuth}${publicHost}:${externalPort}`
 			: "";
 	} else if (databaseType === "libsql") {
 		const auth = user || password ? `${encodedUser}:${encodedPassword}@` : "";
 		internalUrl = `http://${auth}${appName}:${internalPort}`;
-		externalUrl = isExternalEnabled
+		// Strictly expose the HTTP/WebSocket data port (8080), never admin port (5000)
+		externalUrl = isExternalEnabled && publicHost
 			? `http://${auth}${publicHost}:${externalPort}`
 			: "";
 	}
@@ -341,6 +351,16 @@ export const DatabaseConnectionCard = ({
 								Use this connection URL for applications hosted within HatDot.
 								Communication is fast and completely isolated from the public
 								internet.
+							</p>
+						</div>
+
+						<div className="flex flex-col gap-1.5 text-xs bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 p-3.5 rounded-lg">
+							<div className="flex items-center gap-2 font-semibold">
+								<Info className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+								<span>Private Swarm Network Only</span>
+							</div>
+							<p className="leading-relaxed">
+								This internal URL connects using Docker private hostname (<code>{appName}</code>) and is strictly for apps running inside HatDot. External desktop clients (MongoDB Compass, TablePlus, DBeaver) cannot resolve this hostname. To connect from your personal computer, switch to the <strong>Public Connection</strong> tab.
 							</p>
 						</div>
 
@@ -455,9 +475,9 @@ export const DatabaseConnectionCard = ({
 											</div>
 											<span className="text-xs text-muted-foreground">
 												Reachable via {publicHost || "Platform Gateway"}:
-												{externalPort} • Auth: admin •{" "}
+												{externalPort} • Auth: {dbName || "app"} •{" "}
 												{databaseType === "mongo"
-													? "directConnection=true"
+													? "directConnection=true (Compass Compatible)"
 													: "Direct TCP"}
 											</span>
 										</div>
@@ -472,6 +492,18 @@ export const DatabaseConnectionCard = ({
 										Disable Public Access
 									</Button>
 								</div>
+
+								{!publicHost && (
+									<div className="flex flex-col gap-1.5 text-xs bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 p-3.5 rounded-lg">
+										<div className="flex items-center gap-2 font-semibold">
+											<Info className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+											<span>Public Host Unconfigured</span>
+										</div>
+										<p className="leading-relaxed">
+											Public external access is published on port <code>{externalPort}</code>, but HatDot requires a configured public IP or Platform Domain (in Web Server Settings) to generate an externally reachable connection URL.
+										</p>
+									</div>
+								)}
 
 								{/* Full External Connection String */}
 								<div className="flex flex-col gap-2">

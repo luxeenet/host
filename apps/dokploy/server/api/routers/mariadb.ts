@@ -255,6 +255,7 @@ export const mariadbRouter = createTRPCRouter({
 				password: mariadb.databasePassword,
 				databaseName: mariadb.databaseName || undefined,
 				serverId: mariadb.serverId || undefined,
+				appName: mariadb.appName,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

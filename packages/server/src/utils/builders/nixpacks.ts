@@ -13,6 +13,7 @@ import type { ApplicationNested } from ".";
 import { NIXPKGS_ARCHIVES } from "./runtime-catalog";
 import {
 	generateNixpacksToml,
+	normalizeNixpacksToml,
 	resolveNodeRuntime,
 	resolvePackageManagerAndCommands,
 } from "./runtime-resolver";
@@ -228,16 +229,11 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 			} else if (preResolvedProvider) {
 				try {
 					const existingToml = fs.readFileSync(nixpacksTomlPath, "utf-8");
-					let updatedToml = existingToml;
-					if (!updatedToml.includes("providers")) {
-						updatedToml = `providers = ["${preResolvedProvider}"]\n\n${updatedToml}`;
-					}
-					if (preResolvedArchive && !updatedToml.includes("nixpkgsArchive")) {
-						updatedToml += `\n\n[phases.setup]\nnixpkgsArchive = "${preResolvedArchive}"\n`;
-					}
-					if (preResolvedSetupCmds && preResolvedSetupCmds.length > 0 && !updatedToml.includes("cmds")) {
-						updatedToml += `\n[phases.setup]\ncmds = [${preResolvedSetupCmds.map((c) => JSON.stringify(c)).join(", ")}]\n`;
-					}
+					const updatedToml = normalizeNixpacksToml(existingToml, {
+						defaultProvider: preResolvedProvider,
+						nixpkgsArchive: preResolvedArchive,
+						setupCmds: preResolvedSetupCmds,
+					});
 					if (updatedToml !== existingToml) {
 						fs.writeFileSync(nixpacksTomlPath, updatedToml, "utf-8");
 					}
@@ -382,6 +378,27 @@ ${activeStartCommand ? `export NIXPACKS_START_CMD="\${NIXPACKS_START_CMD:-${acti
 ${effectivePort ? `export PORT="\${PORT:-${effectivePort}}"\nexport NIXPACKS_PORT="\${NIXPACKS_PORT:-${effectivePort}}"` : ""}
 
 if [ -d ${quote([buildAppDirectory])} ]; then
+  # Enforce valid TOML structure: Ensure providers is serialized at top level, not nested under [variables]
+  if [ -f "${buildAppDirectory}/nixpacks.toml" ]; then
+    node -e '
+      try {
+        const fs = require("fs");
+        const p = "${buildAppDirectory}/nixpacks.toml";
+        let c = fs.readFileSync(p, "utf-8");
+        const m = c.match(/providers\s*=\s*\[[^\]]*\]/);
+        if (m) {
+          const provLine = m[0];
+          const firstSection = c.search(/^\s*\[/m);
+          if (firstSection !== -1 && c.indexOf(provLine) > firstSection) {
+            c = c.replace(provLine, "");
+            c = provLine + "\n\n" + c.trim() + "\n";
+            fs.writeFileSync(p, c.replace(/\n{3,}/g, "\n\n"), "utf-8");
+          }
+        }
+      } catch(e) {}
+    ' 2>/dev/null || true
+  fi
+
   # Pure Python detection in preflight shell
   if [ -f "${buildAppDirectory}/requirements.txt" ] || [ -f "${buildAppDirectory}/pyproject.toml" ] || [ -f "${buildAppDirectory}/Pipfile" ] || [ -f "${buildAppDirectory}/app.py" ] || [ -f "${buildAppDirectory}/streamlit_app.py" ]; then
     if [ ! -f "${buildAppDirectory}/package.json" ]; then
@@ -400,8 +417,16 @@ if [ -d ${quote([buildAppDirectory])} ]; then
 
       if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
         printf 'providers = ["python"]\n\n[phases.setup]\ncmds = ["python3 -m venv --copies /opt/venv 2>/dev/null || python -m venv --copies /opt/venv || true", "/opt/venv/bin/python -m ensurepip --upgrade 2>/dev/null || true"]\n' > "${buildAppDirectory}/nixpacks.toml" ;
-      elif ! grep -q "providers" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
-        printf '\nproviders = ["python"]\n\n[phases.setup]\ncmds = ["python3 -m venv --copies /opt/venv 2>/dev/null || python -m venv --copies /opt/venv || true", "/opt/venv/bin/python -m ensurepip --upgrade 2>/dev/null || true"]\n' >> "${buildAppDirectory}/nixpacks.toml" ;
+      else
+        if ! grep -q "providers" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
+          TMP_TOML=$(mktemp 2>/dev/null || echo "${buildAppDirectory}/nixpacks.toml.tmp")
+          printf 'providers = ["python"]\n\n' > "$TMP_TOML"
+          cat "${buildAppDirectory}/nixpacks.toml" >> "$TMP_TOML"
+          mv -f "$TMP_TOML" "${buildAppDirectory}/nixpacks.toml"
+        fi
+        if ! grep -q "cmds" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
+          printf '\n[phases.setup]\ncmds = ["python3 -m venv --copies /opt/venv 2>/dev/null || python -m venv --copies /opt/venv || true", "/opt/venv/bin/python -m ensurepip --upgrade 2>/dev/null || true"]\n' >> "${buildAppDirectory}/nixpacks.toml" ;
+        fi
       fi
       if [ -z "$NIXPACKS_INSTALL_CMD" ]; then
         if [ -f "${buildAppDirectory}/uv.lock" ]; then
@@ -461,7 +486,10 @@ if [ -d ${quote([buildAppDirectory])} ]; then
     if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
       printf 'providers = ["node"]\n' > "${buildAppDirectory}/nixpacks.toml" ;
     elif ! grep -q "providers" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
-      printf '\nproviders = ["node"]\n' >> "${buildAppDirectory}/nixpacks.toml" ;
+      TMP_TOML=$(mktemp 2>/dev/null || echo "${buildAppDirectory}/nixpacks.toml.tmp")
+      printf 'providers = ["node"]\n\n' > "$TMP_TOML"
+      cat "${buildAppDirectory}/nixpacks.toml" >> "$TMP_TOML"
+      mv -f "$TMP_TOML" "${buildAppDirectory}/nixpacks.toml"
     fi
   fi
 

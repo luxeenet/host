@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { parse as parseToml } from "toml";
+import { z } from "zod";
 import {
 	DOTNET_CATALOG,
 	GO_CATALOG,
@@ -1148,7 +1150,126 @@ export const resolvePackageManagerAndCommands = (params: {
 };
 
 /**
- * Generate a Nixpacks configuration TOML content to pin the archive and packages
+ * Nixpacks GeneratePlanConfig schemas mirroring official Rust serde definitions.
+ */
+export const NixpacksPhaseSchema = z.object({
+	name: z.string().optional(),
+	nixpkgsArchive: z.string().optional(),
+	nixpkgs_archive: z.string().optional(),
+	nixPkgs: z.array(z.string()).optional(),
+	nix_pkgs: z.array(z.string()).optional(),
+	pkgs: z.array(z.string()).optional(),
+	aptPkgs: z.array(z.string()).optional(),
+	apt_pkgs: z.array(z.string()).optional(),
+	cmds: z.array(z.string()).optional(),
+	dependsOn: z.array(z.string()).optional(),
+	depends_on: z.array(z.string()).optional(),
+	onlyIncludeFiles: z.array(z.string()).optional(),
+	only_include_files: z.array(z.string()).optional(),
+	paths: z.array(z.string()).optional(),
+});
+
+export const NixpacksStartPhaseSchema = z.object({
+	cmd: z.string().optional(),
+	runImage: z.string().optional(),
+	run_image: z.string().optional(),
+	onlyIncludeFiles: z.array(z.string()).optional(),
+	only_include_files: z.array(z.string()).optional(),
+});
+
+export const NixpacksConfigSchema = z.object({
+	providers: z.array(z.string()).optional(),
+	build_image: z.string().optional(),
+	buildImage: z.string().optional(),
+	variables: z.record(z.string(), z.string()).optional(),
+	static_cache: z.array(z.string()).optional(),
+	staticCache: z.array(z.string()).optional(),
+	phases: z.record(z.string(), NixpacksPhaseSchema).optional(),
+	start: NixpacksStartPhaseSchema.optional(),
+});
+
+export type NixpacksConfig = z.infer<typeof NixpacksConfigSchema>;
+
+/**
+ * Validates a TOML string against the official Nixpacks configuration schema.
+ * Throws a detailed error if invalid (e.g. invalid type: sequence in variables).
+ */
+export const validateNixpacksToml = (tomlContent: string): NixpacksConfig => {
+	const parsed = parseToml(tomlContent);
+	return NixpacksConfigSchema.parse(parsed);
+};
+
+/**
+ * Normalizes existing or generated nixpacks.toml content:
+ * - Guarantees providers declaration is top-level (never nested under [variables] or phases)
+ * - Safely integrates defaultProvider, nixpkgsArchive, and setupCmds without syntax errors
+ */
+export const normalizeNixpacksToml = (
+	tomlContent: string,
+	options: {
+		defaultProvider?: string;
+		nixpkgsArchive?: string;
+		setupCmds?: string[];
+	} = {},
+): string => {
+	let content = tomlContent.trim();
+	if (!content) {
+		return generateNixpacksToml({
+			providers: options.defaultProvider ? [options.defaultProvider] : undefined,
+			nixpkgsArchive: options.nixpkgsArchive,
+			setupCmds: options.setupCmds,
+		});
+	}
+
+	// 1. Detect if providers is already defined
+	let extractedProviders: string[] | undefined;
+	const providerMatch = content.match(/providers\s*=\s*\[([^\]]*)\]/);
+	if (providerMatch?.[1] !== undefined) {
+		extractedProviders = providerMatch[1]
+			.split(",")
+			.map((s) => s.replace(/["'\s]/g, ""))
+			.filter(Boolean);
+	} else if (options.defaultProvider) {
+		extractedProviders = [options.defaultProvider];
+	}
+
+	// 2. Remove any misplaced providers declaration from within the body
+	if (providerMatch) {
+		content = content.replace(providerMatch[0], "").trim();
+	}
+
+	// 3. Construct clean normalized TOML with top-level fields first
+	const topLevelLines: string[] = [];
+	if (extractedProviders && extractedProviders.length > 0) {
+		topLevelLines.push(`providers = [${extractedProviders.map((p) => `"${p}"`).join(", ")}]`);
+	}
+
+	let result = topLevelLines.length > 0
+		? `${topLevelLines.join("\n")}\n\n${content}`
+		: content;
+
+	// If setup archive needs to be added and isn't present:
+	if (options.nixpkgsArchive && !result.includes("nixpkgsArchive")) {
+		result += `\n\n[phases.setup]\nnixpkgsArchive = "${options.nixpkgsArchive}"`;
+	}
+
+	// If setupCmds need to be added and aren't present:
+	const hasSetupCmds = /\[phases\.setup\][\s\S]*?cmds\s*=/.test(result);
+	if (options.setupCmds && options.setupCmds.length > 0 && !hasSetupCmds) {
+		if (!result.includes("[phases.setup]")) {
+			result += `\n\n[phases.setup]`;
+		}
+		result += `\ncmds = [${options.setupCmds.map((c) => JSON.stringify(c)).join(", ")}]`;
+	}
+
+	return `${result.trim().replace(/\n{3,}/g, "\n\n")}\n`;
+};
+
+/**
+ * Generate a Nixpacks configuration TOML content to pin the archive and packages.
+ * Strictly adheres to Nixpacks schema:
+ * - providers is emitted at the top level before any table declarations.
+ * - [variables] only contains string-compatible values and never contains providers.
  */
 export const generateNixpacksToml = (options: {
 	nixpkgsArchive?: string;
@@ -1163,25 +1284,46 @@ export const generateNixpacksToml = (options: {
 	const lines: string[] = [];
 	lines.push("# Generated by HatDot Universal Deployment Engine");
 
-	const variables: Record<string, string> = {
-		NPM_CONFIG_PRODUCTION: "",
-		NPM_CONFIG_UPDATE_NOTIFIER: "false",
-		...(options.variables || {}),
-	};
-
-	lines.push("");
-	lines.push("[variables]");
-	for (const [key, val] of Object.entries(variables)) {
-		lines.push(`${key} = ${JSON.stringify(val)}`);
-	}
-
+	// 1. Top-level keys MUST appear before any table headers ([section])
 	if (options.providers && options.providers.length > 0) {
-		lines.push("");
 		lines.push(
 			`providers = [${options.providers.map((p) => `"${p}"`).join(", ")}]`,
 		);
 	}
 
+	// 2. Variables table ([variables])
+	// In Nixpacks schema, variables is HashMap<String, String>.
+	// All values must be strings, and 'providers' must NEVER be in variables.
+	const rawVariables: Record<string, unknown> = {
+		NPM_CONFIG_PRODUCTION: "",
+		NPM_CONFIG_UPDATE_NOTIFIER: "false",
+		...(options.variables || {}),
+	};
+
+	const cleanedVariables: Record<string, string> = {};
+	for (const [key, val] of Object.entries(rawVariables)) {
+		if (key === "providers") {
+			// Protection against accidental 'providers' key inside variables
+			continue;
+		}
+		if (Array.isArray(val)) {
+			cleanedVariables[key] = val.map(String).join(",");
+		} else if (val === null || val === undefined) {
+			cleanedVariables[key] = "";
+		} else {
+			cleanedVariables[key] = String(val);
+		}
+	}
+
+	if (Object.keys(cleanedVariables).length > 0) {
+		lines.push("");
+		lines.push("[variables]");
+		for (const [key, val] of Object.entries(cleanedVariables)) {
+			lines.push(`${key} = ${JSON.stringify(val)}`);
+		}
+	}
+
+	// 3. Setup phase ([phases.setup])
 	if (
 		options.nixpkgsArchive ||
 		(options.nixPkgs && options.nixPkgs.length > 0) ||
@@ -1204,18 +1346,21 @@ export const generateNixpacksToml = (options: {
 		}
 	}
 
+	// 4. Install phase ([phases.install])
 	if (options.installCmd) {
 		lines.push("");
 		lines.push("[phases.install]");
 		lines.push(`cmds = [${JSON.stringify(options.installCmd)}]`);
 	}
 
+	// 5. Build phase ([phases.build])
 	if (options.buildCmd) {
 		lines.push("");
 		lines.push("[phases.build]");
 		lines.push(`cmds = [${JSON.stringify(options.buildCmd)}]`);
 	}
 
+	// 6. Start phase ([start])
 	if (options.startCmd) {
 		lines.push("");
 		lines.push("[start]");

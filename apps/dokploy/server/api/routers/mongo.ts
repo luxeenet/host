@@ -43,6 +43,7 @@ import {
 } from "@dokploy/server/services/plan-entitlement";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { quote } from "shell-quote";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
@@ -252,6 +253,8 @@ export const mongoRouter = createTRPCRouter({
 				port: mongo.externalPort,
 				user: mongo.databaseUser,
 				password: mongo.databasePassword,
+				databaseName: mongo.databaseName || undefined,
+				authSource: mongo.authSource || "admin",
 				serverId: mongo.serverId || undefined,
 				appName: mongo.appName,
 			});
@@ -703,7 +706,29 @@ export const mongoRouter = createTRPCRouter({
 				});
 			}
 
-			const command = `docker exec ${container.Id} mongosh -u '${databaseUser}' -p '${databasePassword}' --authenticationDatabase admin --eval "db.getSiblingDB('admin').changeUserPassword('${databaseUser}', '${password}')"`;
+			const authDb = mongo.authSource || "admin";
+			const targetDb = mongo.databaseName || "app";
+			const safeUser = JSON.stringify(databaseUser);
+			const safePass = JSON.stringify(password);
+
+			const script = `
+			(function() {
+				const authDb = db.getSiblingDB(${JSON.stringify(authDb)});
+				if (authDb.getUser(${safeUser})) {
+					authDb.changeUserPassword(${safeUser}, ${safePass});
+				}
+				const targetDb = db.getSiblingDB(${JSON.stringify(targetDb)});
+				if (targetDb.getUser(${safeUser})) {
+					targetDb.changeUserPassword(${safeUser}, ${safePass});
+				}
+				const adminDb = db.getSiblingDB('admin');
+				if (adminDb.getUser(${safeUser})) {
+					adminDb.changeUserPassword(${safeUser}, ${safePass});
+				}
+			})();
+			`.trim();
+
+			const command = `docker exec ${quote([container.Id])} mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --eval ${quote([script])}`;
 
 			await db.transaction(async (tx) => {
 				await tx

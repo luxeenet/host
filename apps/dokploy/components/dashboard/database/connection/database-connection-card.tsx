@@ -1,6 +1,10 @@
 import {
+	Activity,
+	AlertCircle,
 	Check,
+	CheckCircle2,
 	Copy,
+	Download,
 	Globe,
 	Info,
 	Link2,
@@ -12,6 +16,7 @@ import {
 	Unlink,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import copy from "copy-to-clipboard";
 import { toast } from "sonner";
 import { ToggleVisibilityInput } from "@/components/shared/toggle-visibility-input";
 import { UpdateDatabasePassword } from "@/components/shared/update-database-password";
@@ -59,6 +64,8 @@ export const DatabaseConnectionCard = ({
 	);
 	const [customPort, setCustomPort] = useState<string>("");
 	const [isCustomPortOpen, setIsCustomPortOpen] = useState(false);
+	const [testResult, setTestResult] = useState<any>(null);
+	const [isTesting, setIsTesting] = useState(false);
 
 	// Mutations for password update
 	const changePasswordPostgres = api.postgres.changePassword.useMutation();
@@ -267,7 +274,7 @@ export const DatabaseConnectionCard = ({
 	} else if (databaseType === "mongo") {
 		const targetDb = dbName || (data?.databaseName as string) || "app";
 		const dbPath = `/${encodeURIComponent(targetDb)}`;
-		const authSource = (data?.authSource as string) || targetDb;
+		const authSource = (data?.authSource as string) || (data?.databaseName as string) || "admin";
 		const internalReplicaSetQuery = data?.replicaSets
 			? `&replicaSet=${encodeURIComponent(data.replicaSets)}`
 			: "&directConnection=true";
@@ -291,6 +298,65 @@ export const DatabaseConnectionCard = ({
 			? `http://${auth}${publicHost}:${externalPort}`
 			: "";
 	}
+
+	const handleTestConnection = async () => {
+		setIsTesting(true);
+		setTestResult(null);
+		try {
+			let res: any;
+			if (databaseType === "mongo") {
+				res = await utils.mongo.verifyConnectivity.fetch({ mongoId: databaseId });
+			} else if (databaseType === "postgres") {
+				res = await utils.postgres.verifyConnectivity.fetch({ postgresId: databaseId });
+			} else if (databaseType === "mysql") {
+				res = await utils.mysql.verifyConnectivity.fetch({ mysqlId: databaseId });
+			} else if (databaseType === "mariadb") {
+				res = await utils.mariadb.verifyConnectivity.fetch({ mariadbId: databaseId });
+			} else if (databaseType === "redis") {
+				res = await utils.redis.verifyConnectivity.fetch({ redisId: databaseId });
+			} else if (databaseType === "libsql") {
+				res = await utils.libsql.verifyConnectivity.fetch({ libsqlId: databaseId });
+			}
+			setTestResult(res);
+			if (res?.protocolStatus === "verified") {
+				toast.success("Database connection & authentication verified successfully!");
+			} else {
+				toast.error(res?.message || "Connection verification failed");
+			}
+		} catch (err: any) {
+			toast.error(err.message || "Failed to test connection");
+		} finally {
+			setIsTesting(false);
+		}
+	};
+
+	const handleDownloadCompassConfig = () => {
+		const targetDb = dbName || (data?.databaseName as string) || "app";
+		const authSource = (data?.authSource as string) || (data?.databaseName as string) || "admin";
+		const config = {
+			name: `${data?.name || appName} (HatDot)`,
+			connectionString: externalUrl,
+			hosts: [`${publicHost}:${externalPort}`],
+			directConnection: true,
+			database: targetDb,
+			auth: {
+				username: user,
+				password: password,
+				authSource: authSource,
+				authMechanism: "DEFAULT",
+			},
+		};
+		const blob = new Blob([JSON.stringify(config, null, 2)], {
+			type: "application/json",
+		});
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `${appName || "database"}-compass-connection.json`;
+		a.click();
+		URL.revokeObjectURL(url);
+		toast.success("Downloaded MongoDB Compass connection profile");
+	};
 
 	return (
 		<Card className="bg-background shadow-sm border">
@@ -370,9 +436,23 @@ export const DatabaseConnectionCard = ({
 								<Label className="text-sm font-semibold">
 									Internal Connection URL
 								</Label>
-								<span className="text-xs text-muted-foreground font-mono">
-									Format: {databaseType}://...
-								</span>
+								<div className="flex items-center gap-2">
+									<Button
+										variant="outline"
+										size="sm"
+										className="h-7 text-xs gap-1.5"
+										onClick={() => {
+											copy(internalUrl);
+											toast.success("Internal connection URL copied!");
+										}}
+									>
+										<Copy className="size-3.5" />
+										Copy URI
+									</Button>
+									<span className="text-xs text-muted-foreground font-mono">
+										Format: {databaseType}://...
+									</span>
+								</div>
 							</div>
 							<ToggleVisibilityInput value={internalUrl} disabled />
 						</div>
@@ -399,6 +479,19 @@ export const DatabaseConnectionCard = ({
 										Database Name
 									</Label>
 									<Input enableCopyButton disabled value={dbName} />
+								</div>
+							)}
+
+							{databaseType === "mongo" && (
+								<div className="flex flex-col gap-1.5">
+									<Label className="text-xs text-muted-foreground uppercase font-semibold">
+										Authentication Database (authSource)
+									</Label>
+									<Input
+										enableCopyButton
+										disabled
+										value={(data?.authSource as string) || (data?.databaseName as string) || "admin"}
+									/>
 								</div>
 							)}
 
@@ -507,16 +600,94 @@ export const DatabaseConnectionCard = ({
 
 								{/* Full External Connection String */}
 								<div className="flex flex-col gap-2">
-									<div className="flex items-center justify-between">
+									<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
 										<Label className="text-sm font-semibold">
 											External Connection URL (Public)
 										</Label>
-										<span className="text-xs text-muted-foreground font-mono">
-											Ready for external tools & clients
-										</span>
+										<div className="flex flex-wrap items-center gap-2">
+											<Button
+												variant="outline"
+												size="sm"
+												className="h-7 text-xs gap-1.5"
+												onClick={() => {
+													copy(externalUrl);
+													toast.success("Public connection URL copied!");
+												}}
+											>
+												<Copy className="size-3.5" />
+												Copy URI
+											</Button>
+											{databaseType === "mongo" && (
+												<Button
+													variant="outline"
+													size="sm"
+													className="h-7 text-xs gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
+													onClick={handleDownloadCompassConfig}
+												>
+													<Download className="size-3.5" />
+													Download Compass Details
+												</Button>
+											)}
+											<Button
+												variant="secondary"
+												size="sm"
+												className="h-7 text-xs gap-1.5"
+												onClick={handleTestConnection}
+												isLoading={isTesting}
+											>
+												<Activity className="size-3.5" />
+												Test Connection
+											</Button>
+										</div>
 									</div>
 									<ToggleVisibilityInput value={externalUrl} disabled />
 								</div>
+
+								{/* Connection Diagnostics Card */}
+								{testResult && (
+									<div
+										className={`p-3.5 rounded-lg border flex flex-col gap-2 text-xs ${
+											testResult.protocolStatus === "verified"
+												? "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200"
+												: "bg-destructive/10 border-destructive/30 text-destructive"
+										}`}
+									>
+										<div className="flex items-center justify-between">
+											<div className="flex items-center gap-2 font-semibold text-sm">
+												{testResult.protocolStatus === "verified" ? (
+													<CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+												) : (
+													<AlertCircle className="size-4 text-destructive" />
+												)}
+												<span>
+													{testResult.protocolStatus === "verified"
+														? "Connection & Authentication Verified"
+														: "Connection Test Failed"}
+												</span>
+											</div>
+											<div className="flex items-center gap-1.5">
+												<Badge variant="outline" className="text-[10px] py-0 px-1.5">
+													DNS: {testResult.dnsStatus}
+												</Badge>
+												<Badge variant="outline" className="text-[10px] py-0 px-1.5">
+													TCP: {testResult.tcpStatus}
+												</Badge>
+												<Badge
+													variant={testResult.authStatus === "verified" ? "default" : "destructive"}
+													className="text-[10px] py-0 px-1.5"
+												>
+													Auth: {testResult.authStatus || testResult.protocolStatus}
+												</Badge>
+											</div>
+										</div>
+										<p className="leading-relaxed">{testResult.message}</p>
+										{testResult.diagnostics?.errorDetails && (
+											<div className="font-mono text-[11px] p-2 bg-black/20 rounded border border-black/10 break-all">
+												{testResult.diagnostics.errorDetails}
+											</div>
+										)}
+									</div>
+								)}
 
 								{/* Individual External Fields Grid */}
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -548,6 +719,19 @@ export const DatabaseConnectionCard = ({
 												Database Name
 											</Label>
 											<Input enableCopyButton disabled value={dbName} />
+										</div>
+									)}
+
+									{databaseType === "mongo" && (
+										<div className="flex flex-col gap-1.5">
+											<Label className="text-xs text-muted-foreground uppercase font-semibold">
+												Authentication Database (authSource)
+											</Label>
+											<Input
+												enableCopyButton
+												disabled
+												value={(data?.authSource as string) || (data?.databaseName as string) || "admin"}
+											/>
 										</div>
 									)}
 

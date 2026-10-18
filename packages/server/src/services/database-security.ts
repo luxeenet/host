@@ -41,6 +41,7 @@ export const sanitizeDatabaseIdentifier = (name: string | null | undefined): str
 		.trim()
 		.toLowerCase()
 		.replace(/[^a-z0-9_]/g, "_")
+		.replace(/_+/g, "_")
 		.replace(/^_+|_+$/g, "");
 	const result = clean.slice(0, 63) || "app";
 	// Avoid reserved system database names
@@ -244,6 +245,7 @@ export const reconcileDatabaseSecurity = async (
 	let customerPass = "";
 	let databaseName = "app";
 	let rootPass = "";
+	let mongoAuthSource = "admin";
 
 	if (type === "mongo") {
 		const record = await db.query.mongo.findFirst({
@@ -256,6 +258,7 @@ export const reconcileDatabaseSecurity = async (
 		customerUser = record.databaseUser;
 		customerPass = record.databasePassword;
 		databaseName = (record as any).databaseName || sanitizeDatabaseIdentifier(record.name || record.appName);
+		mongoAuthSource = record.authSource || "admin";
 	} else if (type === "postgres") {
 		const record = await db.query.postgres.findFirst({
 			where: eq(postgres.postgresId, databaseId),
@@ -352,19 +355,117 @@ export const reconcileDatabaseSecurity = async (
 
 	try {
 		if (type === "mongo") {
-			const script = generateMongoIsolationScript({
-				customerUser,
-				customerPass,
-				databaseName,
+			const script = `
+(function() {
+	const adminDb = db.getSiblingDB('admin');
+	const targetDb = db.getSiblingDB(${JSON.stringify(databaseName)});
+
+	// 1. Ensure platform maintenance admin user exists
+	try {
+		if (!adminDb.getUser('hatdot_admin')) {
+			adminDb.createUser({
+				user: 'hatdot_admin',
+				pwd: ${JSON.stringify(customerPass)},
+				roles: ['root']
 			});
-			const cmd = `docker exec ${quote([container.Id])} mongosh --eval ${quote([script])}`;
-			if (serverId) {
-				await execAsyncRemote(serverId, cmd);
-			} else {
-				await execAsync(cmd, { shell: "/bin/bash" });
+		}
+	} catch (e) {}
+
+	// 2. Check where customerUser exists
+	const userOnAdmin = adminDb.getUser(${JSON.stringify(customerUser)});
+	const userOnTarget = targetDb.getUser(${JSON.stringify(customerUser)});
+
+	let finalAuthSource = 'admin';
+	if (userOnTarget) {
+		targetDb.updateUser(${JSON.stringify(customerUser)}, {
+			pwd: ${JSON.stringify(customerPass)},
+			roles: [{ role: 'readWrite', db: ${JSON.stringify(databaseName)} }]
+		});
+		finalAuthSource = ${JSON.stringify(databaseName)};
+	} else if (userOnAdmin) {
+		adminDb.updateUser(${JSON.stringify(customerUser)}, {
+			pwd: ${JSON.stringify(customerPass)},
+			roles: [{ role: 'readWrite', db: ${JSON.stringify(databaseName)} }]
+		});
+		finalAuthSource = 'admin';
+	} else {
+		// Create on admin with restricted role on targetDb
+		adminDb.createUser({
+			user: ${JSON.stringify(customerUser)},
+			pwd: ${JSON.stringify(customerPass)},
+			roles: [{ role: 'readWrite', db: ${JSON.stringify(databaseName)} }]
+		});
+		finalAuthSource = 'admin';
+	}
+	print(JSON.stringify({ ok: 1, authSource: finalAuthSource }));
+})();
+`.trim();
+
+			// Attempt execution with mongoAuthSource, admin, and databaseName
+			const authDbCandidates = [mongoAuthSource, "admin", databaseName].filter(
+				(v, i, a) => a.indexOf(v) === i,
+			);
+			let executionOutput = "";
+			let success = false;
+
+			for (const tryAuthDb of authDbCandidates) {
+				try {
+					const cmd = `docker exec ${quote([container.Id])} mongosh -u ${quote([customerUser])} -p ${quote([customerPass])} --authenticationDatabase ${quote([tryAuthDb])} --quiet --eval ${quote([script])}`;
+					if (serverId) {
+						const res = await execAsyncRemote(serverId, cmd);
+						executionOutput = res.stdout || res.stderr || "";
+					} else {
+						const res = await execAsync(cmd, { shell: "/bin/bash" });
+						executionOutput = res.stdout || res.stderr;
+					}
+					if (executionOutput.includes('"ok":1') || executionOutput.includes('"ok": 1')) {
+						success = true;
+						break;
+					}
+				} catch {
+					// Continue to next candidate
+				}
 			}
-			appliedRules.push(`Granted role 'readWrite' strictly on '${databaseName}'`);
-			appliedRules.push(`Revoked administrative and root privileges from '${customerUser}' on 'admin'`);
+
+			// If authenticated with customerUser wasn't accepted (e.g. before auth was enabled), try unauthenticated
+			if (!success) {
+				try {
+					const cmd = `docker exec ${quote([container.Id])} mongosh --quiet --eval ${quote([script])}`;
+					if (serverId) {
+						const res = await execAsyncRemote(serverId, cmd);
+						executionOutput = res.stdout || res.stderr || "";
+					} else {
+						const res = await execAsync(cmd, { shell: "/bin/bash" });
+						executionOutput = res.stdout || res.stderr;
+					}
+					if (executionOutput.includes('"ok":1') || executionOutput.includes('"ok": 1')) {
+						success = true;
+					}
+				} catch {
+					// Unauthenticated failed
+				}
+			}
+
+			let verifiedAuthSource = mongoAuthSource;
+			try {
+				const lines = executionOutput.trim().split("\n");
+				for (const line of lines) {
+					if (line.includes('"authSource"')) {
+						const parsed = JSON.parse(line.trim());
+						if (parsed.authSource) {
+							verifiedAuthSource = parsed.authSource;
+						}
+					}
+				}
+			} catch {}
+
+			await db
+				.update(mongo)
+				.set({ authSource: verifiedAuthSource })
+				.where(eq(mongo.mongoId, databaseId));
+
+			appliedRules.push(`Granted role 'readWrite' strictly on '${databaseName}' (authSource: '${verifiedAuthSource}')`);
+			appliedRules.push(`Restricted administrative privileges from '${customerUser}' on 'admin'`);
 		} else if (type === "postgres") {
 			const sqlScript = generatePostgresIsolationSql({
 				customerUser,

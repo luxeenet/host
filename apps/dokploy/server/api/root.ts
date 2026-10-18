@@ -58,6 +58,7 @@ import { userRouter } from "./routers/user";
 import { vaultProviderRouter } from "./routers/vault-provider";
 import { volumeBackupsRouter } from "./routers/volume-backups";
 // ─── Platform Business Layer ──────────────────────────────────
+import { databaseManagerRouter } from "./routers/database-manager";
 import { planRouter } from "./routers/plan";
 import { subscriptionRouter } from "./routers/subscription";
 import { supportRouter } from "./routers/support";
@@ -128,6 +129,7 @@ export const appRouter = createTRPCRouter({
 	overview: overviewRouter,
 	transfer: transferRouter,
 	// ─── Platform Business Layer ──────────────────────────────
+	databaseManager: databaseManagerRouter,
 	plan: planRouter,
 	subscription: subscriptionRouter,
 	support: supportRouter,

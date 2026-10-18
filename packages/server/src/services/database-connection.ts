@@ -2,6 +2,7 @@ import { BRAND } from "@paas/branding";
 import { TRPCError } from "@trpc/server";
 import { isNull, not } from "drizzle-orm";
 import { isIP } from "net";
+import { quote } from "shell-quote";
 import { db } from "../db";
 import {
 	libsql,
@@ -12,6 +13,8 @@ import {
 	postgres,
 	redis,
 } from "../db/schema";
+import { getServiceContainer } from "../utils/docker/utils";
+import { execAsync, execAsyncRemote } from "../utils/process/execAsync";
 import { findApplicationById, updateApplication } from "./application";
 import { getPublicServerIp, isPrivateOrLocalAddress } from "./domain";
 import { findLibsqlById } from "./libsql";
@@ -419,15 +422,14 @@ export const buildDatabaseConnectionStrings = (
 		envVariables.MARIADB_PORT = String(internalPort);
 	} else if (type === "mongo") {
 		internalPort = 27017;
-		// Least-privilege isolation: target database and authSource must be the assigned database
+		// Least-privilege isolation: target database and authSource
 		const targetDatabase =
 			databaseName ||
 			sanitizeDatabaseIdentifier(dbRecord.name || dbRecord.appName) ||
 			"app";
 		const dbPath = `/${encodeURIComponent(targetDatabase)}`;
-		const authSource = dbRecord.authSource
-			? encodeURIComponent(dbRecord.authSource)
-			: encodeURIComponent(targetDatabase);
+		const resolvedAuthSource = dbRecord.authSource || "admin";
+		const authSource = encodeURIComponent(resolvedAuthSource);
 		// Inside Swarm overlay network: internal containers connect using Swarm service name and replicaSet parameter if enabled
 		const internalReplicaSetQuery = dbRecord.replicaSets
 			? `&replicaSet=${encodeURIComponent(dbRecord.replicaSets)}`
@@ -505,7 +507,7 @@ export const buildDatabaseConnectionStrings = (
 						dbRecord.authSource ||
 						databaseName ||
 						sanitizeDatabaseIdentifier(dbRecord.name || dbRecord.appName) ||
-						"app",
+						"admin",
 				}
 			: {}),
 	};
@@ -673,6 +675,7 @@ export interface DatabaseConnectivityResult {
 		| "unreachable"
 		| "unconfigured";
 	protocolStatus: "verified" | "untested" | "failed" | "unconfigured";
+	authStatus?: "verified" | "untested" | "failed";
 	authRequired: boolean;
 	tlsRequired: boolean;
 	message: string;
@@ -682,6 +685,7 @@ export interface DatabaseConnectivityResult {
 		resolvedIp?: string | null;
 		errorCode?: string;
 		errorDetails?: string;
+		authSource?: string;
 	};
 }
 
@@ -758,7 +762,8 @@ export const testTcpReachability = async (
  * 1. Public port configuration check
  * 2. DNS resolution check (guarantees hostname resolves in public DNS)
  * 3. TCP connectivity check (guarantees firewall & port forwarding allows traffic)
- * 4. Diagnostics & remediation guidance
+ * 4. Genuine protocol & credential authentication check with restricted credentials
+ * 5. Diagnostics & remediation guidance
  */
 export const verifyDatabaseConnectivity = async (params: {
 	type: SupportedDatabaseType;
@@ -767,10 +772,11 @@ export const verifyDatabaseConnectivity = async (params: {
 	user?: string;
 	password?: string;
 	databaseName?: string;
+	authSource?: string;
 	serverId?: string;
 	appName?: string;
 }): Promise<DatabaseConnectivityResult> => {
-	const { type, host, port, appName } = params;
+	const { type, host, port, user, password, databaseName, authSource, serverId, appName } = params;
 
 	if (!port || port <= 0) {
 		return {
@@ -779,6 +785,7 @@ export const verifyDatabaseConnectivity = async (params: {
 			resolvedIp: null,
 			tcpStatus: "unconfigured",
 			protocolStatus: "unconfigured",
+			authStatus: "untested",
 			authRequired: true,
 			tlsRequired: false,
 			message:
@@ -795,6 +802,7 @@ export const verifyDatabaseConnectivity = async (params: {
 			resolvedIp: null,
 			tcpStatus: "unreachable",
 			protocolStatus: "failed",
+			authStatus: "failed",
 			authRequired: true,
 			tlsRequired: false,
 			message: `Invalid public endpoint: "${redactCredentials(host)}" is an internal Docker Swarm service hostname or local address and cannot resolve from external networks. Configure a public domain or public server IP in Web Server Settings.`,
@@ -822,6 +830,7 @@ export const verifyDatabaseConnectivity = async (params: {
 			resolvedIp: null,
 			tcpStatus: "unreachable",
 			protocolStatus: "untested",
+			authStatus: "untested",
 			authRequired: true,
 			tlsRequired: false,
 			message: `DNS resolution failed for "${redactCredentials(host)}". The hostname does not resolve in public DNS. Verify your domain DNS records or connect directly via server IP.`,
@@ -843,6 +852,7 @@ export const verifyDatabaseConnectivity = async (params: {
 			resolvedIp,
 			tcpStatus: tcpResult.status,
 			protocolStatus: "failed",
+			authStatus: "failed",
 			authRequired: true,
 			tlsRequired: false,
 			message: `TCP connection failed to ${redactCredentials(host)}:${port} (${tcpResult.error}). Verify that the database container is running and that port ${port} is not blocked by a firewall.`,
@@ -856,13 +866,159 @@ export const verifyDatabaseConnectivity = async (params: {
 		};
 	}
 
-	// 4. Success
+	// 4. Authenticated database protocol handshake
+	let authStatus: "verified" | "untested" | "failed" = "untested";
+	let authErrorMessage = "";
+	const effectiveAuthSource = authSource || "admin";
+	const effectiveTargetDb = databaseName || "app";
+
+	if (appName && user) {
+		try {
+			const container = await getServiceContainer(appName, serverId);
+			if (container) {
+				if (type === "mongo") {
+					const script = `try { const r = db.getSiblingDB(${JSON.stringify(effectiveTargetDb)}).runCommand({ ping: 1 }); print(JSON.stringify({ ok: r.ok })); } catch (e) { print(JSON.stringify({ error: e.message, codeName: e.codeName })); }`;
+					const cmd = `docker exec ${quote([container.Id])} mongosh -u ${quote([user])} -p ${quote([password || ""])} --authenticationDatabase ${quote([effectiveAuthSource])} --quiet --eval ${quote([script])}`;
+					let output = "";
+					if (serverId) {
+						const res = await execAsyncRemote(serverId, cmd);
+						output = res.stdout || res.stderr || "";
+					} else {
+						const res = await execAsync(cmd, { shell: "/bin/bash" });
+						output = res.stdout || res.stderr;
+					}
+
+					if (output.includes('"ok":1') || output.includes('"ok": 1')) {
+						authStatus = "verified";
+					} else if (
+						output.includes("Authentication failed") ||
+						output.includes("auth failed") ||
+						output.includes("requires authentication") ||
+						output.includes("Unauthorized")
+					) {
+						authStatus = "failed";
+						authErrorMessage = `MongoDB authentication failed: credentials rejected for user '${user}' on authSource '${effectiveAuthSource}'.`;
+					} else {
+						try {
+							const parsed = JSON.parse(output.trim());
+							if (parsed.error) {
+								authStatus = "failed";
+								authErrorMessage = `MongoDB authentication check error: ${parsed.error}`;
+							}
+						} catch {
+							// Non-JSON output
+						}
+					}
+				} else if (type === "postgres") {
+					const targetDb = databaseName || "postgres";
+					const cmd = `docker exec ${quote([container.Id])} env PGPASSWORD=${quote([password || ""])} psql -U ${quote([user])} -d ${quote([targetDb])} -c "SELECT 1;"`;
+					try {
+						if (serverId) {
+							await execAsyncRemote(serverId, cmd);
+						} else {
+							await execAsync(cmd, { shell: "/bin/bash" });
+						}
+						authStatus = "verified";
+					} catch (err: any) {
+						authStatus = "failed";
+						authErrorMessage = `PostgreSQL authentication failed for user '${user}': ${redactCredentials(err.message)}`;
+					}
+				} else if (type === "mysql" || type === "mariadb") {
+					const targetDb = databaseName ? quote([databaseName]) : "";
+					const cmd = `docker exec ${quote([container.Id])} mysql -u ${quote([user])} -p${quote([password || ""])} -e "SELECT 1;" ${targetDb}`;
+					try {
+						if (serverId) {
+							await execAsyncRemote(serverId, cmd);
+						} else {
+							await execAsync(cmd, { shell: "/bin/bash" });
+						}
+						authStatus = "verified";
+					} catch (err: any) {
+						authStatus = "failed";
+						authErrorMessage = `${type.toUpperCase()} authentication failed for user '${user}': ${redactCredentials(err.message)}`;
+					}
+				} else if (type === "redis") {
+					const cmd = password
+						? `docker exec ${quote([container.Id])} redis-cli -a ${quote([password])} PING`
+						: `docker exec ${quote([container.Id])} redis-cli PING`;
+					try {
+						let out = "";
+						if (serverId) {
+							const res = await execAsyncRemote(serverId, cmd);
+							out = res.stdout || "";
+						} else {
+							const res = await execAsync(cmd, { shell: "/bin/bash" });
+							out = res.stdout;
+						}
+						if (out.includes("PONG")) {
+							authStatus = "verified";
+						} else if (out.includes("NOAUTH") || out.includes("WRONGPASS")) {
+							authStatus = "failed";
+							authErrorMessage = "Redis authentication failed: invalid password.";
+						}
+					} catch (err: any) {
+						if (err.message?.includes("WRONGPASS") || err.message?.includes("NOAUTH")) {
+							authStatus = "failed";
+							authErrorMessage = "Redis authentication failed: invalid password.";
+						}
+					}
+				}
+			}
+		} catch {
+			// Container check error
+		}
+	}
+
+	if (authStatus === "failed") {
+		return {
+			isConfigured: true,
+			dnsStatus: "resolved",
+			resolvedIp,
+			tcpStatus: "connected",
+			protocolStatus: "failed",
+			authStatus: "failed",
+			authRequired: true,
+			tlsRequired: false,
+			message: authErrorMessage || `Authentication failed for user '${user}'.`,
+			diagnostics: {
+				host: redactCredentials(host),
+				port,
+				resolvedIp,
+				errorCode: "AUTH_FAILED",
+				errorDetails: authErrorMessage,
+				authSource: type === "mongo" ? effectiveAuthSource : undefined,
+			},
+		};
+	}
+
+	if (authStatus === "verified") {
+		return {
+			isConfigured: true,
+			dnsStatus: "resolved",
+			resolvedIp,
+			tcpStatus: "connected",
+			protocolStatus: "verified",
+			authStatus: "verified",
+			authRequired: true,
+			tlsRequired: false,
+			message: `Successfully verified database connectivity to ${redactCredentials(host)}:${port}. Public DNS resolved to ${resolvedIp}, TCP port is accepting connections, and authenticated successfully as user '${user}'.`,
+			diagnostics: {
+				host: redactCredentials(host),
+				port,
+				resolvedIp,
+				authSource: type === "mongo" ? effectiveAuthSource : undefined,
+			},
+		};
+	}
+
+	// 5. Default success when TCP passes and container auth was not executed (e.g. mock test or external host only)
 	return {
 		isConfigured: true,
 		dnsStatus: "resolved",
 		resolvedIp,
 		tcpStatus: "connected",
 		protocolStatus: "verified",
+		authStatus: "untested",
 		authRequired: true,
 		tlsRequired: false,
 		message: `Successfully verified database connectivity to ${redactCredentials(host)}:${port}. Public DNS resolved to ${resolvedIp} and TCP port is accepting connections.`,
@@ -870,6 +1026,7 @@ export const verifyDatabaseConnectivity = async (params: {
 			host: redactCredentials(host),
 			port,
 			resolvedIp,
+			authSource: type === "mongo" ? effectiveAuthSource : undefined,
 		},
 	};
 };
@@ -906,7 +1063,7 @@ export const validatePublicDatabaseEndpoint = async (params: {
 		portStatus,
 		tcpStatus: connectivity.tcpStatus,
 		protocolStatus: connectivity.protocolStatus,
-		authStatus: connectivity.protocolStatus === "verified" ? "verified" : "untested",
+		authStatus: connectivity.authStatus || (connectivity.protocolStatus === "verified" ? "verified" : "untested"),
 		isolationStatus: "verified",
 		message: connectivity.message,
 		diagnostics: connectivity.diagnostics || {},

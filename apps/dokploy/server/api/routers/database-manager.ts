@@ -1,9 +1,11 @@
 import {
 	buildDatabaseConnectionStrings,
+	executeDatabaseImport,
 	getAuthorizedDatabaseRecord,
 	getPublicDatabaseHost,
 	libsqlAdapter,
 	mongoAdapter,
+	previewImport,
 	redisAdapter,
 	sqlAdapter,
 	type SupportedDatabaseType,
@@ -898,5 +900,74 @@ export const databaseManagerRouter = createTRPCRouter({
 			});
 
 			return res;
+		}),
+
+	/**
+	 * Previews an uploaded CSV or JSON file, detects headers, infers types, and offers sample records.
+	 */
+	previewImportFile: protectedProcedure
+		.input(
+			z.object({
+				databaseId: z.string().min(1),
+				engine: SupportedEngineEnum,
+				fileContent: z.string().max(10 * 1024 * 1024),
+				fileType: z.enum(["csv", "json"]),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.databaseId, "read");
+			await getAuthorizedDatabaseRecord(
+				input.databaseId,
+				input.engine,
+				ctx.session.activeOrganizationId,
+			);
+
+			const preview = previewImport(input.fileContent, input.fileType);
+			return preview;
+		}),
+
+	/**
+	 * Universally imports CSV or JSON records into any of the 6 supported database engines
+	 * with schema-aware conversion, duplicate handling policies, row-level error reporting, and transactions.
+	 */
+	importData: protectedProcedure
+		.input(
+			z.object({
+				databaseId: z.string().min(1),
+				engine: SupportedEngineEnum,
+				targetEntity: z.string().min(1),
+				fileContent: z.string().max(10 * 1024 * 1024),
+				fileType: z.enum(["csv", "json"]),
+				fieldMappings: z.record(z.string(), z.string()).optional(),
+				duplicatePolicy: z.enum(["reject", "skip", "update"]).default("skip"),
+				redisConfig: z
+					.object({
+						structure: z.enum(["string", "hash", "list", "set", "zset"]).default("hash"),
+						keyField: z.string().optional(),
+						keyPrefix: z.string().optional(),
+						scoreField: z.string().optional(),
+						ttl: z.number().optional(),
+					})
+					.optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.databaseId, "create");
+			const record = await getAuthorizedDatabaseRecord(
+				input.databaseId,
+				input.engine,
+				ctx.session.activeOrganizationId,
+			);
+
+			const result = await executeDatabaseImport(record, input);
+
+			await audit(ctx, {
+				action: "create",
+				resourceType: "service",
+				resourceId: input.databaseId,
+				resourceName: `${record.appName}:import:${input.targetEntity}`,
+			});
+
+			return result;
 		}),
 });

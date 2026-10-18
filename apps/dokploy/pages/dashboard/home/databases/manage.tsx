@@ -6,6 +6,7 @@ import {
 	AlertCircle,
 	AlertTriangle,
 	ArrowLeft,
+	ArrowRight,
 	Check,
 	CheckCircle2,
 	ChevronRight,
@@ -13,6 +14,7 @@ import {
 	Code2,
 	Copy,
 	Database,
+	Download,
 	Edit,
 	FileText,
 	HardDrive,
@@ -25,11 +27,13 @@ import {
 	RefreshCw,
 	Search,
 	Server,
+	Settings2,
 	Shield,
 	ShieldAlert,
 	Table as TableIcon,
 	Terminal,
 	Trash2,
+	Upload,
 	UserCheck,
 	Users,
 	Wrench,
@@ -540,6 +544,294 @@ export default function DatabaseManagePage() {
 			toast.error(err?.message || "Failed to drop user");
 		}
 	};
+	// -------------------------------------------------------------
+	// Universal Data Import State & Handlers (All 6 Engines)
+	// -------------------------------------------------------------
+	const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+	const [importStep, setImportStep] = useState<
+		"upload" | "mapping" | "preview" | "importing" | "result"
+	>("upload");
+	const [importFileName, setImportFileName] = useState("");
+	const [importFileSize, setImportFileSize] = useState(0);
+	const [importFileType, setImportFileType] = useState<"csv" | "json">("csv");
+	const [importFileContent, setImportFileContent] = useState("");
+	const [importTargetEntity, setImportTargetEntity] = useState("");
+	const [importDuplicatePolicy, setImportDuplicatePolicy] = useState<
+		"skip" | "update" | "reject"
+	>("skip");
+	const [importFieldMappings, setImportFieldMappings] = useState<
+		Record<string, string>
+	>({});
+
+	// Redis specific import settings
+	const [redisStructure, setRedisStructure] = useState<
+		"hash" | "string" | "list" | "set" | "zset"
+	>("hash");
+	const [redisKeyField, setRedisKeyField] = useState("");
+	const [redisKeyPrefix, setRedisKeyPrefix] = useState("item:");
+	const [redisScoreField, setRedisScoreField] = useState("");
+	const [redisTtl, setRedisTtl] = useState("");
+
+	// Dynamic target schema query for SQL
+	const { data: targetTableSchema } = api.databaseManager.getSchema.useQuery(
+		{ databaseId, engine: databaseEngine, name: importTargetEntity },
+		{
+			enabled: Boolean(
+				databaseId && importTargetEntity && meta.isSql && isImportModalOpen,
+			),
+		},
+	);
+
+	// Preview & Execution state
+	const [previewData, setPreviewData] = useState<{
+		headers: string[];
+		totalRecords: number;
+		previewRows: any[];
+		sampleInferredTypes: Record<string, string>;
+	} | null>(null);
+
+	const [importResult, setImportResult] = useState<{
+		totalRows?: number;
+		totalRecords?: number;
+		inserted?: number;
+		insertedCount?: number;
+		updated?: number;
+		updatedCount?: number;
+		skipped?: number;
+		skippedCount?: number;
+		failed?: number;
+		failedCount?: number;
+		durationMs?: number;
+		errors?: Array<{
+			row?: number;
+			rowNumber?: number;
+			identifier?: string;
+			keyOrId?: string;
+			message?: string;
+			reason?: string;
+		}>;
+	} | null>(null);
+
+	const previewMutation = api.databaseManager.previewImportFile.useMutation();
+	const importMutation = api.databaseManager.importData.useMutation();
+
+	const handleOpenImportModal = (target?: string) => {
+		const defaultTarget =
+			target ||
+			selectedEntity ||
+			(collectionsOrTables.length > 0 ? collectionsOrTables[0]?.name : "") ||
+			(databaseEngine === "redis" ? "item:" : "records");
+
+		setImportTargetEntity(defaultTarget);
+		setImportStep("upload");
+		setImportFileName("");
+		setImportFileSize(0);
+		setImportFileType("csv");
+		setImportFileContent("");
+		setImportDuplicatePolicy("skip");
+		setImportFieldMappings({});
+		setPreviewData(null);
+		setImportResult(null);
+		setRedisStructure("hash");
+		setRedisKeyField("");
+		setRedisKeyPrefix(databaseEngine === "redis" ? "item:" : "");
+		setRedisScoreField("");
+		setRedisTtl("");
+		setIsImportModalOpen(true);
+	};
+
+	const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+
+		if (file.size > 10 * 1024 * 1024) {
+			toast.error("File is too large. Maximum file size is 10MB.");
+			return;
+		}
+
+		setImportFileName(file.name);
+		setImportFileSize(file.size);
+
+		const isJson =
+			file.name.endsWith(".json") ||
+			file.name.endsWith(".jsonl") ||
+			file.name.endsWith(".ndjson");
+		const detectedType = isJson ? "json" : "csv";
+		setImportFileType(detectedType);
+
+		const reader = new FileReader();
+		reader.onload = async (event) => {
+			const text = String(event.target?.result || "");
+			setImportFileContent(text);
+			await processFileContent(text, detectedType);
+		};
+		reader.onerror = () => {
+			toast.error("Failed to read selected file.");
+		};
+		reader.readAsText(file);
+	};
+
+	const processFileContent = async (text: string, type: "csv" | "json") => {
+		if (!text.trim()) {
+			toast.error("File appears to be empty.");
+			return;
+		}
+
+		try {
+			const preview = await previewMutation.mutateAsync({
+				databaseId,
+				engine: databaseEngine,
+				fileContent: text,
+				fileType: type,
+			});
+
+			setPreviewData(preview);
+
+			// Initialize default field mappings
+			const initialMappings: Record<string, string> = {};
+			for (const h of preview.headers) {
+				initialMappings[h] = h;
+			}
+			setImportFieldMappings(initialMappings);
+
+			// Auto detect Redis key field
+			const keyCandidates = ["id", "key", "_id", "code", "uuid", "name"];
+			const matchedKey = preview.headers.find((h) =>
+				keyCandidates.includes(h.toLowerCase()),
+			);
+			if (matchedKey) {
+				setRedisKeyField(matchedKey);
+			} else if (preview.headers.length > 0) {
+				setRedisKeyField(preview.headers[0] || "");
+			}
+
+			// Auto detect Redis score field if zset
+			const scoreCandidates = [
+				"score",
+				"rank",
+				"points",
+				"timestamp",
+				"weight",
+			];
+			const matchedScore = preview.headers.find((h) =>
+				scoreCandidates.includes(h.toLowerCase()),
+			);
+			if (matchedScore) {
+				setRedisScoreField(matchedScore);
+			}
+
+			setImportStep("mapping");
+		} catch (err: any) {
+			toast.error(err?.message || "Failed to preview file contents");
+		}
+	};
+
+	const handleExecuteImport = async () => {
+		if (!importTargetEntity.trim()) {
+			toast.error(
+				databaseEngine === "redis"
+					? "Please specify a key prefix or target name"
+					: databaseEngine === "mongo"
+						? "Please specify target collection name"
+						: "Please specify target table name",
+			);
+			return;
+		}
+
+		setImportStep("importing");
+		try {
+			const res = await importMutation.mutateAsync({
+				databaseId,
+				engine: databaseEngine,
+				targetEntity: importTargetEntity.trim(),
+				fileContent: importFileContent,
+				fileType: importFileType,
+				fieldMappings: importFieldMappings,
+				duplicatePolicy: importDuplicatePolicy,
+				redisConfig:
+					databaseEngine === "redis"
+						? {
+								structure: redisStructure,
+								keyField: redisKeyField || undefined,
+								keyPrefix: redisKeyPrefix || undefined,
+								scoreField: redisScoreField || undefined,
+								ttl: redisTtl ? Number.parseInt(redisTtl, 10) : undefined,
+							}
+						: undefined,
+			});
+
+			setImportResult(res);
+			setImportStep("result");
+
+			const inserted = res.inserted ?? res.insertedCount ?? 0;
+			const updated = res.updated ?? res.updatedCount ?? 0;
+			const skipped = res.skipped ?? res.skippedCount ?? 0;
+			const failed = res.failed ?? res.failedCount ?? 0;
+
+			if (inserted > 0 || updated > 0) {
+				toast.success(
+					`Import complete: ${inserted} inserted, ${updated} updated${
+						skipped > 0 ? `, ${skipped} skipped` : ""
+					}`,
+				);
+			} else if (failed > 0) {
+				toast.error(`Import failed: ${failed} errors encountered`);
+			} else {
+				toast.info(`Import processed: ${skipped} records skipped`);
+			}
+
+			// Automatically refresh data explorer
+			await refetchList();
+			if (databaseEngine === "redis") {
+				await refetchRedisKeys();
+			} else {
+				await refetchData();
+			}
+			await refetchStats();
+		} catch (err: any) {
+			setImportStep("mapping");
+			toast.error(err?.message || "Data import failed");
+		}
+	};
+
+	const handleDownloadFailureReport = () => {
+		if (!importResult || !importResult.errors || importResult.errors.length === 0) return;
+		const report = {
+			databaseId,
+			engine: databaseEngine,
+			targetEntity: importTargetEntity,
+			timestamp: new Date().toISOString(),
+			summary: {
+				totalRows: importResult.totalRows ?? importResult.totalRecords ?? 0,
+				inserted: importResult.inserted ?? importResult.insertedCount ?? 0,
+				updated: importResult.updated ?? importResult.updatedCount ?? 0,
+				skipped: importResult.skipped ?? importResult.skippedCount ?? 0,
+				failed: importResult.failed ?? importResult.failedCount ?? 0,
+			},
+			errors: importResult.errors,
+		};
+
+		const blob = new Blob([JSON.stringify(report, null, 2)], {
+			type: "application/json",
+		});
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `import-failures-${importTargetEntity}-${Date.now()}.json`;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		URL.revokeObjectURL(url);
+		toast.success("Failure report downloaded");
+	};
+
+	const handleViewInExplorer = () => {
+		setIsImportModalOpen(false);
+		if (databaseEngine !== "redis" && importTargetEntity) {
+			setSelectedEntity(importTargetEntity);
+		}
+		setActiveTab("explorer");
+	};
 
 	return (
 		<>
@@ -605,6 +897,15 @@ export default function DatabaseManagePage() {
 
 					{/* Header Actions */}
 					<div className="flex items-center gap-2">
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => handleOpenImportModal()}
+							className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-950/30 text-xs gap-1.5 h-8 font-medium"
+						>
+							<Upload className="w-3.5 h-3.5 text-indigo-400" /> Import Data
+						</Button>
+
 						<Button
 							variant="outline"
 							size="sm"
@@ -690,13 +991,23 @@ export default function DatabaseManagePage() {
 											<Layers className="w-3.5 h-3.5 text-red-400" /> Keys
 											Explorer
 										</h3>
-										<Button
-											size="sm"
-											onClick={() => setIsAddRedisKeyOpen(true)}
-											className="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] h-7 px-2.5 gap-1"
-										>
-											<Plus className="w-3 h-3" /> New Key
-										</Button>
+										<div className="flex items-center gap-1.5">
+											<Button
+												size="sm"
+												variant="outline"
+												onClick={() => handleOpenImportModal()}
+												className="border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 text-[11px] h-7 px-2.5 gap-1"
+											>
+												<Upload className="w-3 h-3 text-red-400" /> Import
+											</Button>
+											<Button
+												size="sm"
+												onClick={() => setIsAddRedisKeyOpen(true)}
+												className="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] h-7 px-2.5 gap-1"
+											>
+												<Plus className="w-3 h-3" /> New Key
+											</Button>
+										</div>
 									</div>
 
 									{/* Key search filter */}
@@ -985,6 +1296,15 @@ export default function DatabaseManagePage() {
 										</div>
 
 										<div className="flex items-center gap-2">
+											<Button
+												variant="outline"
+												size="sm"
+												onClick={() => handleOpenImportModal(selectedEntity)}
+												className="border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 text-xs h-8 px-3 gap-1.5"
+											>
+												<Upload className="w-3.5 h-3.5 text-indigo-400" /> Import Data
+											</Button>
+
 											<Button
 												size="sm"
 												onClick={() => {
@@ -1714,6 +2034,811 @@ export default function DatabaseManagePage() {
 							Create User
 						</Button>
 					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* ========================================================= */}
+			{/* UNIVERSAL DATA IMPORT DIALOG (ALL 6 ENGINES)               */}
+			{/* ========================================================= */}
+			<Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+				<DialogContent className="max-w-3xl bg-slate-950 border-slate-800 text-white p-6 max-h-[90vh] overflow-y-auto">
+					<DialogHeader>
+						<div className="flex items-center justify-between">
+							<div className="flex items-center gap-2.5">
+								<div className="p-2 rounded-lg bg-indigo-950/60 border border-indigo-500/30 text-indigo-400">
+									<Upload className="w-5 h-5" />
+								</div>
+								<div>
+									<DialogTitle className="text-base font-bold text-white flex items-center gap-2">
+										<span>Import Data into {meta.label}</span>
+										<Badge
+											variant="outline"
+											className="text-[10px] uppercase font-mono border-slate-700"
+										>
+											{databaseEngine}
+										</Badge>
+									</DialogTitle>
+									<DialogDescription className="text-xs text-slate-400 mt-0.5">
+										Upload CSV or JSON records with schema-aware mapping, type
+										validation, and duplicate handling.
+									</DialogDescription>
+								</div>
+							</div>
+						</div>
+
+						{/* Step indicator bar */}
+						<div className="flex items-center justify-between border-t border-b border-slate-800/80 py-2.5 my-3 text-xs">
+							<div
+								className={`flex items-center gap-1.5 font-medium ${
+									importStep === "upload"
+										? "text-indigo-400"
+										: "text-slate-400"
+								}`}
+							>
+								<span
+									className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+										importStep === "upload"
+											? "bg-indigo-600 text-white"
+											: "bg-slate-800 text-slate-400"
+									}`}
+								>
+									1
+								</span>
+								<span>Select Source</span>
+							</div>
+							<ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+							<div
+								className={`flex items-center gap-1.5 font-medium ${
+									importStep === "mapping"
+										? "text-indigo-400"
+										: "text-slate-400"
+								}`}
+							>
+								<span
+									className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+										importStep === "mapping"
+											? "bg-indigo-600 text-white"
+											: "bg-slate-800 text-slate-400"
+									}`}
+								>
+									2
+								</span>
+								<span>Configure & Map</span>
+							</div>
+							<ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+							<div
+								className={`flex items-center gap-1.5 font-medium ${
+									importStep === "preview"
+										? "text-indigo-400"
+										: "text-slate-400"
+								}`}
+							>
+								<span
+									className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+										importStep === "preview"
+											? "bg-indigo-600 text-white"
+											: "bg-slate-800 text-slate-400"
+									}`}
+								>
+									3
+								</span>
+								<span>Preview</span>
+							</div>
+							<ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+							<div
+								className={`flex items-center gap-1.5 font-medium ${
+									importStep === "result" || importStep === "importing"
+										? "text-indigo-400"
+										: "text-slate-400"
+								}`}
+							>
+								<span
+									className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+										importStep === "result"
+											? "bg-emerald-600 text-white"
+											: "bg-slate-800 text-slate-400"
+									}`}
+								>
+									4
+								</span>
+								<span>Results</span>
+							</div>
+						</div>
+					</DialogHeader>
+
+					{/* STEP 1: SELECT SOURCE */}
+					{importStep === "upload" && (
+						<div className="space-y-4 py-2">
+							{/* Engine Support Summary Banner */}
+							<div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
+								<Database className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+								<div>
+									<p className="font-semibold text-white">
+										Supported Format for {meta.label}
+									</p>
+									<p className="text-[11px] text-slate-400 mt-0.5">
+										{meta.isSql
+											? "CSV and JSON records imported into any selected table with schema-aware type conversion (integers, floats, booleans, timestamps, JSON)."
+											: databaseEngine === "mongo"
+												? "JSON document arrays or CSV-to-document records imported into any collection with automatic type preservation."
+												: "JSON or CSV records mapped into Redis keys (Hashes, Strings, Lists, Sets, or Sorted Sets)."}
+									</p>
+								</div>
+							</div>
+
+							{/* File Dropzone / Selector */}
+							<div className="border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-xl p-8 text-center transition-all bg-slate-900/30">
+								<input
+									type="file"
+									id="import-file-input"
+									accept=".csv,.json,.jsonl,.ndjson,text/csv,application/json"
+									className="hidden"
+									onChange={handleFileChange}
+								/>
+								<label
+									htmlFor="import-file-input"
+									className="cursor-pointer flex flex-col items-center gap-2.5"
+								>
+									<div className="w-12 h-12 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-indigo-400">
+										<Upload className="w-6 h-6" />
+									</div>
+									<div>
+										<p className="text-sm font-semibold text-white">
+											Click to upload or drag and drop
+										</p>
+										<p className="text-xs text-slate-400 mt-0.5">
+											CSV or JSON files up to 10MB
+										</p>
+									</div>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="border-slate-700 text-xs text-slate-300 pointer-events-none mt-1"
+									>
+										Browse Files
+									</Button>
+								</label>
+							</div>
+
+							{/* Or Direct Paste Toggle */}
+							<div className="space-y-2">
+								<div className="flex items-center justify-between">
+									<label className="text-xs font-semibold text-slate-300">
+										Or Paste Raw CSV / JSON Data Directly:
+									</label>
+									<div className="flex items-center gap-2">
+										<span className="text-[11px] text-slate-400">Format:</span>
+										<Select
+											value={importFileType}
+											onValueChange={(val: "csv" | "json") =>
+												setImportFileType(val)
+											}
+										>
+											<SelectTrigger className="bg-slate-900 border-slate-800 text-[11px] h-7 w-24 text-white">
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent className="bg-slate-900 border-slate-800 text-white">
+												<SelectItem value="csv">CSV</SelectItem>
+												<SelectItem value="json">JSON</SelectItem>
+											</SelectContent>
+										</Select>
+									</div>
+								</div>
+
+								<Textarea
+									placeholder={
+										importFileType === "csv"
+											? "id,name,email,created_at\n1,Alice,alice@example.com,2026-01-01\n2,Bob,bob@example.com,2026-01-02"
+											: '[\n  {"id": 1, "name": "Alice", "email": "alice@example.com"},\n  {"id": 2, "name": "Bob", "email": "bob@example.com"}\n]'
+									}
+									value={importFileContent}
+									onChange={(e) => {
+										setImportFileContent(e.target.value);
+										setImportFileName(`pasted_data.${importFileType}`);
+										setImportFileSize(e.target.value.length);
+									}}
+									rows={4}
+									className="bg-slate-900/60 border-slate-800 text-xs font-mono text-slate-200"
+								/>
+
+								{importFileContent.trim() && (
+									<div className="flex justify-end">
+										<Button
+											size="sm"
+											onClick={() =>
+												processFileContent(importFileContent, importFileType)
+											}
+											disabled={previewMutation.isPending}
+											className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 gap-1.5"
+										>
+											{previewMutation.isPending ? (
+												<>
+													<RefreshCw className="w-3.5 h-3.5 animate-spin" />
+													Analyzing...
+												</>
+											) : (
+												<>
+													Continue to Mapping
+													<ArrowRight className="w-3.5 h-3.5" />
+												</>
+											)}
+										</Button>
+									</div>
+								)}
+							</div>
+						</div>
+					)}
+
+					{/* STEP 2: CONFIGURE & MAP */}
+					{importStep === "mapping" && (
+						<div className="space-y-4 py-2">
+							{/* Destination Target & Duplicate Policy Controls */}
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+								{/* Target Entity */}
+								<div>
+									<label className="text-xs font-semibold text-slate-300 block mb-1.5">
+										{meta.isSql
+											? "Target Table"
+											: databaseEngine === "mongo"
+												? "Target Collection"
+												: "Redis Key Prefix / Target"}
+									</label>
+
+									{databaseEngine === "redis" ? (
+										<Input
+											placeholder="e.g. user: or item:"
+											value={importTargetEntity}
+											onChange={(e) => {
+												setImportTargetEntity(e.target.value);
+												setRedisKeyPrefix(e.target.value);
+											}}
+											className="bg-slate-950 border-slate-800 text-xs text-white font-mono h-8"
+										/>
+									) : (
+										<div className="flex items-center gap-2">
+											<Select
+												value={importTargetEntity}
+												onValueChange={(val) => setImportTargetEntity(val)}
+											>
+												<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white font-mono h-8">
+													<SelectValue placeholder="Select target" />
+												</SelectTrigger>
+												<SelectContent className="bg-slate-900 border-slate-800 text-white">
+													{collectionsOrTables.map((item: any) => (
+														<SelectItem key={item.name} value={item.name}>
+															{item.name}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+
+											<Input
+												placeholder="Or type new name"
+												value={importTargetEntity}
+												onChange={(e) => setImportTargetEntity(e.target.value)}
+												className="bg-slate-950 border-slate-800 text-xs text-white font-mono h-8 w-44 shrink-0"
+											/>
+										</div>
+									)}
+								</div>
+
+								{/* Duplicate Policy */}
+								<div>
+									<label className="text-xs font-semibold text-slate-300 block mb-1.5">
+										Duplicate Record Handling Policy
+									</label>
+									<Select
+										value={importDuplicatePolicy}
+										onValueChange={(val: "skip" | "update" | "reject") =>
+											setImportDuplicatePolicy(val)
+										}
+									>
+										<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-8">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent className="bg-slate-900 border-slate-800 text-white">
+											<SelectItem value="skip">
+												Skip Duplicates (Ignore conflict, preserve existing)
+											</SelectItem>
+											<SelectItem value="update">
+												Update Existing (Upsert / Overwrite with new data)
+											</SelectItem>
+											<SelectItem value="reject">
+												Reject on Duplicate (Strict unique constraint
+												enforcement)
+											</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+							</div>
+
+							{/* Redis Engine Specific Controls */}
+							{databaseEngine === "redis" && (
+								<div className="p-4 rounded-xl bg-red-950/20 border border-red-500/20 space-y-3">
+									<h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+										<Settings2 className="w-3.5 h-3.5" /> Redis Key-Value
+										Structure Mapping
+									</h4>
+
+									<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+										<div>
+											<label className="text-[11px] text-slate-300 block mb-1">
+												Redis Data Structure
+											</label>
+											<Select
+												value={redisStructure}
+												onValueChange={(val: any) => setRedisStructure(val)}
+											>
+												<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-8">
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent className="bg-slate-900 border-slate-800 text-white">
+													<SelectItem value="hash">
+														Hash (Recommended)
+													</SelectItem>
+													<SelectItem value="string">
+														String (JSON stringified)
+													</SelectItem>
+													<SelectItem value="list">List (RPUSH)</SelectItem>
+													<SelectItem value="set">
+														Set (SADD unique members)
+													</SelectItem>
+													<SelectItem value="zset">
+														Sorted Set (ZADD with score)
+													</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+
+										<div>
+											<label className="text-[11px] text-slate-300 block mb-1">
+												Key Identifier Column
+											</label>
+											<Select
+												value={redisKeyField}
+												onValueChange={(val) => setRedisKeyField(val)}
+											>
+												<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-8 font-mono">
+													<SelectValue placeholder="Choose key field" />
+												</SelectTrigger>
+												<SelectContent className="bg-slate-900 border-slate-800 text-white font-mono">
+													{previewData?.headers.map((h) => (
+														<SelectItem key={h} value={h}>
+															{h}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+										</div>
+
+										{redisStructure === "zset" ? (
+											<div>
+												<label className="text-[11px] text-slate-300 block mb-1">
+													Score Column
+												</label>
+												<Select
+													value={redisScoreField}
+													onValueChange={(val) => setRedisScoreField(val)}
+												>
+													<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-8 font-mono">
+														<SelectValue placeholder="Score field" />
+													</SelectTrigger>
+													<SelectContent className="bg-slate-900 border-slate-800 text-white font-mono">
+														{previewData?.headers.map((h) => (
+															<SelectItem key={h} value={h}>
+																{h}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</div>
+										) : (
+											<div>
+												<label className="text-[11px] text-slate-300 block mb-1">
+													TTL in seconds (optional)
+												</label>
+												<Input
+													placeholder="e.g. 86400 (blank = persistent)"
+													value={redisTtl}
+													onChange={(e) => setRedisTtl(e.target.value)}
+													className="bg-slate-950 border-slate-800 text-xs text-white h-8 font-mono"
+												/>
+											</div>
+										)}
+									</div>
+								</div>
+							)}
+
+							{/* Field to Column Mapping Section */}
+							<div className="space-y-2">
+								<div className="flex items-center justify-between">
+									<h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+										<TableIcon className="w-3.5 h-3.5 text-indigo-400" /> Field
+										to Column Mappings
+									</h4>
+									<span className="text-[11px] text-slate-400">
+										{previewData?.headers.length || 0} fields detected in source
+									</span>
+								</div>
+
+								<div className="rounded-xl border border-slate-800 overflow-hidden max-h-56 overflow-y-auto">
+									<table className="w-full text-left text-xs font-mono">
+										<thead className="bg-slate-950 text-slate-400 border-b border-slate-800 text-[10px] uppercase">
+											<tr>
+												<th className="px-3 py-2">Source Field</th>
+												<th className="px-3 py-2">Detected Type</th>
+												<th className="px-3 py-2">Target Column / Field</th>
+											</tr>
+										</thead>
+										<tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+											{previewData?.headers.map((header) => {
+												const detectedType =
+													previewData.sampleInferredTypes?.[header] || "string";
+												const currentTarget =
+													importFieldMappings[header] ?? header;
+
+												return (
+													<tr key={header} className="hover:bg-slate-800/30">
+														<td className="px-3 py-2 text-white font-semibold">
+															{header}
+														</td>
+														<td className="px-3 py-2">
+															<span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-cyan-300 border border-slate-700">
+																{detectedType}
+															</span>
+														</td>
+														<td className="px-3 py-2">
+															<div className="flex items-center gap-2">
+																{targetTableSchema?.columns &&
+																targetTableSchema.columns.length > 0 ? (
+																	<Select
+																		value={currentTarget}
+																		onValueChange={(val) => {
+																			setImportFieldMappings((prev) => ({
+																				...prev,
+																				[header]: val,
+																			}));
+																		}}
+																	>
+																		<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-7 font-mono w-48">
+																			<SelectValue />
+																		</SelectTrigger>
+																		<SelectContent className="bg-slate-900 border-slate-800 text-white font-mono">
+																			<SelectItem value="__ignore__">
+																				[ Skip / Ignore ]
+																			</SelectItem>
+																			{targetTableSchema.columns.map(
+																				(col: any) => (
+																					<SelectItem
+																						key={col.name}
+																						value={col.name}
+																					>
+																						{col.name} ({col.type})
+																					</SelectItem>
+																				),
+																			)}
+																		</SelectContent>
+																	</Select>
+																) : (
+																	<Input
+																		value={
+																			currentTarget === "__ignore__"
+																				? ""
+																				: currentTarget
+																		}
+																		placeholder="Target column (or leave blank to skip)"
+																		onChange={(e) => {
+																			const val =
+																				e.target.value.trim() || "__ignore__";
+																			setImportFieldMappings((prev) => ({
+																				...prev,
+																				[header]: val,
+																			}));
+																		}}
+																		className="bg-slate-950 border-slate-800 text-xs text-white font-mono h-7 w-48"
+																	/>
+																)}
+
+																{currentTarget === "__ignore__" && (
+																	<span className="text-[10px] text-amber-400">
+																		Omitted
+																	</span>
+																)}
+															</div>
+														</td>
+													</tr>
+												);
+											})}
+										</tbody>
+									</table>
+								</div>
+							</div>
+
+							{/* Actions */}
+							<div className="flex items-center justify-between pt-2 border-t border-slate-800">
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => setImportStep("upload")}
+									className="text-xs text-slate-400"
+								>
+									Back
+								</Button>
+								<Button
+									size="sm"
+									onClick={() => setImportStep("preview")}
+									className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 gap-1.5"
+								>
+									Review Data Preview
+									<ArrowRight className="w-3.5 h-3.5" />
+								</Button>
+							</div>
+						</div>
+					)}
+
+					{/* STEP 3: PREVIEW & CONFIRM */}
+					{importStep === "preview" && (
+						<div className="space-y-4 py-2">
+							{/* Summary metrics header */}
+							<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+										Engine & Target
+									</span>
+									<span className="text-xs font-mono font-bold text-white mt-0.5 truncate block">
+										{meta.label} • {importTargetEntity}
+									</span>
+								</div>
+								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+										Total Records
+									</span>
+									<span className="text-xs font-mono font-bold text-indigo-400 mt-0.5 block">
+										{previewData?.totalRecords || 0} rows
+									</span>
+								</div>
+								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+										Duplicate Policy
+									</span>
+									<span className="text-xs font-mono font-bold text-emerald-400 mt-0.5 uppercase block">
+										{importDuplicatePolicy}
+									</span>
+								</div>
+								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+										Format & Size
+									</span>
+									<span className="text-xs font-mono font-bold text-slate-300 mt-0.5 uppercase block">
+										{importFileType} • {(importFileSize / 1024).toFixed(1)} KB
+									</span>
+								</div>
+							</div>
+
+							{/* Preview table */}
+							<div className="space-y-2">
+								<label className="text-xs font-semibold text-slate-300 block">
+									Sample Record Preview (First 5 Rows)
+								</label>
+								<div className="rounded-xl border border-slate-800 overflow-x-auto max-h-60">
+									<table className="w-full text-left text-xs font-mono">
+										<thead className="bg-slate-950 text-slate-400 border-b border-slate-800 text-[10px] uppercase">
+											<tr>
+												{previewData?.headers
+													.filter((h) => importFieldMappings[h] !== "__ignore__")
+													.map((h) => (
+														<th key={h} className="px-3 py-2 text-slate-300">
+															{importFieldMappings[h] || h}
+														</th>
+													))}
+											</tr>
+										</thead>
+										<tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+											{previewData?.previewRows?.map((row, idx) => (
+												<tr key={idx} className="hover:bg-slate-800/30">
+													{previewData.headers
+														.filter(
+															(h) => importFieldMappings[h] !== "__ignore__",
+														)
+														.map((h) => (
+															<td
+																key={h}
+																className="px-3 py-2 text-slate-300 truncate max-w-xs"
+															>
+																{typeof row[h] === "object"
+																	? JSON.stringify(row[h])
+																	: String(row[h] ?? "")}
+															</td>
+														))}
+												</tr>
+											))}
+										</tbody>
+									</table>
+								</div>
+							</div>
+
+							{/* Actions */}
+							<div className="flex items-center justify-between pt-2 border-t border-slate-800">
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => setImportStep("mapping")}
+									className="text-xs text-slate-400"
+								>
+									Back to Mapping
+								</Button>
+								<Button
+									size="sm"
+									onClick={handleExecuteImport}
+									disabled={importMutation.isPending}
+									className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-5 gap-1.5 font-semibold"
+								>
+									<Upload className="w-3.5 h-3.5" />
+									Execute Universal Import
+								</Button>
+							</div>
+						</div>
+					)}
+
+					{/* STEP: IMPORTING IN PROGRESS */}
+					{importStep === "importing" && (
+						<div className="py-12 text-center space-y-4">
+							<RefreshCw className="w-8 h-8 animate-spin mx-auto text-indigo-400" />
+							<div>
+								<h3 className="text-sm font-bold text-white">
+									Persisting Records to {meta.label}...
+								</h3>
+								<p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+									Validating constraints, executing schema conversions, and
+									writing to database safely in bounded batches.
+								</p>
+							</div>
+						</div>
+					)}
+
+					{/* STEP 4: IMPORT RESULTS */}
+					{importStep === "result" && importResult && (
+						<div className="space-y-4 py-2">
+							{/* Status Banner */}
+							<div
+								className={`p-4 rounded-xl border flex items-start gap-3 ${
+									(importResult.failed ?? importResult.failedCount ?? 0) === 0
+										? "bg-emerald-950/20 border-emerald-500/30 text-emerald-400"
+										: (importResult.inserted ?? importResult.insertedCount ?? 0) > 0 ||
+											  (importResult.updated ?? importResult.updatedCount ?? 0) > 0
+											? "bg-amber-950/20 border-amber-500/30 text-amber-400"
+											: "bg-red-950/20 border-red-500/30 text-red-400"
+								}`}
+							>
+								{(importResult.failed ?? importResult.failedCount ?? 0) === 0 ? (
+									<CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-emerald-400" />
+								) : (
+									<AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-400" />
+								)}
+								<div>
+									<h4 className="text-sm font-bold text-white">
+										{(importResult.failed ?? importResult.failedCount ?? 0) === 0
+											? "Data Import Succeeded"
+											: (importResult.inserted ?? importResult.insertedCount ?? 0) > 0 ||
+												  (importResult.updated ?? importResult.updatedCount ?? 0) > 0
+												? "Data Import Completed with Partial Warnings"
+												: "Data Import Failed"}
+									</h4>
+									<p className="text-xs text-slate-300 mt-0.5">
+										Processed {importResult.totalRows ?? importResult.totalRecords ?? 0} records in{" "}
+										{importResult.durationMs ?? 0}ms into &apos;{importTargetEntity}&apos;.
+									</p>
+								</div>
+							</div>
+
+							{/* Metric Cards */}
+							<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
+									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+										Inserted
+									</span>
+									<span className="text-lg font-mono font-bold text-emerald-400 mt-0.5 block">
+										{importResult.inserted ?? importResult.insertedCount ?? 0}
+									</span>
+								</div>
+
+								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
+									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+										Updated
+									</span>
+									<span className="text-lg font-mono font-bold text-cyan-400 mt-0.5 block">
+										{importResult.updated ?? importResult.updatedCount ?? 0}
+									</span>
+								</div>
+
+								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
+									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+										Skipped
+									</span>
+									<span className="text-lg font-mono font-bold text-slate-400 mt-0.5 block">
+										{importResult.skipped ?? importResult.skippedCount ?? 0}
+									</span>
+								</div>
+
+								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
+									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+										Failed
+									</span>
+									<span className="text-lg font-mono font-bold text-red-400 mt-0.5 block">
+										{importResult.failed ?? importResult.failedCount ?? 0}
+									</span>
+								</div>
+							</div>
+
+							{/* Row Error Details (if any errors occurred) */}
+							{importResult.errors && importResult.errors.length > 0 && (
+								<div className="space-y-2">
+									<div className="flex items-center justify-between">
+										<label className="text-xs font-semibold text-red-400 flex items-center gap-1.5">
+											<AlertTriangle className="w-3.5 h-3.5" />
+											Row Error Details ({importResult.errors.length})
+										</label>
+										<Button
+											size="sm"
+											variant="outline"
+											onClick={handleDownloadFailureReport}
+											className="border-red-500/30 text-red-400 hover:bg-red-950/20 text-xs h-7 gap-1"
+										>
+											<Download className="w-3 h-3" /> Download Failure Report
+										</Button>
+									</div>
+
+									<div className="rounded-xl border border-red-500/20 bg-red-950/10 overflow-hidden max-h-48 overflow-y-auto">
+										<table className="w-full text-left text-xs font-mono">
+											<thead className="bg-red-950/30 text-red-300 border-b border-red-500/20 text-[10px] uppercase">
+												<tr>
+													<th className="px-3 py-1.5 w-16">Row #</th>
+													<th className="px-3 py-1.5 w-32">Identifier</th>
+													<th className="px-3 py-1.5">Error Message</th>
+												</tr>
+											</thead>
+											<tbody className="divide-y divide-red-500/10 text-slate-300">
+												{importResult.errors.slice(0, 50).map((err, idx) => (
+													<tr key={idx}>
+														<td className="px-3 py-1.5 text-red-400 font-bold">
+															{err.row ?? err.rowNumber ?? idx + 1}
+														</td>
+														<td className="px-3 py-1.5 text-slate-400 truncate max-w-[120px]">
+															{err.identifier ?? err.keyOrId ?? "-"}
+														</td>
+														<td className="px-3 py-1.5 text-red-300">
+															{err.message ?? err.reason ?? "Unknown error"}
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+								</div>
+							)}
+
+							{/* Result Actions */}
+							<DialogFooter className="gap-2 pt-2 border-t border-slate-800">
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => handleOpenImportModal(importTargetEntity)}
+									className="text-xs text-slate-400"
+								>
+									Import Another File
+								</Button>
+								<Button
+									size="sm"
+									onClick={handleViewInExplorer}
+									className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 gap-1.5 font-semibold"
+								>
+									<TableIcon className="w-3.5 h-3.5" />
+									View In Data Explorer
+								</Button>
+							</DialogFooter>
+						</div>
+					)}
 				</DialogContent>
 			</Dialog>
 

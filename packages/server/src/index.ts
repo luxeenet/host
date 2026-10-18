@@ -17,6 +17,7 @@ export * from "./services/certificate";
 export * from "./services/cluster";
 export * from "./services/compose";
 export * from "./services/database-connection";
+export * from "./services/database-import";
 export * from "./services/database-manager";
 export * from "./services/database-security";
 export * from "./services/deployment";

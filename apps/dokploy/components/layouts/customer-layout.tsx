@@ -1,6 +1,4 @@
-import Link from "next/link";
-import { useRouter } from "next/router";
-import { type ReactNode, useState } from "react";
+import { brand } from "@paas/branding";
 import {
 	Activity,
 	ChevronRight,
@@ -16,22 +14,41 @@ import {
 	User,
 	X,
 } from "lucide-react";
-import { authClient } from "@/lib/auth-client";
-import { brand } from "@paas/branding";
+import Link from "next/link";
+import { useRouter } from "next/router";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
 
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
 	{ label: "Overview", icon: LayoutDashboard, href: "/dashboard/home" },
 	{ label: "Projects", icon: Cloud, href: "/dashboard/projects" },
-	{ label: "Databases", icon: Database, href: "/dashboard/databases" },
+	{ label: "Databases", icon: Database, href: "/dashboard/home/databases" },
 	{ label: "Domains", icon: Globe, href: "/dashboard/domains" },
 	{ label: "Usage", icon: Activity, href: "/dashboard/usage" },
 	{ label: "Billing", icon: CreditCard, href: "/dashboard/billing" },
 	{ label: "Support", icon: HeadphonesIcon, href: "/dashboard/support" },
 	{ label: "Account", icon: Settings, href: "/dashboard/account" },
 ];
+
+export function isCustomerRouteActive(href: string, pathname: string): boolean {
+	if (href === "/dashboard" || href === "/dashboard/home") {
+		return pathname === href;
+	}
+
+	if (href === "/dashboard/home/databases") {
+		return (
+			pathname === "/dashboard/home/databases" ||
+			pathname.startsWith("/dashboard/home/databases/") ||
+			pathname === "/dashboard/databases" ||
+			pathname.startsWith("/dashboard/databases/")
+		);
+	}
+
+	return pathname.startsWith(href);
+}
 
 interface CustomerLayoutProps {
 	children: ReactNode;
@@ -54,21 +71,23 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
 			<div className="p-5 border-b border-slate-800">
 				<Link href="/dashboard/home" className="flex items-center gap-2.5">
 					<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center shrink-0">
-						<svg viewBox="0 0 24 24" className="w-4 h-4 text-white fill-current">
+						<svg
+							viewBox="0 0 24 24"
+							className="w-4 h-4 text-white fill-current"
+						>
 							<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
 						</svg>
 					</div>
-					<span className="text-white font-bold text-base">{brand.APP_NAME}</span>
+					<span className="text-white font-bold text-base">
+						{brand.APP_NAME}
+					</span>
 				</Link>
 			</div>
 
 			{/* Navigation */}
 			<nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
 				{NAV_ITEMS.map(({ label, icon: Icon, href }) => {
-					const isActive =
-						href === "/dashboard"
-							? router.pathname === "/dashboard"
-							: router.pathname.startsWith(href);
+					const isActive = isCustomerRouteActive(href, router.pathname);
 
 					return (
 						<Link
@@ -82,9 +101,18 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
 									: "text-slate-400 hover:text-white hover:bg-slate-800",
 							)}
 						>
-							<Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-indigo-400" : "text-slate-500 group-hover:text-slate-300")} />
+							<Icon
+								className={cn(
+									"w-4 h-4 shrink-0",
+									isActive
+										? "text-indigo-400"
+										: "text-slate-500 group-hover:text-slate-300",
+								)}
+							/>
 							{label}
-							{isActive && <ChevronRight className="ml-auto w-3 h-3 text-indigo-400" />}
+							{isActive && (
+								<ChevronRight className="ml-auto w-3 h-3 text-indigo-400" />
+							)}
 						</Link>
 					);
 				})}
@@ -160,19 +188,22 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
 					</Button>
 					<Link href="/dashboard" className="flex items-center gap-2">
 						<div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center">
-							<svg viewBox="0 0 24 24" className="w-4 h-4 text-white fill-current">
+							<svg
+								viewBox="0 0 24 24"
+								className="w-4 h-4 text-white fill-current"
+							>
 								<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
 							</svg>
 						</div>
-						<span className="text-white font-bold text-sm">{brand.APP_NAME}</span>
+						<span className="text-white font-bold text-sm">
+							{brand.APP_NAME}
+						</span>
 					</Link>
 					<div className="w-8" />
 				</header>
 
 				{/* Page content */}
-				<main className="flex-1 p-5 md:p-8 max-w-7xl w-full">
-					{children}
-				</main>
+				<main className="flex-1 p-5 md:p-8 max-w-7xl w-full">{children}</main>
 			</div>
 		</div>
 	);

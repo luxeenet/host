@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { ArrowRight, Rocket, Server } from "lucide-react";
+import { ArrowRight, Database, Rocket, Server } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,10 @@ function getServiceInfo(d: any) {
 	const app = d.application;
 	const comp = d.compose;
 	const serverName: string =
-		d.server?.name ?? app?.server?.name ?? comp?.server?.name ?? "Primary Server";
+		d.server?.name ??
+		app?.server?.name ??
+		comp?.server?.name ??
+		"Primary Server";
 	if (app?.environment?.project && app.environment) {
 		return {
 			name: app.name as string,
@@ -169,12 +172,20 @@ export const ShowHome = () => {
 						<h1 className="text-3xl font-semibold tracking-tight">
 							{firstName ? `Welcome back, ${firstName}` : "Welcome back"}
 						</h1>
-						<Button asChild variant="secondary" className="w-fit">
-							<Link href="/dashboard/projects">
-								Go to projects
-								<ArrowRight className="size-4" />
-							</Link>
-						</Button>
+						<div className="flex items-center gap-2">
+							<Button asChild variant="outline" className="w-fit">
+								<Link href="/dashboard/home/databases">
+									<Database className="size-4 mr-2" />
+									Databases
+								</Link>
+							</Button>
+							<Button asChild variant="secondary" className="w-fit">
+								<Link href="/dashboard/projects">
+									Go to projects
+									<ArrowRight className="size-4 ml-1" />
+								</Link>
+							</Button>
+						</div>
 					</div>
 
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

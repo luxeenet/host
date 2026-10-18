@@ -15,6 +15,7 @@ import {
 	ClipboardList,
 	Clock,
 	CreditCard,
+	Database,
 	Folder,
 	Forward,
 	GalleryVerticalEnd,
@@ -168,7 +169,7 @@ type Menu = {
 // Consists of unfiltered home, settings, and help items
 // The items are filtered based on the user's role and permissions
 // The `isEnabled` function is called to determine if the item should be displayed
-const MENU: Menu = {
+export const MENU: Menu = {
 	home: [
 		{
 			isSingle: true,
@@ -181,6 +182,12 @@ const MENU: Menu = {
 			title: "Projects",
 			url: "/dashboard/projects",
 			icon: Folder,
+		},
+		{
+			isSingle: true,
+			title: "Databases",
+			url: "/dashboard/home/databases",
+			icon: Database,
 		},
 		{
 			isSingle: true,
@@ -475,7 +482,7 @@ function createMenuForAuthUser(opts: {
  * Determines if an item url is active based on the current pathname
  * @returns true if the item url is active, false otherwise
  */
-function isActiveRoute(opts: {
+export function isActiveRoute(opts: {
 	/** The url of the item. Usually obtained from `item.url` */
 	itemUrl: string;
 	/** The current pathname. Usually obtained from `usePathname()` */
@@ -487,6 +494,20 @@ function isActiveRoute(opts: {
 	if (!normalizedPathname) return false;
 
 	if (normalizedPathname === normalizedItemUrl) return true;
+
+	// Isolate /dashboard/home so it does not match subpaths like /dashboard/home/databases
+	if (normalizedItemUrl === "/dashboard/home") {
+		return normalizedPathname === "/dashboard/home";
+	}
+
+	// Backward compatibility alias: /dashboard/databases routes highlight Databases item
+	if (
+		normalizedItemUrl === "/dashboard/home/databases" &&
+		(normalizedPathname === "/dashboard/databases" ||
+			normalizedPathname.startsWith("/dashboard/databases/"))
+	) {
+		return true;
+	}
 
 	if (normalizedPathname.startsWith(normalizedItemUrl)) {
 		const nextChar = normalizedPathname.charAt(normalizedItemUrl.length);

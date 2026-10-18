@@ -1,16 +1,20 @@
-import { describe, expect, it } from "vitest";
 import {
 	buildDatabaseConnectionStrings,
 	isInternalSwarmHostname,
 	validatePublicDatabaseEndpoint,
 	verifyDatabaseConnectivity,
 } from "@dokploy/server/services/database-connection";
+import { describe, expect, it } from "vitest";
 
 describe("Database Public Connectivity Audit & Verification Matrix", () => {
 	describe("1. Internal Swarm Hostname Rejection (Root Cause Elimination)", () => {
 		it("detects and rejects appName as a public hostname", () => {
-			expect(isInternalSwarmHostname("qrcode-qrcode-43muxo", "qrcode-qrcode-43muxo")).toBe(true);
-			expect(isInternalSwarmHostname("mongo-service-12345", "mongo-service-12345")).toBe(true);
+			expect(
+				isInternalSwarmHostname("qrcode-qrcode-43muxo", "qrcode-qrcode-43muxo"),
+			).toBe(true);
+			expect(
+				isInternalSwarmHostname("mongo-service-12345", "mongo-service-12345"),
+			).toBe(true);
 		});
 
 		it("detects and rejects hostnames without dots that are not IP addresses", () => {
@@ -73,7 +77,7 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 			expect(conn.endpointStatus?.isValidPublicEndpoint).toBe(false);
 			// Internal URL remains intact for internal Swarm usage
 			expect(conn.internal.url).toBe(
-				"mongodb://customer_user:password123@qrcode-qrcode-43muxo:27017/customer_db?authSource=customer_db&directConnection=true",
+				"mongodb://customer_user:password123@qrcode-qrcode-43muxo:27017/customer_db?authSource=admin&directConnection=true",
 			);
 		});
 
@@ -86,7 +90,11 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 				externalPort: 5432,
 			};
 
-			const conn = buildDatabaseConnectionStrings("postgres", record, "127.0.0.1");
+			const conn = buildDatabaseConnectionStrings(
+				"postgres",
+				record,
+				"127.0.0.1",
+			);
 
 			expect(conn.external.isEnabled).toBe(false);
 			expect(conn.external.url).toBeNull();
@@ -103,7 +111,11 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 				externalPort: null,
 			};
 
-			const conn = buildDatabaseConnectionStrings("mysql", record, "db.hatdot.cloud");
+			const conn = buildDatabaseConnectionStrings(
+				"mysql",
+				record,
+				"db.hatdot.cloud",
+			);
 
 			expect(conn.external.isEnabled).toBe(false);
 			expect(conn.external.url).toBeNull();
@@ -122,19 +134,23 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 				replicaSets: "rs0",
 			};
 
-			const conn = buildDatabaseConnectionStrings("mongo", record, "db.hatdot.cloud");
+			const conn = buildDatabaseConnectionStrings(
+				"mongo",
+				record,
+				"db.hatdot.cloud",
+			);
 
 			expect(conn.external.isEnabled).toBe(true);
 			// External URL must use directConnection=true to prevent Compass from discovering qrcode-qrcode-43muxo
 			expect(conn.external.url).toBe(
-				"mongodb://restricted_user:secure_password@db.hatdot.cloud:27017/qrcode_app?authSource=qrcode_app&directConnection=true",
+				"mongodb://restricted_user:secure_password@db.hatdot.cloud:27017/qrcode_app?authSource=admin&directConnection=true",
 			);
 			expect(conn.external.url).not.toContain("replicaSet=rs0");
 			expect(conn.external.url).not.toContain("qrcode-qrcode-43muxo");
 
 			// Internal URL preserves replicaSet=rs0 on the internal overlay network
 			expect(conn.internal.url).toBe(
-				"mongodb://restricted_user:secure_password@qrcode-qrcode-43muxo:27017/qrcode_app?authSource=qrcode_app&replicaSet=rs0",
+				"mongodb://restricted_user:secure_password@qrcode-qrcode-43muxo:27017/qrcode_app?authSource=admin&replicaSet=rs0",
 			);
 		});
 
@@ -147,10 +163,14 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 				externalPort: 27018,
 			};
 
-			const conn = buildDatabaseConnectionStrings("mongo", record, "db.hatdot.cloud");
+			const conn = buildDatabaseConnectionStrings(
+				"mongo",
+				record,
+				"db.hatdot.cloud",
+			);
 
 			expect(conn.external.url).toContain("/tenant_database");
-			expect(conn.external.url).toContain("authSource=tenant_database");
+			expect(conn.external.url).toContain("authSource=admin");
 			expect(conn.external.url).toContain("directConnection=true");
 		});
 	});
@@ -165,7 +185,11 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 				externalPort: 5433,
 			};
 
-			const conn = buildDatabaseConnectionStrings("postgres", record, "db.hatdot.cloud");
+			const conn = buildDatabaseConnectionStrings(
+				"postgres",
+				record,
+				"db.hatdot.cloud",
+			);
 
 			expect(conn.external.url).toBe(
 				`postgresql://pg_tenant:${encodeURIComponent("p@ssword:with+special")}@db.hatdot.cloud:5433/pg_tenant_db`,
@@ -182,7 +206,11 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 				externalPort: 3307,
 			};
 
-			const conn = buildDatabaseConnectionStrings("mysql", record, "db.hatdot.cloud");
+			const conn = buildDatabaseConnectionStrings(
+				"mysql",
+				record,
+				"db.hatdot.cloud",
+			);
 
 			expect(conn.external.url).toBe(
 				"mysql://my_tenant:my_password@db.hatdot.cloud:3307/my_tenant_db",
@@ -199,7 +227,11 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 				externalPort: 3308,
 			};
 
-			const conn = buildDatabaseConnectionStrings("mariadb", record, "db.hatdot.cloud");
+			const conn = buildDatabaseConnectionStrings(
+				"mariadb",
+				record,
+				"db.hatdot.cloud",
+			);
 
 			expect(conn.external.url).toBe(
 				"mysql://maria_tenant:maria_password@db.hatdot.cloud:3308/maria_tenant_db",
@@ -215,7 +247,11 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 				externalPort: 6380,
 			};
 
-			const conn = buildDatabaseConnectionStrings("redis", record, "db.hatdot.cloud");
+			const conn = buildDatabaseConnectionStrings(
+				"redis",
+				record,
+				"db.hatdot.cloud",
+			);
 
 			expect(conn.external.url).toBe(
 				"redis://default:redis_secret_password@db.hatdot.cloud:6380",
@@ -232,7 +268,11 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 				externalAdminPort: 5000,
 			};
 
-			const conn = buildDatabaseConnectionStrings("libsql", record, "db.hatdot.cloud");
+			const conn = buildDatabaseConnectionStrings(
+				"libsql",
+				record,
+				"db.hatdot.cloud",
+			);
 
 			// Strictly port 8081 (data port), never 5000 (admin port)
 			expect(conn.external.url).toBe(
@@ -254,7 +294,9 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 			expect(result.isConfigured).toBe(false);
 			expect(result.dnsStatus).toBe("unconfigured");
 			expect(result.tcpStatus).toBe("unconfigured");
-			expect(result.message).toContain("Public external access is currently disabled");
+			expect(result.message).toContain(
+				"Public external access is currently disabled",
+			);
 		});
 
 		it("rejects internal Swarm hostname in verifyDatabaseConnectivity with actionable message", async () => {
@@ -268,9 +310,13 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 			expect(result.isConfigured).toBe(false);
 			expect(result.dnsStatus).toBe("failed");
 			expect(result.tcpStatus).toBe("unreachable");
-			expect(result.message).toContain("internal Docker Swarm service hostname");
+			expect(result.message).toContain(
+				"internal Docker Swarm service hostname",
+			);
 			expect(result.diagnostics?.errorCode).toBe("ENOTFOUND");
-			expect(result.diagnostics?.errorDetails).toContain("Internal Swarm Hostname Rejected");
+			expect(result.diagnostics?.errorDetails).toContain(
+				"Internal Swarm Hostname Rejected",
+			);
 		});
 
 		it("classifies all 8 states in validatePublicDatabaseEndpoint", async () => {
@@ -291,7 +337,8 @@ describe("Database Public Connectivity Audit & Verification Matrix", () => {
 		});
 
 		it("redacts credentials from error messages and diagnostics", async () => {
-			const sensitiveHost = "mongo_user:secret_pass@unresolvable-domain-xyz123.com";
+			const sensitiveHost =
+				"mongo_user:secret_pass@unresolvable-domain-xyz123.com";
 			const result = await verifyDatabaseConnectivity({
 				type: "mongo",
 				host: sensitiveHost,

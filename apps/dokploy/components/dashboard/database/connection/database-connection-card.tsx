@@ -423,10 +423,10 @@ export const DatabaseConnectionCard = ({
 						<div className="flex flex-col gap-1.5 text-xs bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 p-3.5 rounded-lg">
 							<div className="flex items-center gap-2 font-semibold">
 								<Info className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-								<span>Private Swarm Network Only</span>
+								<span>Private Virtual Network Only</span>
 							</div>
 							<p className="leading-relaxed">
-								This internal URL connects using Docker private hostname (<code>{appName}</code>) and is strictly for apps running inside HatDot. External desktop clients (MongoDB Compass, TablePlus, DBeaver) cannot resolve this hostname. To connect from your personal computer, switch to the <strong>Public Connection</strong> tab.
+								This internal URL connects using the private service endpoint (<code>{appName}</code>) and is strictly for applications running inside your HatDot project. External desktop clients (MongoDB Compass, TablePlus, DBeaver) cannot resolve this private endpoint. To connect from your personal computer, switch to the <strong>Public Connection</strong> tab.
 							</p>
 						</div>
 

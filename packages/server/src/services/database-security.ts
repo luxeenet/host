@@ -660,3 +660,18 @@ export const reconcileAllDatabasesSecurity = async (
 
 	return { secured, skipped, failed };
 };
+
+/**
+ * Sanitizes infrastructure terms, internal socket paths, and container details
+ * into customer-safe messaging while preserving actionable guidance.
+ */
+export const sanitizeCustomerDiagnostic = (text: string | null | undefined): string => {
+	if (!text) return "";
+	return redactCredentials(text)
+		.replace(/\/var\/run\/docker\.sock/g, "[managed-runtime-endpoint]")
+		.replace(/\bDocker Swarm\b/gi, "Managed Service")
+		.replace(/\bSwarm\b/gi, "Managed Service")
+		.replace(/\bDocker container\b/gi, "Database instance")
+		.replace(/\bcontainer\b/gi, "instance")
+		.replace(/\bDocker\b/gi, "Managed Platform");
+};

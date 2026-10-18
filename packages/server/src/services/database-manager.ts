@@ -77,7 +77,7 @@ export const executeInsideServiceContainer = async (
 	if (!container) {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
-			message: `Database container for '${appName}' is not currently running. Please start or deploy the service to use manager features.`,
+			message: `Database instance for '${appName}' is not currently running. Please start or deploy the service to use manager features.`,
 		});
 	}
 
@@ -88,15 +88,108 @@ export const executeInsideServiceContainer = async (
 	return await execAsync(fullCmd, { shell: "/bin/bash" });
 };
 
+/**
+ * Safely extracts and parses JSON payload from command output,
+ * stripping any prefix/suffix daemon warnings, mongosh log notices, or connection headers.
+ */
+export function extractJsonFromStdout(stdout: string): any {
+	const trimmed = stdout.trim();
+	try {
+		return JSON.parse(trimmed);
+	} catch {
+		const firstBrace = trimmed.indexOf("{");
+		const lastBrace = trimmed.lastIndexOf("}");
+		if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+			const candidate = trimmed.substring(firstBrace, lastBrace + 1);
+			return JSON.parse(candidate);
+		}
+		const firstBracket = trimmed.indexOf("[");
+		const lastBracket = trimmed.lastIndexOf("]");
+		if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+			const candidate = trimmed.substring(firstBracket, lastBracket + 1);
+			return JSON.parse(candidate);
+		}
+		throw new Error(`Unable to parse JSON from command output: ${trimmed.slice(0, 150)}`);
+	}
+}
+
 /* =======================================================================
  * 1. MONGODB ADAPTER
  * ======================================================================= */
 
 export const mongoAdapter = {
-	async getOverview(record: any) {
+	/**
+	 * Discovers all logical databases available on the MongoDB instance.
+	 */
+	async listDatabases(record: any) {
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const configuredDb = record.databaseName || "app";
+
+		const script = `
+		(function() {
+			let list = [];
+			let restricted = false;
+			let errorMsg = null;
+			try {
+				const adminRes = db.adminCommand({ listDatabases: 1 });
+				if (adminRes && adminRes.databases) {
+					list = adminRes.databases.map(d => ({
+						name: d.name,
+						sizeOnDisk: d.sizeOnDisk || 0,
+						empty: d.empty || false,
+						isInternal: ["admin", "config", "local"].includes(d.name)
+					}));
+				}
+			} catch(e) {
+				try {
+					const names = db.getMongo().getDBNames();
+					list = names.map(n => ({
+						name: n,
+						sizeOnDisk: 0,
+						empty: false,
+						isInternal: ["admin", "config", "local"].includes(n)
+					}));
+				} catch(e2) {
+					restricted = true;
+					errorMsg = e.message || e2.message;
+				}
+			}
+
+			// Ensure configuredDb, "test", and "app" are included in the discoverable set
+			const candidates = [${JSON.stringify(configuredDb)}, "test", "app"].filter(Boolean);
+			candidates.forEach(cand => {
+				if (!list.some(d => d.name === cand)) {
+					list.push({
+						name: cand,
+						sizeOnDisk: 0,
+						empty: false,
+						isInternal: false
+					});
+				}
+			});
+
+			print(JSON.stringify({ databases: list, restricted, error: errorMsg, configuredDatabase: ${JSON.stringify(configuredDb)} }));
+		})();
+		`.trim();
+
+		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
+		try {
+			const res = await executeInsideServiceContainer(appName, serverId, cmd);
+			const parsed = extractJsonFromStdout(res.stdout);
+			return parsed.databases || [{ name: configuredDb, sizeOnDisk: 0, empty: false, isInternal: false }];
+		} catch {
+			return [
+				{ name: configuredDb, sizeOnDisk: 0, empty: false, isInternal: false },
+				...(configuredDb !== "test" ? [{ name: "test", sizeOnDisk: 0, empty: false, isInternal: false }] : [])
+			];
+		}
+	},
+
+	async getOverview(record: any, database?: string) {
+		const { appName, serverId, databaseUser, databasePassword } = record;
+		const authDb = record.authSource || "admin";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
@@ -106,6 +199,7 @@ export const mongoAdapter = {
 				const c = db.getSiblingDB(${JSON.stringify(targetDb)}).getCollectionNames();
 				print(JSON.stringify({
 					version: v,
+					database: ${JSON.stringify(targetDb)},
 					collectionsCount: c.length,
 					dataSize: s.dataSize || 0,
 					storageSize: s.storageSize || 0,
@@ -114,7 +208,7 @@ export const mongoAdapter = {
 					indexSize: s.indexSize || 0,
 				}));
 			} catch(e) {
-				print(JSON.stringify({ error: e.message }));
+				print(JSON.stringify({ error: e.message, database: ${JSON.stringify(targetDb)} }));
 			}
 		})();
 		`.trim();
@@ -122,16 +216,16 @@ export const mongoAdapter = {
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
 		try {
-			return JSON.parse(res.stdout.trim());
+			return extractJsonFromStdout(res.stdout);
 		} catch {
-			return { version: "MongoDB", collectionsCount: 0, storageSize: 0 };
+			return { version: "MongoDB", database: targetDb, collectionsCount: 0, storageSize: 0 };
 		}
 	},
 
-	async listCollections(record: any) {
+	async listCollections(record: any, database?: string) {
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
@@ -141,9 +235,9 @@ export const mongoAdapter = {
 				try {
 					const c = target.getCollection(n);
 					const count = c.estimatedDocumentCount();
-					return { name: n, documentCount: count };
+					return { name: n, documentCount: count, estimatedRows: count };
 				} catch(e) {
-					return { name: n, documentCount: 0 };
+					return { name: n, documentCount: 0, estimatedRows: 0 };
 				}
 			});
 			print(JSON.stringify(list));
@@ -153,43 +247,43 @@ export const mongoAdapter = {
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
 		try {
-			return JSON.parse(res.stdout.trim());
+			return extractJsonFromStdout(res.stdout);
 		} catch {
 			return [];
 		}
 	},
 
-	async createCollection(record: any, collectionName: string) {
+	async createCollection(record: any, collectionName: string, database?: string) {
 		const safeName = sanitizeDatabaseIdentifier(collectionName);
 		if (!safeName) {
 			throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid collection name." });
 		}
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `db.getSiblingDB(${JSON.stringify(targetDb)}).createCollection(${JSON.stringify(safeName)}); print(JSON.stringify({ success: true }));`;
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		await executeInsideServiceContainer(appName, serverId, cmd);
-		return { success: true, name: safeName };
+		return { success: true, name: safeName, database: targetDb };
 	},
 
-	async dropCollection(record: any, collectionName: string) {
+	async dropCollection(record: any, collectionName: string, database?: string) {
 		const safeName = sanitizeDatabaseIdentifier(collectionName);
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `db.getSiblingDB(${JSON.stringify(targetDb)}).getCollection(${JSON.stringify(safeName)}).drop(); print(JSON.stringify({ success: true }));`;
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		await executeInsideServiceContainer(appName, serverId, cmd);
-		return { success: true, name: safeName };
+		return { success: true, name: safeName, database: targetDb };
 	},
 
 	async queryDocuments(
 		record: any,
 		collectionName: string,
-		options: { page?: number; limit?: number; filter?: string; sort?: string },
+		options: { page?: number; limit?: number; filter?: string; sort?: string; database?: string },
 	) {
 		const safeName = sanitizeDatabaseIdentifier(collectionName);
 		const page = Math.max(1, options.page || 1);
@@ -216,7 +310,7 @@ export const mongoAdapter = {
 
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(options.database || record.databaseName || "app");
 
 		const script = `
 		(function() {
@@ -225,10 +319,46 @@ export const mongoAdapter = {
 				const filter = ${JSON.stringify(filterObj)};
 				const sort = ${JSON.stringify(sortObj)};
 				const total = col.countDocuments(filter);
-				const docs = col.find(filter).sort(sort).skip(${skip}).limit(${limit}).toArray();
-				print(JSON.stringify({ total, page: ${page}, limit: ${limit}, documents: docs }));
+				const rawDocs = col.find(filter).sort(sort).skip(${skip}).limit(${limit}).toArray();
+
+				function serializeVal(val) {
+					if (val === null || val === undefined) return val;
+					if (typeof val === 'bigint') return val.toString();
+					if (typeof val === 'object') {
+						if (val instanceof ObjectId || (val.constructor && val.constructor.name === 'ObjectId') || val._bsontype === 'ObjectID' || val._bsontype === 'ObjectId') {
+							return val.toString();
+						}
+						if (val instanceof Date) {
+							return val.toISOString();
+						}
+						if (val._bsontype === 'Decimal128' || (val.constructor && val.constructor.name === 'Decimal128')) {
+							return val.toString();
+						}
+						if (val._bsontype === 'Long' || (val.constructor && val.constructor.name === 'Long')) {
+							return val.toString();
+						}
+						if (val._bsontype === 'Binary' || (val.constructor && val.constructor.name === 'Binary')) {
+							return typeof val.toString === 'function' ? val.toString('base64') : String(val);
+						}
+						if (val._bsontype === 'Timestamp' || (val.constructor && val.constructor.name === 'Timestamp')) {
+							return val.toString();
+						}
+						if (Array.isArray(val)) {
+							return val.map(serializeVal);
+						}
+						const copy = {};
+						for (const k of Object.keys(val)) {
+							copy[k] = serializeVal(val[k]);
+						}
+						return copy;
+					}
+					return val;
+				}
+
+				const docs = rawDocs.map(serializeVal);
+				print(JSON.stringify({ total, page: ${page}, limit: ${limit}, documents: docs, rows: docs, database: ${JSON.stringify(targetDb)} }));
 			} catch(e) {
-				print(JSON.stringify({ error: e.message }));
+				print(JSON.stringify({ error: e.message, database: ${JSON.stringify(targetDb)} }));
 			}
 		})();
 		`.trim();
@@ -236,29 +366,39 @@ export const mongoAdapter = {
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
 		try {
-			const parsed = JSON.parse(res.stdout.trim());
+			const parsed = extractJsonFromStdout(res.stdout);
 			if (parsed.error) {
-				throw new TRPCError({ code: "BAD_REQUEST", message: parsed.error });
+				throw new TRPCError({ code: "BAD_REQUEST", message: `MongoDB Query Error: ${parsed.error}` });
 			}
-			return parsed;
+			return {
+				total: parsed.total ?? 0,
+				page: parsed.page ?? page,
+				limit: parsed.limit ?? limit,
+				rows: parsed.rows ?? parsed.documents ?? [],
+				documents: parsed.documents ?? parsed.rows ?? [],
+				database: parsed.database || targetDb,
+			};
 		} catch (err: any) {
 			if (err instanceof TRPCError) throw err;
-			return { total: 0, page, limit, documents: [] };
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+				message: `Failed to query collection '${collectionName}': ${err?.message || "Unknown error"}`,
+			});
 		}
 	},
 
-	async insertDocument(record: any, collectionName: string, document: Record<string, any>) {
+	async insertDocument(record: any, collectionName: string, document: Record<string, any>, database?: string) {
 		const safeName = sanitizeDatabaseIdentifier(collectionName);
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
 			try {
 				const col = db.getSiblingDB(${JSON.stringify(targetDb)}).getCollection(${JSON.stringify(safeName)});
 				const res = col.insertOne(${JSON.stringify(document)});
-				print(JSON.stringify({ success: true, insertedId: res.insertedId }));
+				print(JSON.stringify({ success: true, insertedId: res.insertedId, database: ${JSON.stringify(targetDb)} }));
 			} catch(e) {
 				print(JSON.stringify({ error: e.message }));
 			}
@@ -267,7 +407,7 @@ export const mongoAdapter = {
 
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
-		const parsed = JSON.parse(res.stdout.trim());
+		const parsed = extractJsonFromStdout(res.stdout);
 		if (parsed.error) {
 			throw new TRPCError({ code: "BAD_REQUEST", message: parsed.error });
 		}
@@ -279,11 +419,12 @@ export const mongoAdapter = {
 		collectionName: string,
 		docId: string,
 		updateData: Record<string, any>,
+		database?: string,
 	) {
 		const safeName = sanitizeDatabaseIdentifier(collectionName);
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
@@ -295,7 +436,7 @@ export const mongoAdapter = {
 					query = { _id: ObjectId(id) };
 				} catch(e) {}
 				const res = col.updateOne(query, { $set: ${JSON.stringify(updateData)} });
-				print(JSON.stringify({ success: true, matchedCount: res.matchedCount, modifiedCount: res.modifiedCount }));
+				print(JSON.stringify({ success: true, matchedCount: res.matchedCount, modifiedCount: res.modifiedCount, database: ${JSON.stringify(targetDb)} }));
 			} catch(e) {
 				print(JSON.stringify({ error: e.message }));
 			}
@@ -304,18 +445,18 @@ export const mongoAdapter = {
 
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
-		const parsed = JSON.parse(res.stdout.trim());
+		const parsed = extractJsonFromStdout(res.stdout);
 		if (parsed.error) {
 			throw new TRPCError({ code: "BAD_REQUEST", message: parsed.error });
 		}
 		return parsed;
 	},
 
-	async deleteDocument(record: any, collectionName: string, docId: string) {
+	async deleteDocument(record: any, collectionName: string, docId: string, database?: string) {
 		const safeName = sanitizeDatabaseIdentifier(collectionName);
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
@@ -327,7 +468,7 @@ export const mongoAdapter = {
 					query = { _id: ObjectId(id) };
 				} catch(e) {}
 				const res = col.deleteOne(query);
-				print(JSON.stringify({ success: true, deletedCount: res.deletedCount }));
+				print(JSON.stringify({ success: true, deletedCount: res.deletedCount, database: ${JSON.stringify(targetDb)} }));
 			} catch(e) {
 				print(JSON.stringify({ error: e.message }));
 			}
@@ -336,18 +477,18 @@ export const mongoAdapter = {
 
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
-		const parsed = JSON.parse(res.stdout.trim());
+		const parsed = extractJsonFromStdout(res.stdout);
 		if (parsed.error) {
 			throw new TRPCError({ code: "BAD_REQUEST", message: parsed.error });
 		}
 		return parsed;
 	},
 
-	async listIndexes(record: any, collectionName: string) {
+	async listIndexes(record: any, collectionName: string, database?: string) {
 		const safeName = sanitizeDatabaseIdentifier(collectionName);
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
@@ -364,7 +505,7 @@ export const mongoAdapter = {
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
 		try {
-			return JSON.parse(res.stdout.trim());
+			return extractJsonFromStdout(res.stdout);
 		} catch {
 			return [];
 		}
@@ -375,18 +516,19 @@ export const mongoAdapter = {
 		collectionName: string,
 		keys: Record<string, number>,
 		options?: { unique?: boolean; name?: string },
+		database?: string,
 	) {
 		const safeName = sanitizeDatabaseIdentifier(collectionName);
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
 			try {
 				const col = db.getSiblingDB(${JSON.stringify(targetDb)}).getCollection(${JSON.stringify(safeName)});
 				const res = col.createIndex(${JSON.stringify(keys)}, ${JSON.stringify(options || {})});
-				print(JSON.stringify({ success: true, indexName: res }));
+				print(JSON.stringify({ success: true, indexName: res, database: ${JSON.stringify(targetDb)} }));
 			} catch(e) {
 				print(JSON.stringify({ error: e.message }));
 			}
@@ -395,25 +537,25 @@ export const mongoAdapter = {
 
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
-		const parsed = JSON.parse(res.stdout.trim());
+		const parsed = extractJsonFromStdout(res.stdout);
 		if (parsed.error) {
 			throw new TRPCError({ code: "BAD_REQUEST", message: parsed.error });
 		}
 		return parsed;
 	},
 
-	async dropIndex(record: any, collectionName: string, indexName: string) {
+	async dropIndex(record: any, collectionName: string, indexName: string, database?: string) {
 		const safeName = sanitizeDatabaseIdentifier(collectionName);
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
 			try {
 				const col = db.getSiblingDB(${JSON.stringify(targetDb)}).getCollection(${JSON.stringify(safeName)});
 				col.dropIndex(${JSON.stringify(indexName)});
-				print(JSON.stringify({ success: true }));
+				print(JSON.stringify({ success: true, database: ${JSON.stringify(targetDb)} }));
 			} catch(e) {
 				print(JSON.stringify({ error: e.message }));
 			}
@@ -422,17 +564,17 @@ export const mongoAdapter = {
 
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
-		const parsed = JSON.parse(res.stdout.trim());
+		const parsed = extractJsonFromStdout(res.stdout);
 		if (parsed.error) {
 			throw new TRPCError({ code: "BAD_REQUEST", message: parsed.error });
 		}
 		return parsed;
 	},
 
-	async listUsers(record: any) {
+	async listUsers(record: any, database?: string) {
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
@@ -448,17 +590,17 @@ export const mongoAdapter = {
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
 		try {
-			return JSON.parse(res.stdout.trim());
+			return extractJsonFromStdout(res.stdout);
 		} catch {
 			return [];
 		}
 	},
 
-	async createUser(record: any, username: string, password: string, role = "readWrite") {
+	async createUser(record: any, username: string, password: string, role = "readWrite", database?: string) {
 		const safeUser = sanitizeDatabaseIdentifier(username);
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
@@ -468,7 +610,7 @@ export const mongoAdapter = {
 					pwd: ${JSON.stringify(password)},
 					roles: [{ role: ${JSON.stringify(role)}, db: ${JSON.stringify(targetDb)} }]
 				});
-				print(JSON.stringify({ success: true, user: ${JSON.stringify(safeUser)} }));
+				print(JSON.stringify({ success: true, user: ${JSON.stringify(safeUser)}, database: ${JSON.stringify(targetDb)} }));
 			} catch(e) {
 				print(JSON.stringify({ error: e.message }));
 			}
@@ -477,24 +619,24 @@ export const mongoAdapter = {
 
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
-		const parsed = JSON.parse(res.stdout.trim());
+		const parsed = extractJsonFromStdout(res.stdout);
 		if (parsed.error) {
 			throw new TRPCError({ code: "BAD_REQUEST", message: parsed.error });
 		}
 		return parsed;
 	},
 
-	async dropUser(record: any, username: string) {
+	async dropUser(record: any, username: string, database?: string) {
 		const safeUser = sanitizeDatabaseIdentifier(username);
 		const { appName, serverId, databaseUser, databasePassword } = record;
 		const authDb = record.authSource || "admin";
-		const targetDb = record.databaseName || "app";
+		const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 		const script = `
 		(function() {
 			try {
 				db.getSiblingDB(${JSON.stringify(targetDb)}).dropUser(${JSON.stringify(safeUser)});
-				print(JSON.stringify({ success: true }));
+				print(JSON.stringify({ success: true, database: ${JSON.stringify(targetDb)} }));
 			} catch(e) {
 				print(JSON.stringify({ error: e.message }));
 			}
@@ -503,7 +645,7 @@ export const mongoAdapter = {
 
 		const cmd = `mongosh -u ${quote([databaseUser])} -p ${quote([databasePassword])} --authenticationDatabase ${quote([authDb])} --quiet --eval ${quote([script])}`;
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
-		const parsed = JSON.parse(res.stdout.trim());
+		const parsed = extractJsonFromStdout(res.stdout);
 		if (parsed.error) {
 			throw new TRPCError({ code: "BAD_REQUEST", message: parsed.error });
 		}
@@ -516,18 +658,57 @@ export const mongoAdapter = {
  * ======================================================================= */
 
 export const sqlAdapter = {
-	async getOverview(record: any, engine: "postgres" | "mysql" | "mariadb") {
+	async listDatabases(record: any, engine: "postgres" | "mysql" | "mariadb") {
 		const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-		const targetDb = databaseName || (engine === "postgres" ? "postgres" : "");
+		const configuredDb = databaseName || (engine === "postgres" ? "postgres" : "");
+
+		if (engine === "postgres") {
+			const sql = `SELECT datname, pg_size_pretty(pg_database_size(datname)) AS size_pretty FROM pg_database WHERE datistemplate = false ORDER BY datname;`;
+			const cmd = `env PGPASSWORD=${quote([databasePassword])} psql -U ${quote([databaseUser])} -d ${quote([configuredDb || "postgres"])} -X -t -A -c ${quote([`SELECT json_agg(json_build_object('name', datname, 'sizeOnDisk', size_pretty, 'isInternal', datname IN ('postgres', 'template0', 'template1'))) FROM (${sql}) q;`])}`;
+			try {
+				const res = await executeInsideServiceContainer(appName, serverId, cmd);
+				const list = JSON.parse(res.stdout.trim() || "[]");
+				const found = Array.isArray(list) ? list : [];
+				if (configuredDb && !found.some((d: any) => d.name === configuredDb)) {
+					found.push({ name: configuredDb, sizeOnDisk: "0 MB", isInternal: false });
+				}
+				return found;
+			} catch (err: any) {
+				return [{ name: configuredDb || "postgres", sizeOnDisk: "0 MB", isInternal: false, error: err.message }];
+			}
+		}
+
+		// MySQL / MariaDB
+		const cmd = `mysql -u ${quote([databaseUser])} -p${quote([databasePassword])} -s -N -e "SHOW DATABASES;"`;
+		try {
+			const res = await executeInsideServiceContainer(appName, serverId, cmd);
+			const lines = res.stdout.trim().split("\n").filter(Boolean);
+			const list = lines.map((name) => {
+				const trimmed = name.trim();
+				const isInternal = ["information_schema", "mysql", "performance_schema", "sys"].includes(trimmed);
+				return { name: trimmed, sizeOnDisk: "0 MB", isInternal };
+			});
+			if (configuredDb && !list.some((d) => d.name === configuredDb)) {
+				list.push({ name: configuredDb, sizeOnDisk: "0 MB", isInternal: false });
+			}
+			return list;
+		} catch (err: any) {
+			return [{ name: configuredDb || "mysql", sizeOnDisk: "0 MB", isInternal: false, error: err.message }];
+		}
+	},
+
+	async getOverview(record: any, engine: "postgres" | "mysql" | "mariadb", database?: string) {
+		const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
+		const targetDb = sanitizeDatabaseIdentifier(database || databaseName || (engine === "postgres" ? "postgres" : ""));
 
 		if (engine === "postgres") {
 			const sql = `SELECT version() AS version, (SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public') AS tables_count, pg_size_pretty(pg_database_size(current_database())) AS total_size;`;
-			const cmd = `env PGPASSWORD=${quote([databasePassword])} psql -U ${quote([databaseUser])} -d ${quote([targetDb])} -X -t -A -c ${quote([`SELECT json_build_object('version', version, 'tablesCount', tables_count, 'totalSize', total_size) FROM (${sql}) q;`])}`;
+			const cmd = `env PGPASSWORD=${quote([databasePassword])} psql -U ${quote([databaseUser])} -d ${quote([targetDb])} -X -t -A -c ${quote([`SELECT json_build_object('version', version, 'tablesCount', tables_count, 'totalSize', total_size, 'database', '${targetDb}') FROM (${sql}) q;`])}`;
 			const res = await executeInsideServiceContainer(appName, serverId, cmd);
 			try {
 				return JSON.parse(res.stdout.trim());
 			} catch {
-				return { version: "PostgreSQL", tablesCount: 0, totalSize: "0 MB" };
+				return { version: "PostgreSQL", database: targetDb, tablesCount: 0, totalSize: "0 MB" };
 			}
 		}
 
@@ -538,14 +719,15 @@ export const sqlAdapter = {
 		const parts = res.stdout.trim().split("\t");
 		return {
 			version: parts[0] || `${engine.toUpperCase()}`,
+			database: targetDb,
 			tablesCount: Number.parseInt(parts[1] || "0", 10),
 			totalSize: parts[2] || "0 MB",
 		};
 	},
 
-	async listTables(record: any, engine: "postgres" | "mysql" | "mariadb") {
+	async listTables(record: any, engine: "postgres" | "mysql" | "mariadb", database?: string) {
 		const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-		const targetDb = databaseName || (engine === "postgres" ? "postgres" : "");
+		const targetDb = sanitizeDatabaseIdentifier(database || databaseName || (engine === "postgres" ? "postgres" : ""));
 
 		if (engine === "postgres") {
 			const sql = `SELECT table_name, COALESCE((SELECT reltuples::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = t.table_name AND n.nspname = 'public'), 0) AS estimated_rows FROM information_schema.tables t WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;`;
@@ -556,6 +738,7 @@ export const sqlAdapter = {
 				return (list || []).map((t: any) => ({
 					name: t.table_name,
 					estimatedRows: Number(t.estimated_rows || 0),
+					database: targetDb,
 				}));
 			} catch {
 				return [];
@@ -569,14 +752,14 @@ export const sqlAdapter = {
 		const lines = res.stdout.trim().split("\n").filter(Boolean);
 		return lines.map((l) => {
 			const [name, rows] = l.split("\t");
-			return { name, estimatedRows: Number.parseInt(rows || "0", 10) };
+			return { name, estimatedRows: Number.parseInt(rows || "0", 10), database: targetDb };
 		});
 	},
 
-	async getTableSchema(record: any, engine: "postgres" | "mysql" | "mariadb", tableName: string) {
+	async getTableSchema(record: any, engine: "postgres" | "mysql" | "mariadb", tableName: string, database?: string) {
 		const safeTable = sanitizeDatabaseIdentifier(tableName);
 		const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-		const targetDb = databaseName || (engine === "postgres" ? "postgres" : "");
+		const targetDb = sanitizeDatabaseIdentifier(database || databaseName || (engine === "postgres" ? "postgres" : ""));
 
 		if (engine === "postgres") {
 			const colSql = `
@@ -596,6 +779,7 @@ export const sqlAdapter = {
 				const parsed = JSON.parse(res.stdout.trim());
 				return {
 					tableName: safeTable,
+					database: targetDb,
 					columns: (parsed.columns || []).map((c: any) => ({
 						name: c.column_name,
 						type: c.data_type,
@@ -609,7 +793,7 @@ export const sqlAdapter = {
 					})),
 				};
 			} catch {
-				return { tableName: safeTable, columns: [], indexes: [] };
+				return { tableName: safeTable, database: targetDb, columns: [], indexes: [] };
 			}
 		}
 
@@ -650,14 +834,14 @@ export const sqlAdapter = {
 				};
 			});
 
-		return { tableName: safeTable, columns, indexes };
+		return { tableName: safeTable, database: targetDb, columns, indexes };
 	},
 
 	async queryRows(
 		record: any,
 		engine: "postgres" | "mysql" | "mariadb",
 		tableName: string,
-		options: { page?: number; limit?: number; searchColumn?: string; searchValue?: string },
+		options: { page?: number; limit?: number; searchColumn?: string; searchValue?: string; database?: string },
 	) {
 		const safeTable = sanitizeDatabaseIdentifier(tableName);
 		const page = Math.max(1, options.page || 1);
@@ -675,7 +859,7 @@ export const sqlAdapter = {
 		}
 
 		const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-		const targetDb = databaseName || (engine === "postgres" ? "postgres" : "");
+		const targetDb = sanitizeDatabaseIdentifier(options.database || databaseName || (engine === "postgres" ? "postgres" : ""));
 
 		if (engine === "postgres") {
 			const countSql = `SELECT count(*) FROM "${safeTable}" ${whereClause};`;
@@ -686,14 +870,17 @@ export const sqlAdapter = {
 			const res = await executeInsideServiceContainer(appName, serverId, cmd);
 			try {
 				const parsed = JSON.parse(res.stdout.trim());
+				const rows = parsed.rows || [];
 				return {
 					total: Number.parseInt(parsed.total || "0", 10),
 					page,
 					limit,
-					rows: parsed.rows || [],
+					rows,
+					documents: rows,
+					database: targetDb,
 				};
 			} catch {
-				return { total: 0, page, limit, rows: [] };
+				return { total: 0, page, limit, rows: [], documents: [], database: targetDb };
 			}
 		}
 
@@ -709,7 +896,7 @@ export const sqlAdapter = {
 		const total = Number.parseInt(countRes.stdout.trim() || "0", 10);
 		const lines = rowsRes.stdout.trim().split("\n").filter(Boolean);
 		if (lines.length <= 1) {
-			return { total, page, limit, rows: [] };
+			return { total, page, limit, rows: [], documents: [], database: targetDb };
 		}
 		const headers = (lines[0] || "").split("\t");
 		const rows = lines.slice(1).map((line) => {
@@ -721,7 +908,7 @@ export const sqlAdapter = {
 			return row;
 		});
 
-		return { total, page, limit, rows };
+		return { total, page, limit, rows, documents: rows, database: targetDb };
 	},
 
 	async insertRow(
@@ -729,6 +916,7 @@ export const sqlAdapter = {
 		engine: "postgres" | "mysql" | "mariadb",
 		tableName: string,
 		rowData: Record<string, any>,
+		database?: string,
 	) {
 		const safeTable = sanitizeDatabaseIdentifier(tableName);
 		const columns = Object.keys(rowData).map(sanitizeDatabaseIdentifier).filter(Boolean);
@@ -737,7 +925,7 @@ export const sqlAdapter = {
 		}
 
 		const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-		const targetDb = databaseName || (engine === "postgres" ? "postgres" : "");
+		const targetDb = sanitizeDatabaseIdentifier(database || databaseName || (engine === "postgres" ? "postgres" : ""));
 
 		if (engine === "postgres") {
 			const colList = columns.map((c) => `"${c}"`).join(", ");
@@ -754,7 +942,7 @@ export const sqlAdapter = {
 			const res = await executeInsideServiceContainer(appName, serverId, cmd);
 			try {
 				const inserted = JSON.parse(res.stdout.trim() || "[]");
-				return { success: true, row: inserted[0] };
+				return { success: true, row: inserted[0], database: targetDb };
 			} catch (err: any) {
 				throw new TRPCError({ code: "BAD_REQUEST", message: res.stderr || err.message });
 			}
@@ -773,7 +961,7 @@ export const sqlAdapter = {
 		const sql = `INSERT INTO \`${safeTable}\` (${colList}) VALUES (${valList});`;
 		const cmd = `mysql -u ${quote([databaseUser])} -p${quote([databasePassword])} ${quote([targetDb])} -e ${quote([sql])}`;
 		await executeInsideServiceContainer(appName, serverId, cmd);
-		return { success: true };
+		return { success: true, database: targetDb };
 	},
 
 	async updateRow(
@@ -782,6 +970,7 @@ export const sqlAdapter = {
 		tableName: string,
 		primaryKey: { column: string; value: any },
 		updateData: Record<string, any>,
+		database?: string,
 	) {
 		const safeTable = sanitizeDatabaseIdentifier(tableName);
 		const safePkCol = sanitizeDatabaseIdentifier(primaryKey.column);
@@ -793,7 +982,7 @@ export const sqlAdapter = {
 		}
 
 		const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-		const targetDb = databaseName || (engine === "postgres" ? "postgres" : "");
+		const targetDb = sanitizeDatabaseIdentifier(database || databaseName || (engine === "postgres" ? "postgres" : ""));
 
 		if (engine === "postgres") {
 			const setClause = cols
@@ -807,7 +996,7 @@ export const sqlAdapter = {
 			const sql = `UPDATE "${safeTable}" SET ${setClause} WHERE "${safePkCol}" = '${escPkVal}';`;
 			const cmd = `env PGPASSWORD=${quote([databasePassword])} psql -U ${quote([databaseUser])} -d ${quote([targetDb])} -X -c ${quote([sql])}`;
 			await executeInsideServiceContainer(appName, serverId, cmd);
-			return { success: true };
+			return { success: true, database: targetDb };
 		}
 
 		// MySQL / MariaDB
@@ -822,7 +1011,7 @@ export const sqlAdapter = {
 		const sql = `UPDATE \`${safeTable}\` SET ${setClause} WHERE \`${safePkCol}\` = '${escPkVal}';`;
 		const cmd = `mysql -u ${quote([databaseUser])} -p${quote([databasePassword])} ${quote([targetDb])} -e ${quote([sql])}`;
 		await executeInsideServiceContainer(appName, serverId, cmd);
-		return { success: true };
+		return { success: true, database: targetDb };
 	},
 
 	async deleteRow(
@@ -830,13 +1019,14 @@ export const sqlAdapter = {
 		engine: "postgres" | "mysql" | "mariadb",
 		tableName: string,
 		primaryKey: { column: string; value: any },
+		database?: string,
 	) {
 		const safeTable = sanitizeDatabaseIdentifier(tableName);
 		const safePkCol = sanitizeDatabaseIdentifier(primaryKey.column);
 		const escPkVal = String(primaryKey.value).replace(/'/g, "''");
 
 		const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-		const targetDb = databaseName || (engine === "postgres" ? "postgres" : "");
+		const targetDb = sanitizeDatabaseIdentifier(database || databaseName || (engine === "postgres" ? "postgres" : ""));
 
 		const sql =
 			engine === "postgres"
@@ -849,13 +1039,14 @@ export const sqlAdapter = {
 				: `mysql -u ${quote([databaseUser])} -p${quote([databasePassword])} ${quote([targetDb])} -e ${quote([sql])}`;
 
 		await executeInsideServiceContainer(appName, serverId, cmd);
-		return { success: true };
+		return { success: true, database: targetDb };
 	},
 
 	async executeSql(
 		record: any,
 		engine: "postgres" | "mysql" | "mariadb",
 		userSql: string,
+		database?: string,
 	) {
 		const trimmed = userSql.trim();
 		if (!trimmed) {
@@ -871,7 +1062,7 @@ export const sqlAdapter = {
 			(upper.startsWith("DELETE ") && !upper.includes("WHERE"));
 
 		const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-		const targetDb = databaseName || (engine === "postgres" ? "postgres" : "");
+		const targetDb = sanitizeDatabaseIdentifier(database || databaseName || (engine === "postgres" ? "postgres" : ""));
 
 		const startTime = Date.now();
 
@@ -890,6 +1081,7 @@ export const sqlAdapter = {
 						rowCount: 0,
 						durationMs,
 						isDestructive,
+						database: targetDb,
 						statusMessage: res.stderr || "Query executed successfully.",
 					};
 				}
@@ -909,6 +1101,7 @@ export const sqlAdapter = {
 					rowCount: rows.length,
 					durationMs,
 					isDestructive,
+					database: targetDb,
 				};
 			} catch (err: any) {
 				throw new TRPCError({
@@ -931,6 +1124,7 @@ export const sqlAdapter = {
 					rowCount: 0,
 					durationMs,
 					isDestructive,
+					database: targetDb,
 					statusMessage: "Query executed successfully.",
 				};
 			}
@@ -950,6 +1144,7 @@ export const sqlAdapter = {
 				rowCount: rows.length,
 				durationMs,
 				isDestructive,
+				database: targetDb,
 			};
 		} catch (err: any) {
 			throw new TRPCError({
@@ -965,11 +1160,42 @@ export const sqlAdapter = {
  * ======================================================================= */
 
 export const redisAdapter = {
-	async getOverview(record: any) {
+	async listDatabases(record: any) {
 		const { appName, serverId, databasePassword } = record;
-		const cmd = databasePassword
-			? `redis-cli -a ${quote([databasePassword])} INFO`
-			: "redis-cli INFO";
+		const auth = databasePassword ? `-a ${quote([databasePassword])} ` : "";
+		const cmd = `redis-cli ${auth}INFO keyspace`;
+		try {
+			const res = await executeInsideServiceContainer(appName, serverId, cmd);
+			const lines = res.stdout.trim().split("\n");
+			const keyspaceMap = new Map<string, number>();
+			for (const line of lines) {
+				const m = line.match(/^db(\d+):keys=(\d+)/);
+				if (m && m[1] && m[2]) {
+					keyspaceMap.set(m[1], Number.parseInt(m[2], 10));
+				}
+			}
+			const list: Array<{ name: string; keysCount: number; empty: boolean; isInternal: boolean }> = [];
+			for (let i = 0; i < 16; i++) {
+				const str = String(i);
+				const count = keyspaceMap.get(str) || 0;
+				list.push({
+					name: str,
+					keysCount: count,
+					empty: count === 0,
+					isInternal: false,
+				});
+			}
+			return list;
+		} catch {
+			return [{ name: "0", keysCount: 0, empty: false, isInternal: false }];
+		}
+	},
+
+	async getOverview(record: any, database?: string) {
+		const { appName, serverId, databasePassword } = record;
+		const targetDb = database ? Number.parseInt(database, 10) : 0;
+		const auth = databasePassword ? `-a ${quote([databasePassword])} ` : "";
+		const cmd = `redis-cli ${auth}INFO`;
 
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
 		const lines = res.stdout.split("\n");
@@ -984,13 +1210,15 @@ export const redisAdapter = {
 		}
 
 		let totalKeys = 0;
-		if (info.db0) {
-			const m = info.db0.match(/keys=(\d+)/);
+		const dbKey = `db${targetDb}`;
+		if (info[dbKey]) {
+			const m = info[dbKey].match(/keys=(\d+)/);
 			if (m && m[1]) totalKeys = Number.parseInt(m[1], 10);
 		}
 
 		return {
 			version: info.redis_version || "Redis",
+			database: String(targetDb),
 			usedMemory: info.used_memory_human || "0 MB",
 			connectedClients: Number.parseInt(info.connected_clients || "1", 10),
 			uptimeDays: Number.parseInt(info.uptime_in_days || "0", 10),
@@ -998,10 +1226,11 @@ export const redisAdapter = {
 		};
 	},
 
-	async scanKeys(record: any, pattern = "*", cursor = "0", count = 100) {
+	async scanKeys(record: any, pattern = "*", cursor = "0", count = 100, database?: string) {
 		const { appName, serverId, databasePassword } = record;
 		const auth = databasePassword ? `-a ${quote([databasePassword])} ` : "";
-		const scanCmd = `redis-cli ${auth}SCAN ${quote([cursor])} MATCH ${quote([pattern])} COUNT ${count}`;
+		const dbArg = database ? `-n ${quote([database])} ` : "";
+		const scanCmd = `redis-cli ${auth}${dbArg}SCAN ${quote([cursor])} MATCH ${quote([pattern])} COUNT ${count}`;
 
 		const res = await executeInsideServiceContainer(appName, serverId, scanCmd);
 		const lines = res.stdout.trim().split("\n").filter(Boolean);
@@ -1012,9 +1241,8 @@ export const redisAdapter = {
 		for (const k of rawKeys) {
 			if (!k) continue;
 			try {
-				const metaCmd = `redis-cli ${auth}--raw MGET_TYPE_TTL`;
-				const typeCmd = `redis-cli ${auth}TYPE ${quote([k])}`;
-				const ttlCmd = `redis-cli ${auth}TTL ${quote([k])}`;
+				const typeCmd = `redis-cli ${auth}${dbArg}TYPE ${quote([k])}`;
+				const ttlCmd = `redis-cli ${auth}${dbArg}TTL ${quote([k])}`;
 				const [typeRes, ttlRes] = await Promise.all([
 					executeInsideServiceContainer(appName, serverId, typeCmd),
 					executeInsideServiceContainer(appName, serverId, ttlCmd),
@@ -1029,15 +1257,16 @@ export const redisAdapter = {
 			}
 		}
 
-		return { cursor: nextCursor, keys: keysWithMeta };
+		return { cursor: nextCursor, keys: keysWithMeta, database: database || "0" };
 	},
 
-	async getKey(record: any, key: string) {
+	async getKey(record: any, key: string, database?: string) {
 		const { appName, serverId, databasePassword } = record;
 		const auth = databasePassword ? `-a ${quote([databasePassword])} ` : "";
+		const dbArg = database ? `-n ${quote([database])} ` : "";
 
-		const typeCmd = `redis-cli ${auth}TYPE ${quote([key])}`;
-		const ttlCmd = `redis-cli ${auth}TTL ${quote([key])}`;
+		const typeCmd = `redis-cli ${auth}${dbArg}TYPE ${quote([key])}`;
+		const ttlCmd = `redis-cli ${auth}${dbArg}TTL ${quote([key])}`;
 
 		const [typeRes, ttlRes] = await Promise.all([
 			executeInsideServiceContainer(appName, serverId, typeCmd),
@@ -1049,11 +1278,11 @@ export const redisAdapter = {
 
 		let value: any = null;
 		if (type === "string") {
-			const getCmd = `redis-cli ${auth}GET ${quote([key])}`;
+			const getCmd = `redis-cli ${auth}${dbArg}GET ${quote([key])}`;
 			const res = await executeInsideServiceContainer(appName, serverId, getCmd);
 			value = res.stdout.trim();
 		} else if (type === "hash") {
-			const getCmd = `redis-cli ${auth}HGETALL ${quote([key])}`;
+			const getCmd = `redis-cli ${auth}${dbArg}HGETALL ${quote([key])}`;
 			const res = await executeInsideServiceContainer(appName, serverId, getCmd);
 			const lines = res.stdout.trim().split("\n");
 			const hash: Record<string, string> = {};
@@ -1063,42 +1292,44 @@ export const redisAdapter = {
 			}
 			value = hash;
 		} else if (type === "list") {
-			const getCmd = `redis-cli ${auth}LRANGE ${quote([key])} 0 99`;
+			const getCmd = `redis-cli ${auth}${dbArg}LRANGE ${quote([key])} 0 99`;
 			const res = await executeInsideServiceContainer(appName, serverId, getCmd);
 			value = res.stdout.trim().split("\n");
 		} else if (type === "set") {
-			const getCmd = `redis-cli ${auth}SMEMBERS ${quote([key])}`;
+			const getCmd = `redis-cli ${auth}${dbArg}SMEMBERS ${quote([key])}`;
 			const res = await executeInsideServiceContainer(appName, serverId, getCmd);
 			value = res.stdout.trim().split("\n");
 		} else if (type === "zset") {
-			const getCmd = `redis-cli ${auth}ZRANGE ${quote([key])} 0 99 WITHSCORES`;
+			const getCmd = `redis-cli ${auth}${dbArg}ZRANGE ${quote([key])} 0 99 WITHSCORES`;
 			const res = await executeInsideServiceContainer(appName, serverId, getCmd);
 			value = res.stdout.trim().split("\n");
 		}
 
-		return { key, type, ttl, value };
+		return { key, type, ttl, value, database: database || "0" };
 	},
 
-	async setKey(record: any, key: string, value: string, ttlSeconds?: number) {
+	async setKey(record: any, key: string, value: string, ttlSeconds?: number, database?: string) {
 		const { appName, serverId, databasePassword } = record;
 		const auth = databasePassword ? `-a ${quote([databasePassword])} ` : "";
+		const dbArg = database ? `-n ${quote([database])} ` : "";
 		const exPart = ttlSeconds && ttlSeconds > 0 ? ` EX ${ttlSeconds}` : "";
-		const cmd = `redis-cli ${auth}SET ${quote([key])} ${quote([value])}${exPart}`;
+		const cmd = `redis-cli ${auth}${dbArg}SET ${quote([key])} ${quote([value])}${exPart}`;
 
 		await executeInsideServiceContainer(appName, serverId, cmd);
-		return { success: true, key };
+		return { success: true, key, database: database || "0" };
 	},
 
-	async deleteKey(record: any, key: string) {
+	async deleteKey(record: any, key: string, database?: string) {
 		const { appName, serverId, databasePassword } = record;
 		const auth = databasePassword ? `-a ${quote([databasePassword])} ` : "";
-		const cmd = `redis-cli ${auth}DEL ${quote([key])}`;
+		const dbArg = database ? `-n ${quote([database])} ` : "";
+		const cmd = `redis-cli ${auth}${dbArg}DEL ${quote([key])}`;
 
 		await executeInsideServiceContainer(appName, serverId, cmd);
-		return { success: true, key };
+		return { success: true, key, database: database || "0" };
 	},
 
-	async executeCommand(record: any, rawCommand: string) {
+	async executeCommand(record: any, rawCommand: string, database?: string) {
 		const parts = rawCommand.trim().split(/\s+/);
 		const verb = (parts[0] || "").toUpperCase();
 
@@ -1128,10 +1359,11 @@ export const redisAdapter = {
 
 		const { appName, serverId, databasePassword } = record;
 		const auth = databasePassword ? `-a ${quote([databasePassword])} ` : "";
-		const cmd = `redis-cli ${auth}${rawCommand}`;
+		const dbArg = database ? `-n ${quote([database])} ` : "";
+		const cmd = `redis-cli ${auth}${dbArg}${rawCommand}`;
 
 		const res = await executeInsideServiceContainer(appName, serverId, cmd);
-		return { output: res.stdout || res.stderr };
+		return { output: res.stdout || res.stderr, database: database || "0" };
 	},
 };
 
@@ -1140,6 +1372,10 @@ export const redisAdapter = {
  * ======================================================================= */
 
 export const libsqlAdapter = {
+	async listDatabases(record: any) {
+		return [{ name: "main", sizeOnDisk: "Embedded", empty: false, isInternal: false }];
+	},
+
 	async getOverview(record: any) {
 		const { appName, serverId } = record;
 		const sql = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';";
@@ -1155,11 +1391,12 @@ export const libsqlAdapter = {
 			const count = parsed?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value || 0;
 			return {
 				version: "LibSQL / sqld",
+				database: "main",
 				tablesCount: Number(count),
 				totalSize: "Embedded",
 			};
 		} catch {
-			return { version: "LibSQL", tablesCount: 0, totalSize: "Embedded" };
+			return { version: "LibSQL", database: "main", tablesCount: 0, totalSize: "Embedded" };
 		}
 	},
 
@@ -1176,7 +1413,7 @@ export const libsqlAdapter = {
 			const res = await executeInsideServiceContainer(appName, serverId, cmd);
 			const parsed = JSON.parse(res.stdout);
 			const rows = parsed?.results?.[0]?.response?.result?.rows || [];
-			return rows.map((r: any) => ({ name: r[0]?.value, estimatedRows: 0 }));
+			return rows.map((r: any) => ({ name: r[0]?.value, estimatedRows: 0, database: "main" }));
 		} catch {
 			return [];
 		}
@@ -1203,9 +1440,9 @@ export const libsqlAdapter = {
 				defaultValue: r[4]?.value,
 				isPrimary: r[5]?.value === 1,
 			}));
-			return { tableName: safeTable, columns, indexes: [] };
+			return { tableName: safeTable, database: "main", columns, indexes: [] };
 		} catch {
-			return { tableName: safeTable, columns: [], indexes: [] };
+			return { tableName: safeTable, database: "main", columns: [], indexes: [] };
 		}
 	},
 
@@ -1243,9 +1480,9 @@ export const libsqlAdapter = {
 				return row;
 			});
 
-			return { total: Number(total), page, limit, rows };
+			return { total: Number(total), page, limit, rows, documents: rows, database: "main" };
 		} catch {
-			return { total: 0, page, limit, rows: [] };
+			return { total: 0, page, limit, rows: [], documents: [], database: "main" };
 		}
 	},
 
@@ -1295,6 +1532,7 @@ export const libsqlAdapter = {
 				rowCount: rows.length,
 				durationMs,
 				isDestructive,
+				database: "main",
 			};
 		} catch (err: any) {
 			throw new TRPCError({
@@ -1304,3 +1542,58 @@ export const libsqlAdapter = {
 		}
 	},
 };
+
+/* =======================================================================
+ * 5. UNIFIED DATABASE DISCOVERY & SELECTION
+ * ======================================================================= */
+
+export interface DiscoveredDatabase {
+	name: string;
+	sizeOnDisk?: number | string;
+	empty?: boolean;
+	isInternal?: boolean;
+	estimatedCount?: number;
+	keysCount?: number;
+	isDefault?: boolean;
+	error?: string;
+}
+
+/**
+ * Discovers available logical databases for an authorized database resource.
+ * Explicitly distinguishes managed resource identities from logical databases.
+ */
+export async function listDatabases(
+	record: any,
+	engine: SupportedDatabaseType,
+): Promise<{ databases: DiscoveredDatabase[]; selectedDatabase: string }> {
+	let databases: DiscoveredDatabase[] = [];
+
+	try {
+		if (engine === "mongo") {
+			databases = await mongoAdapter.listDatabases(record);
+		} else if (engine === "postgres" || engine === "mysql" || engine === "mariadb") {
+			databases = await sqlAdapter.listDatabases(record, engine);
+		} else if (engine === "redis") {
+			databases = await redisAdapter.listDatabases(record);
+		} else if (engine === "libsql") {
+			databases = await libsqlAdapter.listDatabases(record);
+		}
+	} catch (err: any) {
+		const fallbackDb = record.databaseName || (engine === "postgres" ? "postgres" : engine === "mongo" ? "app" : engine === "redis" ? "0" : "main");
+		databases = [{ name: fallbackDb, sizeOnDisk: "0 MB", isInternal: false, isDefault: true, error: err.message }];
+	}
+
+	const selectedDatabase = record.databaseName || (engine === "postgres" ? "postgres" : engine === "mongo" ? "app" : engine === "redis" ? "0" : "main");
+
+	for (const db of databases) {
+		if (db.name === selectedDatabase) {
+			db.isDefault = true;
+		}
+	}
+
+	return {
+		databases,
+		selectedDatabase,
+	};
+}
+

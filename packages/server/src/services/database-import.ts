@@ -3,6 +3,7 @@ import { quote } from "shell-quote";
 import type { SupportedDatabaseType } from "./database-connection";
 import {
 	executeInsideServiceContainer,
+	extractJsonFromStdout,
 	libsqlAdapter,
 	mongoAdapter,
 	redisAdapter,
@@ -21,6 +22,7 @@ export interface DatabaseImportOptions {
 	fileType: "csv" | "json";
 	fieldMappings?: Record<string, string>; // fileHeader -> targetColumnName (or "__ignore__")
 	duplicatePolicy?: DuplicatePolicy;
+	database?: string;
 	redisConfig?: {
 		structure?: RedisDataStructure;
 		keyField?: string;
@@ -444,11 +446,12 @@ export async function importPostgres(
 	rows: Record<string, any>[],
 	fieldMappings: Record<string, string>,
 	duplicatePolicy: DuplicatePolicy = "skip",
+	database?: string,
 ): Promise<DatabaseImportResult> {
 	const safeTable = sanitizeDatabaseIdentifier(tableName);
 	let schema: any = { columns: [] };
 	try {
-		schema = await sqlAdapter.getTableSchema(record, "postgres", safeTable);
+		schema = await sqlAdapter.getTableSchema(record, "postgres", safeTable, database);
 	} catch {
 		// Introspection fallback if container not reachable or empty schema
 	}
@@ -484,7 +487,7 @@ export async function importPostgres(
 	}
 
 	const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-	const targetDb = databaseName || "postgres";
+	const targetDb = sanitizeDatabaseIdentifier(database || databaseName || "postgres");
 
 	let insertedCount = 0;
 	let updatedCount = 0;
@@ -636,11 +639,12 @@ export async function importMySql(
 	rows: Record<string, any>[],
 	fieldMappings: Record<string, string>,
 	duplicatePolicy: DuplicatePolicy = "skip",
+	database?: string,
 ): Promise<DatabaseImportResult> {
 	const safeTable = sanitizeDatabaseIdentifier(tableName);
 	let schema: any = { columns: [] };
 	try {
-		schema = await sqlAdapter.getTableSchema(record, engine, safeTable);
+		schema = await sqlAdapter.getTableSchema(record, engine, safeTable, database);
 	} catch {
 		// Introspection fallback if container not reachable or empty schema
 	}
@@ -675,7 +679,7 @@ export async function importMySql(
 	}
 
 	const { appName, serverId, databaseUser, databasePassword, databaseName } = record;
-	const targetDb = databaseName || "";
+	const targetDb = sanitizeDatabaseIdentifier(database || databaseName || "");
 
 	let insertedCount = 0;
 	let updatedCount = 0;
@@ -952,6 +956,7 @@ export async function importMongo(
 	rows: Record<string, any>[],
 	fieldMappings: Record<string, string>,
 	duplicatePolicy: DuplicatePolicy = "skip",
+	database?: string,
 ): Promise<DatabaseImportResult> {
 	const safeCollection = sanitizeDatabaseIdentifier(collectionName);
 	if (!safeCollection) {
@@ -1012,7 +1017,7 @@ export async function importMongo(
 
 	const { appName, serverId, databaseUser, databasePassword } = record;
 	const authDb = record.authSource || "admin";
-	const targetDb = record.databaseName || "app";
+	const targetDb = sanitizeDatabaseIdentifier(database || record.databaseName || "app");
 
 	let insertedCount = 0;
 	let updatedCount = 0;
@@ -1096,7 +1101,7 @@ export async function importMongo(
 
 		try {
 			const res = await executeInsideServiceContainer(appName, serverId, cmd);
-			const parsed = JSON.parse(res.stdout.trim());
+			const parsed = extractJsonFromStdout(res.stdout);
 			if (parsed.error) {
 				failedCount += chunk.length;
 				errors.push({
@@ -1371,6 +1376,7 @@ export async function executeDatabaseImport(
 			rows,
 			fieldMappings,
 			duplicatePolicy,
+			options.database,
 		);
 	} else if (engine === "mysql" || engine === "mariadb") {
 		rawResult = await importMySql(
@@ -1380,6 +1386,7 @@ export async function executeDatabaseImport(
 			rows,
 			fieldMappings,
 			duplicatePolicy,
+			options.database,
 		);
 	} else if (engine === "libsql") {
 		rawResult = await importLibSql(
@@ -1396,6 +1403,7 @@ export async function executeDatabaseImport(
 			rows,
 			fieldMappings,
 			duplicatePolicy,
+			options.database,
 		);
 	} else if (engine === "redis") {
 		rawResult = await importRedis(

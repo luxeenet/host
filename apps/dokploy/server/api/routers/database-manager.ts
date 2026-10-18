@@ -4,6 +4,7 @@ import {
 	getAuthorizedDatabaseRecord,
 	getPublicDatabaseHost,
 	libsqlAdapter,
+	listDatabases,
 	mongoAdapter,
 	previewImport,
 	redisAdapter,
@@ -243,9 +244,9 @@ export const databaseManagerRouter = createTRPCRouter({
 	}),
 
 	/**
-	 * Returns engine-specific stats, storage, and version details.
+	 * Discovers available logical databases for an authorized database resource.
 	 */
-	engineOverview: protectedProcedure
+	listDatabases: protectedProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -259,19 +260,40 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.engine,
 				ctx.session.activeOrganizationId,
 			);
+			return await listDatabases(record, input.engine);
+		}),
+
+	/**
+	 * Returns engine-specific stats, storage, and version details.
+	 */
+	engineOverview: protectedProcedure
+		.input(
+			z.object({
+				databaseId: z.string().min(1),
+				engine: SupportedEngineEnum,
+				database: z.string().optional(),
+			}),
+		)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.databaseId, "read");
+			const record = await getAuthorizedDatabaseRecord(
+				input.databaseId,
+				input.engine,
+				ctx.session.activeOrganizationId,
+			);
 
 			if (input.engine === "mongo") {
-				return await mongoAdapter.getOverview(record);
+				return await mongoAdapter.getOverview(record, input.database);
 			}
 			if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
 				input.engine === "mariadb"
 			) {
-				return await sqlAdapter.getOverview(record, input.engine);
+				return await sqlAdapter.getOverview(record, input.engine, input.database);
 			}
 			if (input.engine === "redis") {
-				return await redisAdapter.getOverview(record);
+				return await redisAdapter.getOverview(record, input.database);
 			}
 			if (input.engine === "libsql") {
 				return await libsqlAdapter.getOverview(record);
@@ -287,6 +309,7 @@ export const databaseManagerRouter = createTRPCRouter({
 			z.object({
 				databaseId: z.string().min(1),
 				engine: SupportedEngineEnum,
+				database: z.string().optional(),
 			}),
 		)
 		.query(async ({ input, ctx }) => {
@@ -298,14 +321,14 @@ export const databaseManagerRouter = createTRPCRouter({
 			);
 
 			if (input.engine === "mongo") {
-				return await mongoAdapter.listCollections(record);
+				return await mongoAdapter.listCollections(record, input.database);
 			}
 			if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
 				input.engine === "mariadb"
 			) {
-				return await sqlAdapter.listTables(record, input.engine);
+				return await sqlAdapter.listTables(record, input.engine, input.database);
 			}
 			if (input.engine === "libsql") {
 				return await libsqlAdapter.listTables(record);
@@ -322,6 +345,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				databaseId: z.string().min(1),
 				engine: SupportedEngineEnum,
 				name: z.string().min(1),
+				database: z.string().optional(),
 			}),
 		)
 		.query(async ({ input, ctx }) => {
@@ -333,20 +357,20 @@ export const databaseManagerRouter = createTRPCRouter({
 			);
 
 			if (input.engine === "mongo") {
-				const indexes = await mongoAdapter.listIndexes(record, input.name);
-				return { tableName: input.name, columns: [], indexes };
+				const indexes = await mongoAdapter.listIndexes(record, input.name, input.database);
+				return { tableName: input.name, database: input.database, columns: [], indexes };
 			}
 			if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
 				input.engine === "mariadb"
 			) {
-				return await sqlAdapter.getTableSchema(record, input.engine, input.name);
+				return await sqlAdapter.getTableSchema(record, input.engine, input.name, input.database);
 			}
 			if (input.engine === "libsql") {
 				return await libsqlAdapter.getTableSchema(record, input.name);
 			}
-			return { tableName: input.name, columns: [], indexes: [] };
+			return { tableName: input.name, database: input.database, columns: [], indexes: [] };
 		}),
 
 	/**
@@ -364,6 +388,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				sort: z.string().optional(),
 				searchColumn: z.string().optional(),
 				searchValue: z.string().optional(),
+				database: z.string().optional(),
 			}),
 		)
 		.query(async ({ input, ctx }) => {
@@ -374,33 +399,47 @@ export const databaseManagerRouter = createTRPCRouter({
 				ctx.session.activeOrganizationId,
 			);
 
+			let res: any;
 			if (input.engine === "mongo") {
-				return await mongoAdapter.queryDocuments(record, input.name, {
+				res = await mongoAdapter.queryDocuments(record, input.name, {
 					page: input.page,
 					limit: input.limit,
 					filter: input.filter,
 					sort: input.sort,
+					database: input.database,
 				});
-			}
-			if (
+			} else if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
 				input.engine === "mariadb"
 			) {
-				return await sqlAdapter.queryRows(record, input.engine, input.name, {
+				res = await sqlAdapter.queryRows(record, input.engine, input.name, {
 					page: input.page,
 					limit: input.limit,
 					searchColumn: input.searchColumn,
 					searchValue: input.searchValue,
+					database: input.database,
 				});
-			}
-			if (input.engine === "libsql") {
-				return await libsqlAdapter.queryRows(record, input.name, {
+			} else if (input.engine === "libsql") {
+				res = await libsqlAdapter.queryRows(record, input.name, {
 					page: input.page,
 					limit: input.limit,
 				});
+			} else {
+				res = { total: 0, page: 1, limit: 25, rows: [] };
 			}
-			return { total: 0, page: 1, limit: 25, rows: [] };
+
+			const rows = res.rows || res.documents || [];
+			const documents = res.documents || res.rows || [];
+
+			return {
+				total: res.total ?? 0,
+				page: res.page ?? input.page,
+				limit: res.limit ?? input.limit,
+				rows,
+				documents,
+				database: res.database || input.database,
+			};
 		}),
 
 	/**
@@ -413,6 +452,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				engine: SupportedEngineEnum,
 				name: z.string().min(1),
 				data: z.record(z.string(), z.any()),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -425,7 +465,7 @@ export const databaseManagerRouter = createTRPCRouter({
 
 			let res: any;
 			if (input.engine === "mongo") {
-				res = await mongoAdapter.insertDocument(record, input.name, input.data);
+				res = await mongoAdapter.insertDocument(record, input.name, input.data, input.database);
 			} else if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
@@ -436,6 +476,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					input.engine,
 					input.name,
 					input.data,
+					input.database,
 				);
 			}
 
@@ -461,6 +502,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				id: z.any(),
 				primaryKeyColumn: z.string().optional(),
 				data: z.record(z.string(), z.any()),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -478,6 +520,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					input.name,
 					String(input.id),
 					input.data,
+					input.database,
 				);
 			} else if (
 				input.engine === "postgres" ||
@@ -490,6 +533,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					input.name,
 					{ column: input.primaryKeyColumn || "id", value: input.id },
 					input.data,
+					input.database,
 				);
 			}
 
@@ -514,6 +558,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				name: z.string().min(1),
 				id: z.any(),
 				primaryKeyColumn: z.string().optional(),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -530,6 +575,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					record,
 					input.name,
 					String(input.id),
+					input.database,
 				);
 			} else if (
 				input.engine === "postgres" ||
@@ -541,6 +587,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					input.engine,
 					input.name,
 					{ column: input.primaryKeyColumn || "id", value: input.id },
+					input.database,
 				);
 			}
 
@@ -562,6 +609,7 @@ export const databaseManagerRouter = createTRPCRouter({
 			z.object({
 				databaseId: z.string().min(1),
 				name: z.string().min(1),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -571,7 +619,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				"mongo",
 				ctx.session.activeOrganizationId,
 			);
-			const res = await mongoAdapter.createCollection(record, input.name);
+			const res = await mongoAdapter.createCollection(record, input.name, input.database);
 			await audit(ctx, {
 				action: "create",
 				resourceType: "service",
@@ -589,6 +637,7 @@ export const databaseManagerRouter = createTRPCRouter({
 			z.object({
 				databaseId: z.string().min(1),
 				name: z.string().min(1),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -598,7 +647,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				"mongo",
 				ctx.session.activeOrganizationId,
 			);
-			const res = await mongoAdapter.dropCollection(record, input.name);
+			const res = await mongoAdapter.dropCollection(record, input.name, input.database);
 			await audit(ctx, {
 				action: "delete",
 				resourceType: "service",
@@ -618,6 +667,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				engine: z.enum(["postgres", "mysql", "mariadb", "libsql"]),
 				sql: z.string().min(1),
 				confirmedDestructive: z.boolean().default(false),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -654,7 +704,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.engine === "mysql" ||
 				input.engine === "mariadb"
 			) {
-				res = await sqlAdapter.executeSql(record, input.engine, input.sql);
+				res = await sqlAdapter.executeSql(record, input.engine, input.sql, input.database);
 			} else if (input.engine === "libsql") {
 				res = await libsqlAdapter.executeSql(record, input.sql);
 			}
@@ -679,6 +729,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				pattern: z.string().default("*"),
 				cursor: z.string().default("0"),
 				count: z.number().default(100),
+				database: z.string().optional(),
 			}),
 		)
 		.query(async ({ input, ctx }) => {
@@ -693,6 +744,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.pattern,
 				input.cursor,
 				input.count,
+				input.database,
 			);
 		}),
 
@@ -704,6 +756,7 @@ export const databaseManagerRouter = createTRPCRouter({
 			z.object({
 				databaseId: z.string().min(1),
 				key: z.string().min(1),
+				database: z.string().optional(),
 			}),
 		)
 		.query(async ({ input, ctx }) => {
@@ -713,7 +766,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				"redis",
 				ctx.session.activeOrganizationId,
 			);
-			return await redisAdapter.getKey(record, input.key);
+			return await redisAdapter.getKey(record, input.key, input.database);
 		}),
 
 	/**
@@ -726,6 +779,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				key: z.string().min(1),
 				value: z.string(),
 				ttl: z.number().optional(),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -740,6 +794,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.key,
 				input.value,
 				input.ttl,
+				input.database,
 			);
 			await audit(ctx, {
 				action: "create",
@@ -758,6 +813,7 @@ export const databaseManagerRouter = createTRPCRouter({
 			z.object({
 				databaseId: z.string().min(1),
 				key: z.string().min(1),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -767,7 +823,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				"redis",
 				ctx.session.activeOrganizationId,
 			);
-			const res = await redisAdapter.deleteKey(record, input.key);
+			const res = await redisAdapter.deleteKey(record, input.key, input.database);
 			await audit(ctx, {
 				action: "delete",
 				resourceType: "service",
@@ -785,6 +841,7 @@ export const databaseManagerRouter = createTRPCRouter({
 			z.object({
 				databaseId: z.string().min(1),
 				command: z.string().min(1),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -794,7 +851,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				"redis",
 				ctx.session.activeOrganizationId,
 			);
-			const res = await redisAdapter.executeCommand(record, input.command);
+			const res = await redisAdapter.executeCommand(record, input.command, input.database);
 			await audit(ctx, {
 				action: "run",
 				resourceType: "service",
@@ -812,6 +869,7 @@ export const databaseManagerRouter = createTRPCRouter({
 			z.object({
 				databaseId: z.string().min(1),
 				engine: SupportedEngineEnum,
+				database: z.string().optional(),
 			}),
 		)
 		.query(async ({ input, ctx }) => {
@@ -822,7 +880,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				ctx.session.activeOrganizationId,
 			);
 			if (input.engine === "mongo") {
-				return await mongoAdapter.listUsers(record);
+				return await mongoAdapter.listUsers(record, input.database);
 			}
 			return [];
 		}),
@@ -838,6 +896,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				username: z.string().min(1),
 				password: z.string().min(6),
 				role: z.string().optional(),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -855,6 +914,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					input.username,
 					input.password,
 					input.role,
+					input.database,
 				);
 			}
 
@@ -877,6 +937,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				databaseId: z.string().min(1),
 				engine: SupportedEngineEnum,
 				username: z.string().min(1),
+				database: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -889,7 +950,7 @@ export const databaseManagerRouter = createTRPCRouter({
 
 			let res: any;
 			if (input.engine === "mongo") {
-				res = await mongoAdapter.dropUser(record, input.username);
+				res = await mongoAdapter.dropUser(record, input.username, input.database);
 			}
 
 			await audit(ctx, {
@@ -940,6 +1001,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				fileType: z.enum(["csv", "json"]),
 				fieldMappings: z.record(z.string(), z.string()).optional(),
 				duplicatePolicy: z.enum(["reject", "skip", "update"]).default("skip"),
+				database: z.string().optional(),
 				redisConfig: z
 					.object({
 						structure: z.enum(["string", "hash", "list", "set", "zset"]).default("hash"),

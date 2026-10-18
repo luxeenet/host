@@ -16,6 +16,7 @@ import {
 	Database,
 	Download,
 	Edit,
+	Eye,
 	FileText,
 	HardDrive,
 	Key,
@@ -163,13 +164,47 @@ export default function DatabaseManagePage() {
 		return overviewData?.find((d) => d.id === databaseId);
 	}, [overviewData, databaseId]);
 
+	// Discovered Logical Databases query (Supports MongoDB logical dbs, PostgreSQL/MySQL schemas, Redis db 0-15)
+	const [selectedDatabase, setSelectedDatabase] = useState<string>("");
+	const {
+		data: databasesData,
+		isLoading: isDatabasesLoading,
+		isError: isDatabasesError,
+		error: databasesError,
+		refetch: refetchDatabases,
+	} = api.databaseManager.listDatabases.useQuery(
+		{ databaseId, engine: databaseEngine },
+		{ enabled: Boolean(databaseId) },
+	);
+
+	const discoveredDatabases = useMemo(() => {
+		return databasesData?.databases || [];
+	}, [databasesData]);
+
+	// Auto-select preferred default database
+	useEffect(() => {
+		if (discoveredDatabases.length > 0 && !selectedDatabase) {
+			const preferred =
+				databasesData?.selectedDatabase ||
+				discoveredDatabases.find((d) => d.isDefault)?.name ||
+				discoveredDatabases.find((d) => d.name === (activeRecord?.databaseName as string))?.name ||
+				discoveredDatabases.find((d) => d.name === "test")?.name ||
+				discoveredDatabases.find((d) => d.name === "app")?.name ||
+				discoveredDatabases[0]?.name ||
+				"";
+			if (preferred) {
+				setSelectedDatabase(preferred);
+			}
+		}
+	}, [discoveredDatabases, databasesData, selectedDatabase, activeRecord]);
+
 	// Engine stats query
 	const {
 		data: engineStats,
 		isLoading: isStatsLoading,
 		refetch: refetchStats,
 	} = api.databaseManager.engineOverview.useQuery(
-		{ databaseId, engine: databaseEngine },
+		{ databaseId, engine: databaseEngine, database: selectedDatabase || undefined },
 		{ enabled: Boolean(databaseId) },
 	);
 
@@ -181,7 +216,7 @@ export default function DatabaseManagePage() {
 		isLoading: isListLoading,
 		refetch: refetchList,
 	} = api.databaseManager.listCollectionsOrTables.useQuery(
-		{ databaseId, engine: databaseEngine },
+		{ databaseId, engine: databaseEngine, database: selectedDatabase || undefined },
 		{ enabled: Boolean(databaseId) && databaseEngine !== "redis" },
 	);
 
@@ -196,7 +231,7 @@ export default function DatabaseManagePage() {
 	// Table schema query (for SQL engines)
 	const { data: tableSchema, isLoading: isSchemaLoading } =
 		api.databaseManager.getSchema.useQuery(
-			{ databaseId, engine: databaseEngine, name: selectedEntity },
+			{ databaseId, engine: databaseEngine, name: selectedEntity, database: selectedDatabase || undefined },
 			{ enabled: Boolean(databaseId && selectedEntity && meta.isSql) },
 		);
 
@@ -208,6 +243,8 @@ export default function DatabaseManagePage() {
 	const {
 		data: entityData,
 		isLoading: isDataLoading,
+		isError: isDataError,
+		error: entityDataError,
 		refetch: refetchData,
 	} = api.databaseManager.queryData.useQuery(
 		{
@@ -217,6 +254,7 @@ export default function DatabaseManagePage() {
 			page: currentPage,
 			limit: 25,
 			filter: filterInput || undefined,
+			database: selectedDatabase || undefined,
 		},
 		{
 			enabled: Boolean(
@@ -225,7 +263,7 @@ export default function DatabaseManagePage() {
 		},
 	);
 
-	// Document/Row mutation modals
+	// Document/Row mutation modals & Document inspector
 	const [isInsertModalOpen, setIsInsertModalOpen] = useState(false);
 	const [insertPayload, setInsertPayload] = useState("{}");
 	const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -233,6 +271,8 @@ export default function DatabaseManagePage() {
 	const [editPayload, setEditPayload] = useState("{}");
 	const [isCreateCollModalOpen, setIsCreateCollModalOpen] = useState(false);
 	const [newCollName, setNewCollName] = useState("");
+	const [viewingDocument, setViewingDocument] = useState<any>(null);
+	const [isViewDocModalOpen, setIsViewDocModalOpen] = useState(false);
 
 	const insertMutation = api.databaseManager.insertRecord.useMutation();
 	const updateMutation = api.databaseManager.updateRecord.useMutation();
@@ -263,6 +303,7 @@ export default function DatabaseManagePage() {
 				engine: databaseEngine,
 				name: selectedEntity,
 				data: parsed,
+				database: selectedDatabase || undefined,
 			});
 			toast.success("Record created successfully");
 			setIsInsertModalOpen(false);
@@ -284,6 +325,7 @@ export default function DatabaseManagePage() {
 				primaryKeyColumn: tableSchema?.columns?.find((c: any) => c.isPrimary)
 					?.name,
 				data: parsed,
+				database: selectedDatabase || undefined,
 			});
 			toast.success("Record updated successfully");
 			setIsEditModalOpen(false);
@@ -306,6 +348,7 @@ export default function DatabaseManagePage() {
 				id: rowId,
 				primaryKeyColumn: tableSchema?.columns?.find((c: any) => c.isPrimary)
 					?.name,
+				database: selectedDatabase || undefined,
 			});
 			toast.success("Record deleted");
 			await refetchData();
@@ -320,6 +363,7 @@ export default function DatabaseManagePage() {
 			await createCollMutation.mutateAsync({
 				databaseId,
 				name: newCollName.trim(),
+				database: selectedDatabase || undefined,
 			});
 			toast.success(`Collection '${newCollName}' created`);
 			setIsCreateCollModalOpen(false);
@@ -340,7 +384,11 @@ export default function DatabaseManagePage() {
 			return;
 		}
 		try {
-			await dropCollMutation.mutateAsync({ databaseId, name });
+			await dropCollMutation.mutateAsync({
+				databaseId,
+				name,
+				database: selectedDatabase || undefined,
+			});
 			toast.success(`Collection '${name}' dropped`);
 			await refetchList();
 			setSelectedEntity("");
@@ -367,7 +415,12 @@ export default function DatabaseManagePage() {
 		isLoading: isRedisScanning,
 		refetch: refetchRedisKeys,
 	} = api.databaseManager.redisScan.useQuery(
-		{ databaseId, pattern: redisPattern, cursor: redisCursor },
+		{
+			databaseId,
+			pattern: redisPattern,
+			cursor: redisCursor,
+			database: selectedDatabase || undefined,
+		},
 		{ enabled: Boolean(databaseId && databaseEngine === "redis") },
 	);
 
@@ -376,7 +429,11 @@ export default function DatabaseManagePage() {
 		isLoading: isKeyDetailsLoading,
 		refetch: refetchKeyDetails,
 	} = api.databaseManager.redisGetKey.useQuery(
-		{ databaseId, key: selectedRedisKey },
+		{
+			databaseId,
+			key: selectedRedisKey,
+			database: selectedDatabase || undefined,
+		},
 		{
 			enabled: Boolean(
 				databaseId && databaseEngine === "redis" && selectedRedisKey,
@@ -396,6 +453,7 @@ export default function DatabaseManagePage() {
 				key: newRedisKey.trim(),
 				value: newRedisVal,
 				ttl: newRedisTtl ? Number.parseInt(newRedisTtl, 10) : undefined,
+				database: selectedDatabase || undefined,
 			});
 			toast.success(`Key '${newRedisKey}' saved`);
 			setIsAddRedisKeyOpen(false);
@@ -411,7 +469,11 @@ export default function DatabaseManagePage() {
 	const handleDeleteRedisKey = async (key: string) => {
 		if (!confirm(`Delete key '${key}'?`)) return;
 		try {
-			await redisDeleteMutation.mutateAsync({ databaseId, key });
+			await redisDeleteMutation.mutateAsync({
+				databaseId,
+				key,
+				database: selectedDatabase || undefined,
+			});
 			toast.success(`Key '${key}' deleted`);
 			if (selectedRedisKey === key) setSelectedRedisKey("");
 			await refetchRedisKeys();
@@ -430,6 +492,7 @@ export default function DatabaseManagePage() {
 			const res = await redisExecuteMutation.mutateAsync({
 				databaseId,
 				command: cmd,
+				database: selectedDatabase || undefined,
 			});
 			setRedisConsoleLogs((prev) => [...prev, res.output || "OK"]);
 		} catch (err: any) {
@@ -473,6 +536,7 @@ export default function DatabaseManagePage() {
 				databaseId,
 				engine: databaseEngine as any,
 				sql: sqlQuery,
+				database: selectedDatabase || undefined,
 			});
 			setSqlResult(res);
 			toast.success(
@@ -494,7 +558,11 @@ export default function DatabaseManagePage() {
 		isLoading: isUsersLoading,
 		refetch: refetchUsers,
 	} = api.databaseManager.listUsers.useQuery(
-		{ databaseId, engine: databaseEngine },
+		{
+			databaseId,
+			engine: databaseEngine,
+			database: selectedDatabase || undefined,
+		},
 		{
 			enabled: Boolean(
 				databaseId && databaseEngine !== "redis" && databaseEngine !== "libsql",
@@ -519,6 +587,7 @@ export default function DatabaseManagePage() {
 				username: newDbUser.trim(),
 				password: newDbUserPass,
 				role: newDbUserRoles,
+				database: selectedDatabase || undefined,
 			});
 			toast.success(`User '${newDbUser}' created with ${newDbUserRoles} role`);
 			setIsCreateUserOpen(false);
@@ -537,6 +606,7 @@ export default function DatabaseManagePage() {
 				databaseId,
 				engine: databaseEngine,
 				username: user,
+				database: selectedDatabase || undefined,
 			});
 			toast.success(`User '${user}' dropped`);
 			await refetchUsers();
@@ -748,6 +818,7 @@ export default function DatabaseManagePage() {
 				fileType: importFileType,
 				fieldMappings: importFieldMappings,
 				duplicatePolicy: importDuplicatePolicy,
+				database: selectedDatabase || undefined,
 				redisConfig:
 					databaseEngine === "redis"
 						? {
@@ -877,17 +948,22 @@ export default function DatabaseManagePage() {
 									{meta.label}
 								</Badge>
 							</div>
-							<p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2">
+							<p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
 								<span className="font-mono text-slate-300">
-									{activeRecord?.appName || "instance"}
+									Service: {activeRecord?.appName || "instance"}
 								</span>
 								<span>•</span>
-								<span>{activeRecord?.databaseName || "default"}</span>
+								<span className="flex items-center gap-1">
+									Database:{" "}
+									<span className="text-indigo-300 font-mono font-semibold">
+										{selectedDatabase || (activeRecord?.databaseName as string) || "default"}
+									</span>
+								</span>
 								{activeRecord?.externalPort && (
 									<>
 										<span>•</span>
 										<span className="text-cyan-400 font-mono">
-											db.hatdot.cloud:{activeRecord.externalPort}
+											Endpoint: db.hatdot.cloud:{activeRecord.externalPort}
 										</span>
 									</>
 								)}
@@ -920,6 +996,7 @@ export default function DatabaseManagePage() {
 							size="sm"
 							onClick={() => {
 								refetchOverview();
+								refetchDatabases();
 								refetchStats();
 								refetchList();
 								if (databaseEngine === "redis") refetchRedisKeys();
@@ -1202,9 +1279,51 @@ export default function DatabaseManagePage() {
 						) : (
 							/* MONGODB OR SQL DATA EXPLORER */
 							<div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-								{/* Left: Collections / Tables List */}
+								{/* Left: Logical Database & Collections / Tables List */}
 								<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4 space-y-3">
-									<div className="flex items-center justify-between">
+									{/* Logical Database Selector */}
+									<div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/90 space-y-1.5">
+										<div className="flex items-center justify-between text-[11px]">
+											<span className="font-semibold uppercase tracking-wider flex items-center gap-1.5 text-slate-300">
+												<Database className="w-3.5 h-3.5 text-indigo-400" /> Logical DB
+											</span>
+											{isDatabasesLoading ? (
+												<RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
+											) : (
+												<span className="text-[10px] text-slate-500 font-mono">
+													{discoveredDatabases.length} found
+												</span>
+											)}
+										</div>
+										<Select
+											value={selectedDatabase}
+											onValueChange={(val) => {
+												setSelectedDatabase(val);
+												setSelectedEntity("");
+												setCurrentPage(1);
+											}}
+										>
+											<SelectTrigger className="w-full bg-slate-900 border-slate-800 text-xs h-8 font-mono text-white">
+												<SelectValue placeholder="Select Database" />
+											</SelectTrigger>
+											<SelectContent className="bg-slate-900 border-slate-800 text-white">
+												{discoveredDatabases.map((db) => (
+													<SelectItem key={db.name} value={db.name} className="text-xs font-mono">
+														<div className="flex items-center justify-between gap-2 w-full">
+															<span>{db.name}</span>
+															{db.isDefault && (
+																<span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-sans">
+																	Default
+																</span>
+															)}
+														</div>
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+
+									<div className="flex items-center justify-between pt-1">
 										<h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
 											<Layers className="w-3.5 h-3.5 text-indigo-400" />
 											{databaseEngine === "mongo" ? "Collections" : "Tables"}
@@ -1230,7 +1349,7 @@ export default function DatabaseManagePage() {
 											<div className="p-4 text-center text-xs text-slate-500">
 												No{" "}
 												{databaseEngine === "mongo" ? "collections" : "tables"}{" "}
-												found.
+												found in &apos;{selectedDatabase || "current database"}&apos;.
 											</div>
 										) : (
 											collectionsOrTables.map((item: any) => (
@@ -1284,6 +1403,14 @@ export default function DatabaseManagePage() {
 										<div>
 											<h2 className="text-sm font-bold text-white font-mono flex items-center gap-2">
 												<span>{selectedEntity || "Select target"}</span>
+												{selectedDatabase && (
+													<Badge
+														variant="outline"
+														className="text-[10px] border-slate-800 text-indigo-300 font-mono"
+													>
+														db: {selectedDatabase}
+													</Badge>
+												)}
 												{entityData?.total !== undefined && (
 													<span className="text-[11px] font-normal text-slate-400">
 														({entityData.total} total records)
@@ -1291,7 +1418,7 @@ export default function DatabaseManagePage() {
 												)}
 											</h2>
 											<p className="text-xs text-slate-400 mt-0.5">
-												Browse, filter, insert, and modify records in real-time.
+												Browse, filter, inspect, and modify live database records.
 											</p>
 										</div>
 
@@ -1350,111 +1477,250 @@ export default function DatabaseManagePage() {
 										{isDataLoading ? (
 											<div className="p-12 text-center text-xs text-slate-500">
 												<RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
-												Querying instance data...
+												Querying instance records...
 											</div>
-										) : !entityData?.rows || entityData.rows.length === 0 ? (
-											<div className="p-12 text-center text-xs text-slate-500">
-												No records in this collection/table.
+										) : isDataError || (entityData as any)?.error ? (
+											<div className="p-8 text-center text-xs space-y-3">
+												<div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 flex items-center justify-center mx-auto">
+													<AlertTriangle className="w-5 h-5" />
+												</div>
+												<div>
+													<p className="text-sm font-semibold text-white">
+														Unable to retrieve records from &apos;{selectedEntity}&apos;
+													</p>
+													<p className="text-xs text-red-400 font-mono mt-1 max-w-lg mx-auto break-words">
+														{(entityData as any)?.error ||
+															entityDataError?.message ||
+															"Database query failed."}
+													</p>
+												</div>
+												<Button
+													size="sm"
+													variant="outline"
+													onClick={() => refetchData()}
+													className="border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 text-xs h-8 px-4 gap-1.5"
+												>
+													<RefreshCw className="w-3.5 h-3.5" /> Retry Query
+												</Button>
+											</div>
+										) : (!entityData?.rows && !(entityData as any)?.documents) ||
+										  ((entityData?.rows || (entityData as any)?.documents || []).length === 0) ? (
+											<div className="p-12 text-center text-xs text-slate-500 space-y-2">
+												<TableIcon className="w-8 h-8 text-slate-700 mx-auto" />
+												<p className="text-slate-400 font-medium">
+													{filterInput
+														? "No records match the current filter criteria."
+														: "No records in this collection/table."}
+												</p>
+												{filterInput && (
+													<Button
+														size="sm"
+														variant="outline"
+														onClick={() => {
+															setFilterInput("");
+															setActiveFilter({});
+															setCurrentPage(1);
+														}}
+														className="border-slate-800 text-slate-300 text-xs h-7 px-3 mt-2"
+													>
+														Clear Filter
+													</Button>
+												)}
 											</div>
 										) : (
-											<table className="w-full text-left text-xs font-mono">
-												<thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
-													<tr>
-														{Object.keys(entityData.rows[0] || {}).map(
-															(col) => (
-																<th
-																	key={col}
-																	className="px-3 py-2.5 font-semibold text-slate-300"
-																>
-																	{col}
-																</th>
-															),
-														)}
-														<th className="px-3 py-2.5 text-right">Actions</th>
-													</tr>
-												</thead>
-												<tbody className="divide-y divide-slate-800/60">
-													{entityData.rows.map((row: any, rIdx: number) => (
-														<tr
-															key={rIdx}
-															className="hover:bg-slate-800/40 transition-colors"
-														>
-															{Object.keys(entityData.rows[0] || {}).map(
-																(col) => (
-																	<td
+											(() => {
+												const records = Array.isArray(entityData?.rows)
+													? entityData.rows
+													: Array.isArray((entityData as any)?.documents)
+														? (entityData as any).documents
+														: [];
+												const colSet = new Set<string>();
+												for (const r of records) {
+													if (r && typeof r === "object") {
+														for (const k of Object.keys(r)) {
+															colSet.add(k);
+														}
+													}
+												}
+												const cols = Array.from(colSet);
+												cols.sort((a, b) => {
+													if (a === "_id" || a === "id") return -1;
+													if (b === "_id" || b === "id") return 1;
+													return a.localeCompare(b);
+												});
+
+												return (
+													<table className="w-full text-left text-xs font-mono">
+														<thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
+															<tr>
+																{cols.map((col) => (
+																	<th
 																		key={col}
-																		className="px-3 py-2 text-slate-300 truncate max-w-xs"
+																		className="px-3 py-2.5 font-semibold text-slate-300"
 																	>
-																		{typeof row[col] === "object"
-																			? JSON.stringify(row[col])
-																			: String(row[col] ?? "")}
+																		{col}
+																	</th>
+																))}
+																<th className="px-3 py-2.5 text-right">Actions</th>
+															</tr>
+														</thead>
+														<tbody className="divide-y divide-slate-800/60">
+															{records.map((row: any, rIdx: number) => (
+																<tr
+																	key={row._id || row.id || rIdx}
+																	className="hover:bg-slate-800/40 transition-colors"
+																>
+																	{cols.map((col) => (
+																		<td
+																			key={col}
+																			className="px-3 py-2 text-slate-300 truncate max-w-xs"
+																		>
+																			{row[col] === null ? (
+																				<span className="text-slate-600 italic">null</span>
+																			) : row[col] === undefined ? (
+																				<span className="text-slate-600 italic">undefined</span>
+																			) : typeof row[col] === "boolean" ? (
+																				<span
+																					className={
+																						row[col]
+																							? "text-emerald-400 font-semibold"
+																							: "text-amber-400 font-semibold"
+																					}
+																				>
+																					{String(row[col])}
+																				</span>
+																			) : typeof row[col] === "number" ? (
+																				<span className="text-cyan-400">
+																					{row[col]}
+																				</span>
+																			) : typeof row[col] === "object" ? (
+																				<span
+																					className="text-slate-300 truncate block max-w-[200px]"
+																					title={JSON.stringify(row[col])}
+																				>
+																					{JSON.stringify(row[col])}
+																				</span>
+																			) : (
+																				<span
+																					className="truncate block max-w-[200px]"
+																					title={String(row[col])}
+																				>
+																					{String(row[col])}
+																				</span>
+																			)}
+																		</td>
+																	))}
+																	<td className="px-3 py-2 text-right shrink-0">
+																		<div className="flex items-center justify-end gap-1.5">
+																			<button
+																				type="button"
+																				title="Inspect document"
+																				onClick={() => {
+																					setViewingDocument(row);
+																					setIsViewDocModalOpen(true);
+																				}}
+																				className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800"
+																			>
+																				<Eye className="w-3.5 h-3.5" />
+																			</button>
+																			<button
+																				type="button"
+																				title="Edit record"
+																				onClick={() => {
+																					const rowId =
+																						row._id ||
+																						row.id ||
+																						Object.values(row)[0];
+																					setEditRowId(rowId);
+																					setEditPayload(
+																						JSON.stringify(row, null, 2),
+																					);
+																					setIsEditModalOpen(true);
+																				}}
+																				className="p-1 text-slate-400 hover:text-indigo-300 rounded hover:bg-slate-800"
+																			>
+																				<Edit className="w-3.5 h-3.5" />
+																			</button>
+																			<button
+																				type="button"
+																				title="Delete record"
+																				onClick={() => handleDeleteRecord(row)}
+																				className="p-1 text-slate-500 hover:text-red-400 rounded hover:bg-slate-800"
+																			>
+																				<Trash2 className="w-3.5 h-3.5" />
+																			</button>
+																		</div>
 																	</td>
-																),
-															)}
-															<td className="px-3 py-2 text-right shrink-0">
-																<div className="flex items-center justify-end gap-1.5">
-																	<button
-																		type="button"
-																		onClick={() => {
-																			const rowId =
-																				row._id ||
-																				row.id ||
-																				Object.values(row)[0];
-																			setEditRowId(rowId);
-																			setEditPayload(
-																				JSON.stringify(row, null, 2),
-																			);
-																			setIsEditModalOpen(true);
-																		}}
-																		className="p-1 text-slate-400 hover:text-indigo-300 rounded"
-																	>
-																		<Edit className="w-3.5 h-3.5" />
-																	</button>
-																	<button
-																		type="button"
-																		onClick={() => handleDeleteRecord(row)}
-																		className="p-1 text-slate-500 hover:text-red-400 rounded"
-																	>
-																		<Trash2 className="w-3.5 h-3.5" />
-																	</button>
-																</div>
-															</td>
-														</tr>
-													))}
-												</tbody>
-											</table>
+																</tr>
+															))}
+														</tbody>
+													</table>
+												);
+											})()
 										)}
 									</div>
 
 									{/* Pagination footer */}
-									{entityData && entityData.total > 0 && (
-										<div className="flex items-center justify-between text-xs text-slate-400 pt-2">
-											<span>
-												Showing page {currentPage} of{" "}
-												{Math.ceil(entityData.total / 25) || 1}
-											</span>
-											<div className="flex items-center gap-2">
-												<Button
-													size="sm"
-													disabled={currentPage <= 1}
-													onClick={() =>
-														setCurrentPage((p) => Math.max(1, p - 1))
-													}
-													className="bg-slate-800 text-white text-xs h-7 px-3"
-												>
-													Previous
-												</Button>
-												<Button
-													size="sm"
-													disabled={currentPage * 25 >= entityData.total}
-													onClick={() => setCurrentPage((p) => p + 1)}
-													className="bg-slate-800 text-white text-xs h-7 px-3"
-												>
-													Next
-												</Button>
-											</div>
-										</div>
-									)}
+									{entityData &&
+										(entityData.total > 0 ||
+											(entityData.rows || (entityData as any).documents)?.length >
+												0) &&
+										(() => {
+											const recordsArr = entityData.rows || (entityData as any).documents;
+											const totalCount =
+												entityData.total !== undefined
+													? entityData.total
+													: recordsArr?.length || 0;
+											const totalPages = Math.max(1, Math.ceil(totalCount / 25));
+											const start = (currentPage - 1) * 25 + 1;
+											const end = Math.min(currentPage * 25, totalCount);
+
+											return (
+												<div className="flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-800/80 gap-3">
+													<span>
+														Showing records {start} to {end} of {totalCount} total
+														{totalPages > 1 &&
+															` (Page ${currentPage} of ${totalPages})`}
+													</span>
+													<div className="flex items-center gap-1.5">
+														<Button
+															size="sm"
+															disabled={currentPage <= 1}
+															onClick={() => setCurrentPage(1)}
+															className="bg-slate-800 text-white text-xs h-7 px-2.5 disabled:opacity-40"
+														>
+															First
+														</Button>
+														<Button
+															size="sm"
+															disabled={currentPage <= 1}
+															onClick={() =>
+																setCurrentPage((p) => Math.max(1, p - 1))
+															}
+															className="bg-slate-800 text-white text-xs h-7 px-3 disabled:opacity-40"
+														>
+															Previous
+														</Button>
+														<Button
+															size="sm"
+															disabled={currentPage >= totalPages}
+															onClick={() => setCurrentPage((p) => p + 1)}
+															className="bg-slate-800 text-white text-xs h-7 px-3 disabled:opacity-40"
+														>
+															Next
+														</Button>
+														<Button
+															size="sm"
+															disabled={currentPage >= totalPages}
+															onClick={() => setCurrentPage(totalPages)}
+															className="bg-slate-800 text-white text-xs h-7 px-2.5 disabled:opacity-40"
+														>
+															Last
+														</Button>
+													</div>
+												</div>
+											);
+										})()}
 								</div>
 							</div>
 						)}
@@ -1679,7 +1945,7 @@ export default function DatabaseManagePage() {
 									{engineStats?.version || meta.label}
 								</p>
 								<span className="text-[11px] text-slate-400 block pt-1">
-									Official Dockerized Engine
+									Managed Database Runtime
 								</span>
 							</div>
 
@@ -1690,10 +1956,10 @@ export default function DatabaseManagePage() {
 								<p className="text-xl font-bold text-indigo-400">
 									{engineStats?.dataSize ||
 										engineStats?.usedMemory ||
-										"Container Volume"}
+										"Managed Volume"}
 								</p>
 								<span className="text-[11px] text-slate-400 block pt-1">
-									Persistent Docker volume
+									Encrypted Persistent Storage
 								</span>
 							</div>
 
@@ -1739,7 +2005,7 @@ export default function DatabaseManagePage() {
 										NETWORK BOUNDARY
 									</span>
 									<p className="font-mono text-slate-200">
-										Docker Swarm Overlay + Traefik directConnection
+										Isolated Private VPC + Edge Routing
 									</p>
 								</div>
 							</div>
@@ -1854,6 +2120,136 @@ export default function DatabaseManagePage() {
 							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4"
 						>
 							Save Changes
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* View Document Details Modal */}
+			<Dialog open={isViewDocModalOpen} onOpenChange={setIsViewDocModalOpen}>
+				<DialogContent className="max-w-2xl bg-slate-950 border-slate-800 text-white max-h-[85vh] flex flex-col">
+					<DialogHeader className="border-b border-slate-800 pb-3">
+						<div className="flex items-center justify-between pr-6">
+							<DialogTitle className="flex items-center gap-2 text-sm font-bold font-mono">
+								<FileText className="w-4 h-4 text-indigo-400" />
+								<span>Document Details: {selectedEntity}</span>
+							</DialogTitle>
+							<Badge
+								variant="outline"
+								className="text-[10px] border-slate-800 font-mono text-slate-400"
+							>
+								ID: {String(viewingDocument?._id || viewingDocument?.id || "N/A")}
+							</Badge>
+						</div>
+						<DialogDescription className="text-xs text-slate-400 mt-1">
+							Structured document inspection with preserved BSON types, dates, and nested structures.
+						</DialogDescription>
+					</DialogHeader>
+
+					<div className="flex-1 overflow-y-auto py-3 space-y-4">
+						{/* Field Breakdown */}
+						<div className="rounded-lg border border-slate-800/80 divide-y divide-slate-800/60 bg-slate-900/40 text-xs font-mono">
+							{viewingDocument &&
+								Object.entries(viewingDocument).map(([key, value]) => {
+									const valType =
+										value === null
+											? "null"
+											: Array.isArray(value)
+												? `array[${value.length}]`
+												: typeof value;
+									return (
+										<div
+											key={key}
+											className="p-3 flex flex-col sm:flex-row sm:items-start justify-between gap-2 hover:bg-slate-800/30 transition-colors"
+										>
+											<div className="flex items-center gap-2 shrink-0 sm:w-1/3">
+												<span className="font-semibold text-indigo-300">
+													{key}
+												</span>
+												<span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-sans">
+													{valType}
+												</span>
+											</div>
+											<div className="sm:w-2/3 break-all text-slate-200">
+												{typeof value === "object" && value !== null ? (
+													<pre className="p-2 rounded bg-slate-950 border border-slate-800/80 text-[11px] overflow-x-auto whitespace-pre-wrap max-h-48 text-emerald-300 font-mono">
+														{JSON.stringify(value, null, 2)}
+													</pre>
+												) : typeof value === "boolean" ? (
+													<span
+														className={
+															value
+																? "text-emerald-400 font-semibold"
+																: "text-amber-400 font-semibold"
+														}
+													>
+														{String(value)}
+													</span>
+												) : typeof value === "number" ? (
+													<span className="text-cyan-400">{value}</span>
+												) : value === null ? (
+													<span className="text-slate-500 italic">null</span>
+												) : (
+													<span className="text-slate-100">
+														{String(value)}
+													</span>
+												)}
+											</div>
+										</div>
+									);
+								})}
+						</div>
+
+						{/* Raw JSON */}
+						<div className="space-y-1.5">
+							<div className="flex items-center justify-between text-xs text-slate-400">
+								<span className="font-semibold uppercase tracking-wider text-[10px]">
+									Raw JSON Representation
+								</span>
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => {
+										navigator.clipboard.writeText(
+											JSON.stringify(viewingDocument, null, 2),
+										);
+										toast.success("Document JSON copied to clipboard");
+									}}
+									className="h-6 text-[11px] text-slate-400 hover:text-white gap-1 px-2"
+								>
+									<Copy className="w-3 h-3" /> Copy JSON
+								</Button>
+							</div>
+							<pre className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 max-h-60 overflow-y-auto whitespace-pre-wrap">
+								{JSON.stringify(viewingDocument, null, 2)}
+							</pre>
+						</div>
+					</div>
+
+					<DialogFooter className="border-t border-slate-800 pt-3">
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() => setIsViewDocModalOpen(false)}
+							className="text-xs text-slate-400"
+						>
+							Close
+						</Button>
+						<Button
+							size="sm"
+							onClick={() => {
+								setIsViewDocModalOpen(false);
+								const rowId =
+									viewingDocument?._id ||
+									viewingDocument?.id ||
+									Object.values(viewingDocument || {})[0];
+								setEditRowId(rowId);
+								setEditPayload(JSON.stringify(viewingDocument, null, 2));
+								setIsEditModalOpen(true);
+							}}
+							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3.5 gap-1.5"
+						>
+							<Edit className="w-3.5 h-3.5" /> Edit Record
 						</Button>
 					</DialogFooter>
 				</DialogContent>

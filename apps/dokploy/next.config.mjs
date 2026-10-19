@@ -36,6 +36,15 @@ const nextConfig = {
 			},
 		];
 	},
+	async redirects() {
+		return [
+			{
+				source: "/dashboard/usage",
+				destination: "/home/dashboard/usage",
+				permanent: false,
+			},
+		];
+	},
 };
 
 export default nextConfig;

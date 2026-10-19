@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { ArrowRight, Database, Rocket, Server } from "lucide-react";
+import { Activity, ArrowRight, Database, Rocket, Server, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -100,6 +100,9 @@ export const ShowHome = () => {
 	const { data: auth } = api.user.get.useQuery();
 	const { data: homeStats } = api.project.homeStats.useQuery();
 	const { data: permissions } = api.user.getPermissions.useQuery();
+	const { data: usage } = api.subscription.customerUsage.useQuery(undefined, {
+		refetchInterval: 60000,
+	});
 	const canReadDeployments = !!permissions?.deployment.read;
 	const { data: deployments } = api.deployment.allCentralized.useQuery(
 		undefined,
@@ -174,6 +177,12 @@ export const ShowHome = () => {
 						</h1>
 						<div className="flex items-center gap-2">
 							<Button asChild variant="outline" className="w-fit">
+								<Link href="/home/dashboard/usage">
+									<Activity className="size-4 mr-2" />
+									Usage
+								</Link>
+							</Button>
+							<Button asChild variant="outline" className="w-fit">
 								<Link href="/dashboard/home/databases">
 									<Database className="size-4 mr-2" />
 									Databases
@@ -224,6 +233,142 @@ export const ShowHome = () => {
 								},
 							]}
 						/>
+					</div>
+
+					{/* Subscription Quota & Usage Card */}
+					<div className="rounded-xl border bg-background p-5 flex flex-col gap-4">
+						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+							<div className="flex items-center gap-2.5">
+								<div className="size-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+									<Activity className="size-4" />
+								</div>
+								<div>
+									<div className="flex items-center gap-2">
+										<h2 className="text-sm font-semibold tracking-tight">
+											Subscription Quota & Usage
+										</h2>
+										{usage?.planName && (
+											<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+												{usage.planName}
+											</span>
+										)}
+									</div>
+									<p className="text-xs text-muted-foreground mt-0.5">
+										Real-time tenant resource consumption vs. plan capacity.
+									</p>
+								</div>
+							</div>
+
+							<div className="flex items-center gap-2">
+								<Button asChild size="sm" variant="outline" className="text-xs h-8">
+									<Link href="/home/dashboard/usage">
+										View Usage Details
+										<ArrowRight className="size-3.5 ml-1.5" />
+									</Link>
+								</Button>
+								<Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8">
+									<Link href="/dashboard/billing">
+										<Sparkles className="size-3.5 mr-1.5" />
+										Upgrade
+									</Link>
+								</Button>
+							</div>
+						</div>
+
+						{usage ? (
+							<div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+								<div className="p-3 rounded-lg border bg-muted/20 flex flex-col gap-1.5">
+									<div className="flex items-center justify-between text-xs text-muted-foreground">
+										<span>RAM Quota</span>
+										<span className="font-semibold text-foreground">{usage.ram.percentage}%</span>
+									</div>
+									<div className="text-base font-semibold tracking-tight tabular-nums">
+										{usage.ram.formattedUsed}
+										<span className="text-xs font-normal text-muted-foreground"> / {usage.ram.formattedLimit}</span>
+									</div>
+									<div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+										<div
+											className="h-full bg-indigo-500 rounded-full"
+											style={{ width: `${Math.min(usage.ram.percentage, 100)}%` }}
+										/>
+									</div>
+									<span className="text-[10px] text-muted-foreground">
+										{usage.ram.formattedRemaining} remaining
+									</span>
+								</div>
+
+								<div className="p-3 rounded-lg border bg-muted/20 flex flex-col gap-1.5">
+									<div className="flex items-center justify-between text-xs text-muted-foreground">
+										<span>CPU Load</span>
+										<span className="font-semibold text-foreground">{usage.cpu.percentage}%</span>
+									</div>
+									<div className="text-base font-semibold tracking-tight tabular-nums">
+										{usage.cpu.formattedUsed}
+										<span className="text-xs font-normal text-muted-foreground"> / {usage.cpu.formattedLimit}</span>
+									</div>
+									<div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+										<div
+											className="h-full bg-blue-500 rounded-full"
+											style={{ width: `${Math.min(usage.cpu.percentage, 100)}%` }}
+										/>
+									</div>
+									<span className="text-[10px] text-muted-foreground">
+										{usage.cpu.statusLabel}
+									</span>
+								</div>
+
+								<div className="p-3 rounded-lg border bg-muted/20 flex flex-col gap-1.5">
+									<div className="flex items-center justify-between text-xs text-muted-foreground">
+										<span>Application Slots</span>
+										<span className="font-semibold text-foreground">{usage.applications.percentage}%</span>
+									</div>
+									<div className="text-base font-semibold tracking-tight tabular-nums">
+										{usage.applications.used}
+										<span className="text-xs font-normal text-muted-foreground">
+											{" "}/ {usage.applications.limit === -1 ? "Unlimited" : usage.applications.limit}
+										</span>
+									</div>
+									<div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+										<div
+											className="h-full bg-emerald-500 rounded-full"
+											style={{ width: `${Math.min(usage.applications.percentage, 100)}%` }}
+										/>
+									</div>
+									<span className="text-[10px] text-muted-foreground">
+										{usage.applications.remaining === -1 ? "Unlimited" : `${usage.applications.remaining} available`}
+									</span>
+								</div>
+
+								<div className="p-3 rounded-lg border bg-muted/20 flex flex-col gap-1.5">
+									<div className="flex items-center justify-between text-xs text-muted-foreground">
+										<span>Database Quota</span>
+										<span className="font-semibold text-foreground">{usage.databases.percentage}%</span>
+									</div>
+									<div className="text-base font-semibold tracking-tight tabular-nums">
+										{usage.databases.used}
+										<span className="text-xs font-normal text-muted-foreground">
+											{" "}/ {usage.databases.limit === -1 ? "Unlimited" : usage.databases.limit}
+										</span>
+									</div>
+									<div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+										<div
+											className="h-full bg-amber-500 rounded-full"
+											style={{ width: `${Math.min(usage.databases.percentage, 100)}%` }}
+										/>
+									</div>
+									<span className="text-[10px] text-muted-foreground">
+										{usage.databases.remaining === -1 ? "Unlimited" : `${usage.databases.remaining} available`}
+									</span>
+								</div>
+							</div>
+						) : (
+							<div className="text-xs text-muted-foreground flex items-center justify-between pt-1">
+								<span>Explore plan limits, remaining capacity, and real-time workload telemetry.</span>
+								<Link href="/home/dashboard/usage" className="text-indigo-400 hover:underline">
+									Open Usage Dashboard →
+								</Link>
+							</div>
+						)}
 					</div>
 
 					<div className="rounded-xl border bg-background">

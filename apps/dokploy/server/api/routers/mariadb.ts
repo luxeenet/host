@@ -12,6 +12,7 @@ import {
 	findEnvironmentById,
 	findMariadbById,
 	findProjectById,
+	assertPublicDatabaseAccess,
 	getAccessibleServerIds,
 	getContainerLogs,
 	getPublicDatabaseHost,
@@ -23,6 +24,8 @@ import {
 	reconcileDatabaseSecurity,
 	removeMariadbById,
 	removeService,
+	sanitizeConnectionDetailsForCustomer,
+	sanitizeDatabaseRecordForCustomer,
 	startService,
 	startServiceRemote,
 	stopService,
@@ -168,7 +171,7 @@ export const mariadbRouter = createTRPCRouter({
 			);
 			const isPlatformAdmin =
 				ctx.user.role === "admin" || ctx.user.role === "owner";
-			return {
+			const fullRecord = {
 				...mariadb,
 				databaseRootPassword: isPlatformAdmin
 					? mariadb.databaseRootPassword
@@ -176,6 +179,7 @@ export const mariadbRouter = createTRPCRouter({
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+			return sanitizeDatabaseRecordForCustomer(fullRecord, ctx.user);
 		}),
 	reconcileSecurity: protectedProcedure
 		.input(apiFindOneMariaDB)
@@ -222,16 +226,18 @@ export const mariadbRouter = createTRPCRouter({
 				mariadb.serverId || undefined,
 				mariadb.appName || undefined,
 			);
-			return buildDatabaseConnectionStrings(
+			const details = buildDatabaseConnectionStrings(
 				"mariadb",
 				mariadb,
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+			return sanitizeConnectionDetailsForCustomer(details, ctx.user);
 		}),
 	verifyConnectivity: protectedProcedure
 		.input(apiFindOneMariaDB)
 		.query(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServiceAccess(ctx, input.mariadbId, "read");
 			const mariadb = await findMariadbById(input.mariadbId);
 			if (
@@ -266,6 +272,7 @@ export const mariadbRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServicePermissionAndAccess(ctx, input.mariadbId, {
 				service: ["create"],
 			});
@@ -401,6 +408,9 @@ export const mariadbRouter = createTRPCRouter({
 	saveExternalPort: protectedProcedure
 		.input(apiSaveExternalPortMariaDB)
 		.mutation(async ({ input, ctx }) => {
+			if (input.externalPort !== null && input.externalPort !== undefined) {
+				assertPublicDatabaseAccess(ctx.user);
+			}
 			await checkServicePermissionAndAccess(ctx, input.mariadbId, {
 				service: ["create"],
 			});

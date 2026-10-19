@@ -10,7 +10,7 @@
  * 3. Never invents values: if a metric cannot be reliably measured, it is flagged as unavailable.
  * 4. Limits always come from trusted server-side plan definitions, never client parameters.
  */
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import * as schema from "../db/schema";
 import { readLastValueStatsFile } from "../monitoring/utils";
@@ -150,37 +150,128 @@ export class CustomerUsageService {
 		const dbLimit = planResources["max_databases"] ?? 3;
 		const projectLimit = planResources["max_projects"] ?? 3;
 
-		// 2. Fetch all projects and environments strictly belonging to this organization
-		const orgProjects = await executor.query.projects.findMany({
-			where: eq(schema.projects.organizationId, organizationId),
-			with: {
-				environments: {
-					with: {
-						applications: true,
-						compose: true,
-						postgres: true,
-						mysql: true,
-						mariadb: true,
-						mongo: true,
-						redis: true,
-						libsql: true,
+		// 2. Fetch all projects strictly belonging to this organization (only non-sensitive columns)
+		let orgProjects: { projectId: string; name: string }[] = [];
+		try {
+			if (typeof executor.select === "function") {
+				orgProjects = await executor
+					.select({
+						projectId: schema.projects.projectId,
+						name: schema.projects.name,
+					})
+					.from(schema.projects)
+					.where(eq(schema.projects.organizationId, organizationId));
+			} else if (executor?.query?.projects?.findMany) {
+				const raw = await executor.query.projects.findMany({
+					where: eq(schema.projects.organizationId, organizationId),
+					columns: {
+						projectId: true,
+						name: true,
 					},
-				},
-			},
-		});
+				});
+				orgProjects = (raw || []).map((p: any) => ({
+					projectId: p.projectId,
+					name: p.name,
+				}));
+			}
+		} catch (err: any) {
+			console.error(
+				"[CustomerUsageService] Error querying projects for organization:",
+				organizationId,
+				err?.message,
+			);
+			throw new Error("Unable to retrieve resource usage at this time. Please try again later.");
+		}
 
 		const workloads: WorkloadTelemetry[] = [];
 		let totalAppsCount = 0;
 		let totalDbsCount = 0;
 
-		for (const project of orgProjects || []) {
-			const projectName = project.name || "Default Project";
+		if (orgProjects.length > 0) {
+			const projectIds = orgProjects.map((p) => p.projectId);
+			const projectMap = new Map<string, string>(
+				orgProjects.map((p) => [p.projectId, p.name || "Default Project"]),
+			);
 
-			for (const env of project.environments || []) {
-				const environmentName = env.name || "production";
+			let orgEnvironments: { environmentId: string; name: string; projectId: string }[] = [];
+			try {
+				if (typeof executor.select === "function") {
+					orgEnvironments = await executor
+						.select({
+							environmentId: schema.environments.environmentId,
+							name: schema.environments.name,
+							projectId: schema.environments.projectId,
+						})
+						.from(schema.environments)
+						.where(inArray(schema.environments.projectId, projectIds));
+				} else if (executor?.query?.environments?.findMany) {
+					const raw = await executor.query.environments.findMany({
+						where: inArray(schema.environments.projectId, projectIds),
+						columns: {
+							environmentId: true,
+							name: true,
+							projectId: true,
+						},
+					});
+					orgEnvironments = (raw || []).map((e: any) => ({
+						environmentId: e.environmentId,
+						name: e.name,
+						projectId: e.projectId,
+					}));
+				}
+			} catch (err: any) {
+				console.error(
+					"[CustomerUsageService] Error querying environments:",
+					err?.message,
+				);
+				throw new Error("Unable to retrieve resource usage at this time. Please try again later.");
+			}
 
-				// Applications
-				for (const app of env.applications || []) {
+			if (orgEnvironments.length > 0) {
+				const envIds = orgEnvironments.map((e) => e.environmentId);
+				const envMap = new Map<string, { name: string; projectName: string }>();
+				for (const env of orgEnvironments) {
+					envMap.set(env.environmentId, {
+						name: env.name || "production",
+						projectName: projectMap.get(env.projectId) || "Default Project",
+					});
+				}
+
+				// Applications query (explicit non-sensitive columns only)
+				let appRows: any[] = [];
+				try {
+					if (typeof executor.select === "function") {
+						appRows = await executor
+							.select({
+								applicationId: schema.applications.applicationId,
+								name: schema.applications.name,
+								appName: schema.applications.appName,
+								applicationStatus: schema.applications.applicationStatus,
+								memoryLimit: schema.applications.memoryLimit,
+								cpuLimit: schema.applications.cpuLimit,
+								environmentId: schema.applications.environmentId,
+							})
+							.from(schema.applications)
+							.where(inArray(schema.applications.environmentId, envIds));
+					} else if (executor?.query?.applications?.findMany) {
+						appRows = await executor.query.applications.findMany({
+							where: inArray(schema.applications.environmentId, envIds),
+							columns: {
+								applicationId: true,
+								name: true,
+								appName: true,
+								applicationStatus: true,
+								memoryLimit: true,
+								cpuLimit: true,
+								environmentId: true,
+							},
+						});
+					}
+				} catch (err: any) {
+					console.error("[CustomerUsageService] Error querying applications:", err?.message);
+				}
+
+				for (const app of appRows || []) {
 					totalAppsCount++;
 					const appName = app.appName || app.name;
 					const allocatedRamMb = app.memoryLimit
@@ -190,9 +281,16 @@ export class CustomerUsageService {
 						? Math.ceil(Number(app.cpuLimit) / 1_000_000)
 						: null;
 
-					const memStat = await readLastValueStatsFile(appName, "memory");
-					const cpuStat = await readLastValueStatsFile(appName, "cpu");
-					const netStat = await readLastValueStatsFile(appName, "network");
+					let memStat: any = null;
+					let cpuStat: any = null;
+					let netStat: any = null;
+					try {
+						memStat = await readLastValueStatsFile(appName, "memory");
+						cpuStat = await readLastValueStatsFile(appName, "cpu");
+						netStat = await readLastValueStatsFile(appName, "network");
+					} catch {
+						// Docker telemetry failure is handled safely
+					}
 
 					const measuredRamMb = memStat?.value?.used
 						? parseMemoryStringToMb(memStat.value.used)
@@ -206,14 +304,18 @@ export class CustomerUsageService {
 
 					const isRunning = app.applicationStatus === "done";
 					const isError = app.applicationStatus === "error";
+					const envInfo = envMap.get(app.environmentId) || {
+						name: "production",
+						projectName: "Default Project",
+					};
 
 					workloads.push({
 						id: app.applicationId,
 						name: app.name,
 						appName,
 						serviceType: "application",
-						projectName,
-						environmentName,
+						projectName: envInfo.projectName,
+						environmentName: envInfo.name,
 						status: isRunning ? "running" : isError ? "error" : "idle",
 						measuredRamMb,
 						measuredCpuPercent,
@@ -224,13 +326,50 @@ export class CustomerUsageService {
 					});
 				}
 
-				// Docker Compose Workloads
-				for (const comp of env.compose || []) {
+				// Docker Compose Workloads (explicit non-sensitive columns only)
+				let compRows: any[] = [];
+				try {
+					if (typeof executor.select === "function") {
+						compRows = await executor
+							.select({
+								composeId: schema.compose.composeId,
+								name: schema.compose.name,
+								appName: schema.compose.appName,
+								composeStatus: schema.compose.composeStatus,
+								environmentId: schema.compose.environmentId,
+							})
+							.from(schema.compose)
+							.where(inArray(schema.compose.environmentId, envIds));
+					} else if (executor?.query?.compose?.findMany) {
+						compRows = await executor.query.compose.findMany({
+							where: inArray(schema.compose.environmentId, envIds),
+							columns: {
+								composeId: true,
+								name: true,
+								appName: true,
+								composeStatus: true,
+								environmentId: true,
+							},
+						});
+					}
+				} catch (err: any) {
+					console.error("[CustomerUsageService] Error querying compose:", err?.message);
+				}
+
+				for (const comp of compRows || []) {
 					totalAppsCount++;
 					const appName = comp.appName || comp.name;
-					const memStat = await readLastValueStatsFile(appName, "memory");
-					const cpuStat = await readLastValueStatsFile(appName, "cpu");
-					const netStat = await readLastValueStatsFile(appName, "network");
+
+					let memStat: any = null;
+					let cpuStat: any = null;
+					let netStat: any = null;
+					try {
+						memStat = await readLastValueStatsFile(appName, "memory");
+						cpuStat = await readLastValueStatsFile(appName, "cpu");
+						netStat = await readLastValueStatsFile(appName, "network");
+					} catch {
+						// Docker telemetry failure is handled safely
+					}
 
 					const measuredRamMb = memStat?.value?.used
 						? parseMemoryStringToMb(memStat.value.used)
@@ -244,14 +383,18 @@ export class CustomerUsageService {
 
 					const isRunning = comp.composeStatus === "done";
 					const isError = comp.composeStatus === "error";
+					const envInfo = envMap.get(comp.environmentId) || {
+						name: "production",
+						projectName: "Default Project",
+					};
 
 					workloads.push({
 						id: comp.composeId,
 						name: comp.name,
 						appName,
 						serviceType: "compose",
-						projectName,
-						environmentName,
+						projectName: envInfo.projectName,
+						environmentName: envInfo.name,
 						status: isRunning ? "running" : isError ? "error" : "idle",
 						measuredRamMb,
 						measuredCpuPercent,
@@ -262,18 +405,56 @@ export class CustomerUsageService {
 					});
 				}
 
-				// Databases (All 6 engines)
-				const dbEngines = [
-					{ list: env.postgres, engine: "postgres", idKey: "postgresId" },
-					{ list: env.mysql, engine: "mysql", idKey: "mysqlId" },
-					{ list: env.mariadb, engine: "mariadb", idKey: "mariadbId" },
-					{ list: env.mongo, engine: "mongo", idKey: "mongoId" },
-					{ list: env.redis, engine: "redis", idKey: "redisId" },
-					{ list: env.libsql, engine: "libsql", idKey: "libsqlId" },
+				// Databases (All 6 engines - selecting only non-sensitive columns, zero secrets)
+				const dbConfigs: {
+					table: any;
+					queryProp: string;
+					engine: string;
+					idKey: string;
+				}[] = [
+					{ table: schema.postgres, queryProp: "postgres", engine: "postgres", idKey: "postgresId" },
+					{ table: schema.mysql, queryProp: "mysql", engine: "mysql", idKey: "mysqlId" },
+					{ table: schema.mariadb, queryProp: "mariadb", engine: "mariadb", idKey: "mariadbId" },
+					{ table: schema.mongo, queryProp: "mongo", engine: "mongo", idKey: "mongoId" },
+					{ table: schema.redis, queryProp: "redis", engine: "redis", idKey: "redisId" },
+					{ table: schema.libsql, queryProp: "libsql", engine: "libsql", idKey: "libsqlId" },
 				];
 
-				for (const dbGroup of dbEngines) {
-					for (const dbRecord of dbGroup.list || []) {
+				for (const cfg of dbConfigs) {
+					let dbRows: any[] = [];
+					try {
+						if (typeof executor.select === "function") {
+							dbRows = await executor
+								.select({
+									id: cfg.table[cfg.idKey],
+									name: cfg.table.name,
+									appName: cfg.table.appName,
+									applicationStatus: cfg.table.applicationStatus,
+									memoryLimit: cfg.table.memoryLimit,
+									cpuLimit: cfg.table.cpuLimit,
+									environmentId: cfg.table.environmentId,
+								})
+								.from(cfg.table)
+								.where(inArray(cfg.table.environmentId, envIds));
+						} else if (executor?.query?.[cfg.queryProp]?.findMany) {
+							dbRows = await executor.query[cfg.queryProp].findMany({
+								where: inArray(cfg.table.environmentId, envIds),
+								columns: {
+									[cfg.idKey]: true,
+									name: true,
+									appName: true,
+									applicationStatus: true,
+									memoryLimit: true,
+									cpuLimit: true,
+									environmentId: true,
+								},
+							});
+						}
+					} catch (err: any) {
+						console.error(`[CustomerUsageService] Error querying ${cfg.engine}:`, err?.message);
+					}
+
+					for (const dbRecord of dbRows || []) {
 						totalDbsCount++;
 						const appName = dbRecord.appName || dbRecord.name;
 						const allocatedRamMb = dbRecord.memoryLimit
@@ -283,9 +464,16 @@ export class CustomerUsageService {
 							? Math.ceil(Number(dbRecord.cpuLimit) / 1_000_000)
 							: null;
 
-						const memStat = await readLastValueStatsFile(appName, "memory");
-						const cpuStat = await readLastValueStatsFile(appName, "cpu");
-						const netStat = await readLastValueStatsFile(appName, "network");
+						let memStat: any = null;
+						let cpuStat: any = null;
+						let netStat: any = null;
+						try {
+							memStat = await readLastValueStatsFile(appName, "memory");
+							cpuStat = await readLastValueStatsFile(appName, "cpu");
+							netStat = await readLastValueStatsFile(appName, "network");
+						} catch {
+							// Docker telemetry failure is handled safely
+						}
 
 						const measuredRamMb = memStat?.value?.used
 							? parseMemoryStringToMb(memStat.value.used)
@@ -299,15 +487,19 @@ export class CustomerUsageService {
 
 						const isRunning = dbRecord.applicationStatus === "done";
 						const isError = dbRecord.applicationStatus === "error";
+						const envInfo = envMap.get(dbRecord.environmentId) || {
+							name: "production",
+							projectName: "Default Project",
+						};
 
 						workloads.push({
-							id: dbRecord[dbGroup.idKey],
+							id: dbRecord.id || dbRecord[cfg.idKey],
 							name: dbRecord.name,
 							appName,
 							serviceType: "database",
-							engine: dbGroup.engine,
-							projectName,
-							environmentName,
+							engine: cfg.engine,
+							projectName: envInfo.projectName,
+							environmentName: envInfo.name,
 							status: isRunning ? "running" : isError ? "error" : "idle",
 							measuredRamMb,
 							measuredCpuPercent,

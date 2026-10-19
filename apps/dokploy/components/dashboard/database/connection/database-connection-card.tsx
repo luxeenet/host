@@ -59,6 +59,11 @@ export const DatabaseConnectionCard = ({
 	environmentId,
 }: Props) => {
 	const utils = api.useUtils();
+	const { data: authUser } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(authUser?.user as any)?.isPlatformAdmin ||
+			(authUser as any)?.isPlatformAdmin,
+	);
 	const [activeTab, setActiveTab] = useState<"internal" | "external">(
 		"internal",
 	);
@@ -518,7 +523,40 @@ export const DatabaseConnectionCard = ({
 
 					{/* EXTERNAL CONNECTION TAB */}
 					<TabsContent value="external" className="space-y-6 mt-0">
-						{!isExternalEnabled ? (
+						{!isPlatformAdmin ? (
+							<div className="flex flex-col items-center justify-center p-8 bg-slate-900/40 border border-slate-800 rounded-xl gap-4 text-center">
+								<div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+									<Globe className="size-8 text-indigo-400" />
+								</div>
+								<div className="flex flex-col gap-1 max-w-md">
+									<div className="flex items-center justify-center gap-2">
+										<h4 className="text-base font-semibold text-white">
+											External Database Connectivity
+										</h4>
+										<Badge
+											variant="outline"
+											className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30"
+										>
+											Coming Soon
+										</Badge>
+									</div>
+									<p className="text-xs text-slate-400 leading-relaxed mt-1">
+										External / public database endpoints and direct internet connectivity are currently undergoing security staging and will be available in an upcoming platform release.
+									</p>
+									<p className="text-xs text-slate-300 bg-slate-950/60 p-3 rounded-lg border border-slate-800/80 leading-relaxed mt-2 text-left">
+										🔒 <strong>Internal Networking Active:</strong> Your applications deployed inside HatDot can continue using private internal database connectivity seamlessly without interruption.
+									</p>
+								</div>
+								<Button
+									variant="outline"
+									onClick={() => setActiveTab("internal")}
+									className="flex items-center gap-2 mt-2 border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-950/40"
+								>
+									<Server className="size-4" />
+									View Internal Connection Parameters
+								</Button>
+							</div>
+						) : !isExternalEnabled ? (
 							<div className="flex flex-col items-center justify-center p-8 bg-muted/20 border border-dashed rounded-xl gap-4 text-center">
 								<div className="p-3 bg-muted rounded-full">
 									<Globe className="size-8 text-muted-foreground" />

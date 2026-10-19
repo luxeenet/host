@@ -12,6 +12,7 @@ import {
 	findEnvironmentById,
 	findPostgresById,
 	findProjectById,
+	assertPublicDatabaseAccess,
 	getAccessibleServerIds,
 	getContainerLogs,
 	getMountPath,
@@ -24,6 +25,8 @@ import {
 	reconcileDatabaseSecurity,
 	removePostgresById,
 	removeService,
+	sanitizeConnectionDetailsForCustomer,
+	sanitizeDatabaseRecordForCustomer,
 	startService,
 	startServiceRemote,
 	stopService,
@@ -174,11 +177,12 @@ export const postgresRouter = createTRPCRouter({
 				postgres.serverId || undefined,
 				postgres.appName || undefined,
 			);
-			return {
+			const fullRecord = {
 				...postgres,
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+			return sanitizeDatabaseRecordForCustomer(fullRecord, ctx.user);
 		}),
 	reconcileSecurity: protectedProcedure
 		.input(apiFindOnePostgres)
@@ -225,16 +229,18 @@ export const postgresRouter = createTRPCRouter({
 				postgres.serverId || undefined,
 				postgres.appName || undefined,
 			);
-			return buildDatabaseConnectionStrings(
+			const details = buildDatabaseConnectionStrings(
 				"postgres",
 				postgres,
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+			return sanitizeConnectionDetailsForCustomer(details, ctx.user);
 		}),
 	verifyConnectivity: protectedProcedure
 		.input(apiFindOnePostgres)
 		.query(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServiceAccess(ctx, input.postgresId, "read");
 			const postgres = await findPostgresById(input.postgresId);
 			if (
@@ -269,6 +275,7 @@ export const postgresRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServicePermissionAndAccess(ctx, input.postgresId, {
 				service: ["create"],
 			});
@@ -404,6 +411,9 @@ export const postgresRouter = createTRPCRouter({
 	saveExternalPort: protectedProcedure
 		.input(apiSaveExternalPortPostgres)
 		.mutation(async ({ input, ctx }) => {
+			if (input.externalPort !== null && input.externalPort !== undefined) {
+				assertPublicDatabaseAccess(ctx.user);
+			}
 			await checkServicePermissionAndAccess(ctx, input.postgresId, {
 				service: ["create"],
 			});

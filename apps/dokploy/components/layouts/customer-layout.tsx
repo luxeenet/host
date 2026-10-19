@@ -27,7 +27,7 @@ export const NAV_ITEMS = [
 	{ label: "Projects", icon: Cloud, href: "/dashboard/projects" },
 	{ label: "Databases", icon: Database, href: "/dashboard/home/databases" },
 	{ label: "Domains", icon: Globe, href: "/dashboard/domains" },
-	{ label: "Usage", icon: Activity, href: "/dashboard/usage" },
+	{ label: "Usage", icon: Activity, href: "/home/dashboard/usage" },
 	{ label: "Billing", icon: CreditCard, href: "/dashboard/billing" },
 	{ label: "Support", icon: HeadphonesIcon, href: "/dashboard/support" },
 	{ label: "Account", icon: Settings, href: "/dashboard/account" },
@@ -35,7 +35,18 @@ export const NAV_ITEMS = [
 
 export function isCustomerRouteActive(href: string, pathname: string): boolean {
 	if (href === "/dashboard" || href === "/dashboard/home") {
-		return pathname === href;
+		return (
+			pathname === "/dashboard" ||
+			pathname === "/dashboard/home" ||
+			pathname === "/home/dashboard"
+		);
+	}
+
+	if (href === "/home/dashboard/usage" || href === "/dashboard/usage") {
+		return (
+			pathname === "/home/dashboard/usage" ||
+			pathname === "/dashboard/usage"
+		);
 	}
 
 	if (href === "/dashboard/home/databases") {

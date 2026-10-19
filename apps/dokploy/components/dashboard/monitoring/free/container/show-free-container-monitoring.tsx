@@ -1,6 +1,9 @@
 import { formatMb } from "@dokploy/server/monitoring/units";
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Activity, ArrowRight, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { api } from "@/utils/api";
@@ -121,6 +124,11 @@ export const ContainerFreeMonitoring = ({
 	appName,
 	appType = "application",
 }: Props) => {
+	const { data: authUser } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(authUser?.user as any)?.isPlatformAdmin ||
+			(authUser as any)?.isPlatformAdmin,
+	);
 	const { data: monitoringResponse } = api.application.readAppMonitoring.useQuery(
 		{ appName },
 		{
@@ -244,6 +252,75 @@ export const ContainerFreeMonitoring = ({
 		: 0;
 
 	const effectiveCpuLimitLabel = serviceLimit?.cpuLimitFormatted ?? null;
+
+	if (!isPlatformAdmin) {
+		return (
+			<div className="rounded-xl bg-background flex flex-col gap-4">
+				<header className="flex items-center justify-between">
+					<div className="space-y-1">
+						<h1 className="text-2xl font-semibold tracking-tight">
+							Resource Allocation & Quota
+						</h1>
+						<p className="text-sm text-muted-foreground">
+							Subscription resource consumption and quota metering for your account
+						</p>
+					</div>
+				</header>
+
+				<Card className="bg-background border-slate-800">
+					<CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3">
+						<div className="space-y-1">
+							<CardTitle className="text-base font-semibold flex items-center gap-2">
+								<Activity className="size-4 text-indigo-400" />
+								Subscription Resource Metering
+							</CardTitle>
+							<p className="text-xs text-muted-foreground">
+								Resource consumption is tracked at the organization level against your active plan limits rather than individual raw container telemetry.
+							</p>
+						</div>
+						<Link href="/home/dashboard/usage">
+							<Button
+								size="sm"
+								className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5 shrink-0"
+							>
+								<Activity className="size-3.5" />
+								Open Usage Dashboard
+								<ArrowRight className="size-3.5 ml-0.5" />
+							</Button>
+						</Link>
+					</CardHeader>
+					<CardContent className="space-y-4 pt-2">
+						<div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+							<div className="space-y-1">
+								<div className="text-xs font-medium text-slate-300">
+									Plan Quota Dashboard
+								</div>
+								<div className="text-xs text-slate-400 leading-relaxed">
+									View authoritative RAM, CPU, storage, and database quotas across all deployed services, check remaining capacity, and upgrade limits instantly.
+								</div>
+							</div>
+							<Link href="/home/dashboard/usage" className="shrink-0">
+								<Button
+									variant="outline"
+									size="sm"
+									className="text-xs border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-950/40"
+								>
+									View Subscription Quotas
+								</Button>
+							</Link>
+						</div>
+
+						<div className="flex items-center gap-2 text-[11px] text-muted-foreground pt-1">
+							<ShieldCheck className="size-3.5 text-emerald-500 shrink-0" />
+							<span>
+								Individual container execution performance is managed automatically by the platform runtime according to your service specifications.
+							</span>
+						</div>
+					</CardContent>
+				</Card>
+			</div>
+		);
+	}
 
 	return (
 		<div className="rounded-xl bg-background flex flex-col gap-4">

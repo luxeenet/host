@@ -12,6 +12,7 @@ import {
 	findEnvironmentById,
 	findMySqlById,
 	findProjectById,
+	assertPublicDatabaseAccess,
 	getAccessibleServerIds,
 	getContainerLogs,
 	getPublicDatabaseHost,
@@ -23,6 +24,8 @@ import {
 	reconcileDatabaseSecurity,
 	removeMySqlById,
 	removeService,
+	sanitizeConnectionDetailsForCustomer,
+	sanitizeDatabaseRecordForCustomer,
 	startService,
 	startServiceRemote,
 	stopService,
@@ -172,7 +175,7 @@ export const mysqlRouter = createTRPCRouter({
 			);
 			const isPlatformAdmin =
 				ctx.user.role === "admin" || ctx.user.role === "owner";
-			return {
+			const fullRecord = {
 				...mysql,
 				databaseRootPassword: isPlatformAdmin
 					? mysql.databaseRootPassword
@@ -180,6 +183,7 @@ export const mysqlRouter = createTRPCRouter({
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+			return sanitizeDatabaseRecordForCustomer(fullRecord, ctx.user);
 		}),
 	reconcileSecurity: protectedProcedure
 		.input(apiFindOneMySql)
@@ -226,16 +230,18 @@ export const mysqlRouter = createTRPCRouter({
 				mysql.serverId || undefined,
 				mysql.appName || undefined,
 			);
-			return buildDatabaseConnectionStrings(
+			const details = buildDatabaseConnectionStrings(
 				"mysql",
 				mysql,
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+			return sanitizeConnectionDetailsForCustomer(details, ctx.user);
 		}),
 	verifyConnectivity: protectedProcedure
 		.input(apiFindOneMySql)
 		.query(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServiceAccess(ctx, input.mysqlId, "read");
 			const mysql = await findMySqlById(input.mysqlId);
 			if (
@@ -270,6 +276,7 @@ export const mysqlRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServicePermissionAndAccess(ctx, input.mysqlId, {
 				service: ["create"],
 			});
@@ -405,6 +412,9 @@ export const mysqlRouter = createTRPCRouter({
 	saveExternalPort: protectedProcedure
 		.input(apiSaveExternalPortMySql)
 		.mutation(async ({ input, ctx }) => {
+			if (input.externalPort !== null && input.externalPort !== undefined) {
+				assertPublicDatabaseAccess(ctx.user);
+			}
 			await checkServicePermissionAndAccess(ctx, input.mysqlId, {
 				service: ["create"],
 			});

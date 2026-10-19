@@ -29,7 +29,6 @@ import {
 	Upload,
 	Users,
 } from "lucide-react";
-import { DatabaseManagementComingSoon } from "@/components/dashboard/database/database-management-coming-soon";
 import type { GetServerSidePropsContext } from "next";
 import Head from "next/head";
 import Link from "next/link";
@@ -138,9 +137,6 @@ export default function DatabaseManagePage() {
 
 	const { data: authUser } = api.user.get.useQuery();
 	const isPlatformAdmin = Boolean((authUser?.user as any)?.isPlatformAdmin);
-	const isPublicEnabled =
-		process.env.NEXT_PUBLIC_ENABLE_DATABASE_MANAGEMENT === "true";
-	const canAccess = isPlatformAdmin || isPublicEnabled;
 
 	// Active tab
 	const [activeTab, setActiveTab] = useState<string>("explorer");
@@ -153,7 +149,7 @@ export default function DatabaseManagePage() {
 	// -------------------------------------------------------------
 	const { data: overviewData, refetch: refetchOverview } =
 		api.databaseManager.overview.useQuery(undefined, {
-			enabled: canAccess && Boolean(databaseId),
+			enabled: Boolean(databaseId),
 		});
 
 	const activeRecord = useMemo(() => {
@@ -170,7 +166,7 @@ export default function DatabaseManagePage() {
 		refetch: refetchDatabases,
 	} = api.databaseManager.listDatabases.useQuery(
 		{ databaseId, engine: databaseEngine },
-		{ enabled: canAccess && Boolean(databaseId) },
+		{ enabled: Boolean(databaseId) },
 	);
 
 	const discoveredDatabases = useMemo(() => {
@@ -201,7 +197,7 @@ export default function DatabaseManagePage() {
 		refetch: refetchStats,
 	} = api.databaseManager.engineOverview.useQuery(
 		{ databaseId, engine: databaseEngine, database: selectedDatabase || undefined },
-		{ enabled: canAccess && Boolean(databaseId) },
+		{ enabled: Boolean(databaseId) },
 	);
 
 	// -------------------------------------------------------------
@@ -213,7 +209,7 @@ export default function DatabaseManagePage() {
 		refetch: refetchList,
 	} = api.databaseManager.listCollectionsOrTables.useQuery(
 		{ databaseId, engine: databaseEngine, database: selectedDatabase || undefined },
-		{ enabled: canAccess && Boolean(databaseId) && databaseEngine !== "redis" },
+		{ enabled: Boolean(databaseId) && databaseEngine !== "redis" },
 	);
 
 	const [selectedEntity, setSelectedEntity] = useState<string>("");
@@ -899,10 +895,6 @@ export default function DatabaseManagePage() {
 		}
 		setActiveTab("explorer");
 	};
-
-	if (!canAccess) {
-		return <DatabaseManagementComingSoon />;
-	}
 
 	return (
 		<>

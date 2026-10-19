@@ -191,6 +191,12 @@ export const MENU: Menu = {
 		},
 		{
 			isSingle: true,
+			title: "Usage",
+			url: "/home/dashboard/usage",
+			icon: Activity,
+		},
+		{
+			isSingle: true,
 			title: "Overview",
 			url: "/dashboard/overview",
 			icon: LayoutGrid,
@@ -495,9 +501,14 @@ export function isActiveRoute(opts: {
 
 	if (normalizedPathname === normalizedItemUrl) return true;
 
-	// Isolate /dashboard/home so it does not match subpaths like /dashboard/home/databases
-	if (normalizedItemUrl === "/dashboard/home") {
-		return normalizedPathname === "/dashboard/home";
+	// Isolate /dashboard/home and /home/dashboard so they do not match subpaths
+	if (normalizedItemUrl === "/dashboard/home" || normalizedItemUrl === "/home/dashboard") {
+		return normalizedPathname === "/dashboard/home" || normalizedPathname === "/home/dashboard";
+	}
+
+	// Canonical usage route and compatibility alias
+	if (normalizedItemUrl === "/home/dashboard/usage") {
+		return normalizedPathname === "/home/dashboard/usage" || normalizedPathname === "/dashboard/usage";
 	}
 
 	// Backward compatibility alias: /dashboard/databases routes highlight Databases item

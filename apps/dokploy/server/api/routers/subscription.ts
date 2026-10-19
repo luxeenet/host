@@ -67,12 +67,21 @@ export const subscriptionRouter = createTRPCRouter({
 
 	/** Get authoritative tenant-specific resource usage, telemetry, and plan limits */
 	customerUsage: protectedProcedure.query(async ({ ctx }) => {
-		const { CustomerUsageService } = await import(
-			"@dokploy/server/services/customer-usage"
-		);
-		return await CustomerUsageService.getOrganizationUsage(
-			ctx.session.activeOrganizationId,
-		);
+		try {
+			const { CustomerUsageService } = await import(
+				"@dokploy/server/services/customer-usage"
+			);
+			return await CustomerUsageService.getOrganizationUsage(
+				ctx.session.activeOrganizationId,
+			);
+		} catch (error: any) {
+			console.error("[subscription.customerUsage] Error:", error?.message);
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+				message:
+					"Unable to load resource telemetry at this time. Please try again shortly.",
+			});
+		}
 	}),
 
 	/** Subscribe to a plan (creates subscription + first invoice) */

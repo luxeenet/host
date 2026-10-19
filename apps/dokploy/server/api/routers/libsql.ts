@@ -9,6 +9,7 @@ import {
 	findEnvironmentById,
 	findLibsqlById,
 	findProjectById,
+	assertPublicDatabaseAccess,
 	getAccessibleServerIds,
 	getContainerLogs,
 	getPublicDatabaseHost,
@@ -19,6 +20,8 @@ import {
 	reconcileDatabaseSecurity,
 	removeLibsqlById,
 	removeService,
+	sanitizeConnectionDetailsForCustomer,
+	sanitizeDatabaseRecordForCustomer,
 	startService,
 	startServiceRemote,
 	stopService,
@@ -160,11 +163,12 @@ export const libsqlRouter = createTRPCRouter({
 				libsql.serverId || undefined,
 				libsql.appName || undefined,
 			);
-			return {
+			const fullRecord = {
 				...libsql,
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+			return sanitizeDatabaseRecordForCustomer(fullRecord, ctx.user);
 		}),
 	reconcileSecurity: protectedProcedure
 		.input(apiFindOneLibsql)
@@ -211,16 +215,18 @@ export const libsqlRouter = createTRPCRouter({
 				libsql.serverId || undefined,
 				libsql.appName || undefined,
 			);
-			return buildDatabaseConnectionStrings(
+			const details = buildDatabaseConnectionStrings(
 				"libsql",
 				libsql,
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+			return sanitizeConnectionDetailsForCustomer(details, ctx.user);
 		}),
 	verifyConnectivity: protectedProcedure
 		.input(apiFindOneLibsql)
 		.query(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServiceAccess(ctx, input.libsqlId, "read");
 			const libsql = await findLibsqlById(input.libsqlId);
 			if (
@@ -254,6 +260,7 @@ export const libsqlRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServicePermissionAndAccess(ctx, input.libsqlId, {
 				service: ["create"],
 			});
@@ -390,6 +397,13 @@ export const libsqlRouter = createTRPCRouter({
 	saveExternalPorts: protectedProcedure
 		.input(apiSaveExternalPortsLibsql)
 		.mutation(async ({ input, ctx }) => {
+			if (
+				input.externalPort !== null ||
+				input.externalGRPCPort !== null ||
+				input.externalAdminPort !== null
+			) {
+				assertPublicDatabaseAccess(ctx.user);
+			}
 			await checkServicePermissionAndAccess(ctx, input.libsqlId, {
 				service: ["create"],
 			});

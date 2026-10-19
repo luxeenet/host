@@ -11,6 +11,7 @@ import {
 	findEnvironmentById,
 	findProjectById,
 	findRedisById,
+	assertPublicDatabaseAccess,
 	getAccessibleServerIds,
 	getContainerLogs,
 	getPublicDatabaseHost,
@@ -22,6 +23,8 @@ import {
 	reconcileDatabaseSecurity,
 	removeRedisById,
 	removeService,
+	sanitizeConnectionDetailsForCustomer,
+	sanitizeDatabaseRecordForCustomer,
 	startService,
 	startServiceRemote,
 	stopService,
@@ -161,11 +164,12 @@ export const redisRouter = createTRPCRouter({
 				redis.serverId || undefined,
 				redis.appName || undefined,
 			);
-			return {
+			const fullRecord = {
 				...redis,
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+			return sanitizeDatabaseRecordForCustomer(fullRecord, ctx.user);
 		}),
 	reconcileSecurity: protectedProcedure
 		.input(apiFindOneRedis)
@@ -212,16 +216,18 @@ export const redisRouter = createTRPCRouter({
 				redis.serverId || undefined,
 				redis.appName || undefined,
 			);
-			return buildDatabaseConnectionStrings(
+			const details = buildDatabaseConnectionStrings(
 				"redis",
 				redis,
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+			return sanitizeConnectionDetailsForCustomer(details, ctx.user);
 		}),
 	verifyConnectivity: protectedProcedure
 		.input(apiFindOneRedis)
 		.query(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServiceAccess(ctx, input.redisId, "read");
 			const redis = await findRedisById(input.redisId);
 			if (
@@ -255,6 +261,7 @@ export const redisRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServicePermissionAndAccess(ctx, input.redisId, {
 				service: ["create"],
 			});
@@ -427,6 +434,9 @@ export const redisRouter = createTRPCRouter({
 	saveExternalPort: protectedProcedure
 		.input(apiSaveExternalPortRedis)
 		.mutation(async ({ input, ctx }) => {
+			if (input.externalPort !== null && input.externalPort !== undefined) {
+				assertPublicDatabaseAccess(ctx.user);
+			}
 			await checkServicePermissionAndAccess(ctx, input.redisId, {
 				service: ["create"],
 			});

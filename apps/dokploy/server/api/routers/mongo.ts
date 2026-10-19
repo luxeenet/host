@@ -12,6 +12,7 @@ import {
 	findEnvironmentById,
 	findMongoById,
 	findProjectById,
+	assertPublicDatabaseAccess,
 	getAccessibleServerIds,
 	getContainerLogs,
 	getPublicDatabaseHost,
@@ -23,6 +24,8 @@ import {
 	reconcileDatabaseSecurity,
 	removeMongoById,
 	removeService,
+	sanitizeConnectionDetailsForCustomer,
+	sanitizeDatabaseRecordForCustomer,
 	startService,
 	startServiceRemote,
 	stopService,
@@ -171,11 +174,12 @@ export const mongoRouter = createTRPCRouter({
 				mongo.serverId || undefined,
 				mongo.appName || undefined,
 			);
-			return {
+			const fullRecord = {
 				...mongo,
 				publicHost: publicHostInfo.host,
 				publicHostInfo,
 			};
+			return sanitizeDatabaseRecordForCustomer(fullRecord, ctx.user);
 		}),
 	reconcileSecurity: protectedProcedure
 		.input(apiFindOneMongo)
@@ -222,16 +226,18 @@ export const mongoRouter = createTRPCRouter({
 				mongo.serverId || undefined,
 				mongo.appName || undefined,
 			);
-			return buildDatabaseConnectionStrings(
+			const details = buildDatabaseConnectionStrings(
 				"mongo",
 				mongo,
 				publicHostInfo.host,
 				publicHostInfo,
 			);
+			return sanitizeConnectionDetailsForCustomer(details, ctx.user);
 		}),
 	verifyConnectivity: protectedProcedure
 		.input(apiFindOneMongo)
 		.query(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServiceAccess(ctx, input.mongoId, "read");
 			const mongo = await findMongoById(input.mongoId);
 			if (
@@ -267,6 +273,7 @@ export const mongoRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			assertPublicDatabaseAccess(ctx.user);
 			await checkServicePermissionAndAccess(ctx, input.mongoId, {
 				service: ["create"],
 			});
@@ -403,6 +410,9 @@ export const mongoRouter = createTRPCRouter({
 	saveExternalPort: protectedProcedure
 		.input(apiSaveExternalPortMongo)
 		.mutation(async ({ input, ctx }) => {
+			if (input.externalPort !== null && input.externalPort !== undefined) {
+				assertPublicDatabaseAccess(ctx.user);
+			}
 			await checkServicePermissionAndAccess(ctx, input.mongoId, {
 				service: ["create"],
 			});

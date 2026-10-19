@@ -65,6 +65,16 @@ export const subscriptionRouter = createTRPCRouter({
 		);
 	}),
 
+	/** Get authoritative tenant-specific resource usage, telemetry, and plan limits */
+	customerUsage: protectedProcedure.query(async ({ ctx }) => {
+		const { CustomerUsageService } = await import(
+			"@dokploy/server/services/customer-usage"
+		);
+		return await CustomerUsageService.getOrganizationUsage(
+			ctx.session.activeOrganizationId,
+		);
+	}),
+
 	/** Subscribe to a plan (creates subscription + first invoice) */
 	create: protectedProcedure
 		.input(z.object({ planId: z.string().min(1) }))

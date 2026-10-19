@@ -61,6 +61,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { DatabaseManagementComingSoon } from "@/components/dashboard/database/database-management-coming-soon";
 import { appRouter } from "@/server/api/root";
 import { api } from "@/utils/api";
 
@@ -170,13 +171,20 @@ export default function ManagedDatabasesPage() {
 	const [provProjectId, setProvProjectId] = useState<string>("");
 	const [isProvisioning, setIsProvisioning] = useState(false);
 
+	const { data: authUser } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean((authUser?.user as any)?.isPlatformAdmin);
+	const isPublicEnabled =
+		process.env.NEXT_PUBLIC_ENABLE_DATABASE_MANAGEMENT === "true";
+	const canAccess = isPlatformAdmin || isPublicEnabled;
+
 	// Queries
 	const {
 		data: overviewData,
 		isLoading: isOverviewLoading,
 		refetch: refetchOverview,
 	} = api.databaseManager.overview.useQuery(undefined, {
-		refetchInterval: 15000,
+		enabled: canAccess,
+		refetchInterval: canAccess ? 15000 : false,
 	});
 
 	const { data: allProjects } = api.project.all.useQuery();
@@ -195,6 +203,10 @@ export default function ManagedDatabasesPage() {
 		toast.success("Copied to clipboard!");
 		setTimeout(() => setCopiedKey(null), 2000);
 	};
+
+	if (!canAccess) {
+		return <DatabaseManagementComingSoon />;
+	}
 
 	const databases = overviewData || [];
 

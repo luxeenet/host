@@ -58,20 +58,8 @@ export const setupDeploymentLogsWebSocketServer = (
 			return;
 		}
 
-		// Determine viewer audience: admin vs customer
-		let isAdmin = false;
-		try {
-			if (user.isPlatformAdmin) {
-				isAdmin = true;
-			} else if (session.activeOrganizationId) {
-				const member = await findMemberByUserId(
-					user.id,
-					session.activeOrganizationId,
-				);
-				isAdmin = member?.role === "owner" || member?.role === "admin";
-			}
-		} catch {}
-
+		// Determine viewer audience: platform administrator vs customer
+		const isAdmin = Boolean(user.isPlatformAdmin);
 		const audience: DeploymentAudience = isAdmin ? "admin" : "customer";
 
 		let tailProcess: ReturnType<typeof spawn> | null = null;

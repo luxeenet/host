@@ -19,6 +19,13 @@ export const swarmRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input, ctx }) => {
+			if (!input.serverId && !(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Swarm infrastructure inspection requires platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const server = await findServerById(input.serverId);
 				if (server.organizationId !== ctx.session?.activeOrganizationId) {
@@ -33,6 +40,13 @@ export const swarmRouter = createTRPCRouter({
 	getNodeInfo: withPermission("docker", "read")
 		.input(z.object({ nodeId: z.string(), serverId: z.string().optional() }))
 		.query(async ({ input, ctx }) => {
+			if (!input.serverId && !(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Swarm infrastructure inspection requires platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const server = await findServerById(input.serverId);
 				if (server.organizationId !== ctx.session?.activeOrganizationId) {
@@ -51,6 +65,13 @@ export const swarmRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input, ctx }) => {
+			if (!input.serverId && !(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Swarm infrastructure inspection requires platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const server = await findServerById(input.serverId);
 				if (server.organizationId !== ctx.session?.activeOrganizationId) {
@@ -82,6 +103,13 @@ export const swarmRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input, ctx }) => {
+			if (!input.serverId && !(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Host container information requires platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const server = await findServerById(input.serverId);
 				if (server.organizationId !== ctx.session?.activeOrganizationId) {
@@ -100,6 +128,13 @@ export const swarmRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input, ctx }) => {
+			if (!input.serverId && !(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Cluster container statistics require platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const server = await findServerById(input.serverId);
 				if (server.organizationId !== ctx.session?.activeOrganizationId) {

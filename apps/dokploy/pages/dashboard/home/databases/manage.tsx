@@ -7,10 +7,8 @@ import {
 	AlertTriangle,
 	ArrowLeft,
 	ArrowRight,
-	Check,
 	CheckCircle2,
 	ChevronRight,
-	Clock,
 	Code2,
 	Copy,
 	Database,
@@ -18,28 +16,20 @@ import {
 	Edit,
 	Eye,
 	FileText,
-	HardDrive,
 	Key,
 	Layers,
-	Lock,
 	Play,
 	Plus,
-	Radio,
 	RefreshCw,
-	Search,
-	Server,
 	Settings2,
 	Shield,
-	ShieldAlert,
 	Table as TableIcon,
 	Terminal,
 	Trash2,
 	Upload,
-	UserCheck,
 	Users,
-	Wrench,
-	Zap,
 } from "lucide-react";
+import { DatabaseManagementComingSoon } from "@/components/dashboard/database/database-management-coming-soon";
 import type { GetServerSidePropsContext } from "next";
 import Head from "next/head";
 import Link from "next/link";
@@ -146,6 +136,12 @@ export default function DatabaseManagePage() {
 
 	const meta = ENGINE_METAS[databaseEngine];
 
+	const { data: authUser } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean((authUser?.user as any)?.isPlatformAdmin);
+	const isPublicEnabled =
+		process.env.NEXT_PUBLIC_ENABLE_DATABASE_MANAGEMENT === "true";
+	const canAccess = isPlatformAdmin || isPublicEnabled;
+
 	// Active tab
 	const [activeTab, setActiveTab] = useState<string>("explorer");
 
@@ -157,7 +153,7 @@ export default function DatabaseManagePage() {
 	// -------------------------------------------------------------
 	const { data: overviewData, refetch: refetchOverview } =
 		api.databaseManager.overview.useQuery(undefined, {
-			enabled: Boolean(databaseId),
+			enabled: canAccess && Boolean(databaseId),
 		});
 
 	const activeRecord = useMemo(() => {
@@ -174,7 +170,7 @@ export default function DatabaseManagePage() {
 		refetch: refetchDatabases,
 	} = api.databaseManager.listDatabases.useQuery(
 		{ databaseId, engine: databaseEngine },
-		{ enabled: Boolean(databaseId) },
+		{ enabled: canAccess && Boolean(databaseId) },
 	);
 
 	const discoveredDatabases = useMemo(() => {
@@ -205,7 +201,7 @@ export default function DatabaseManagePage() {
 		refetch: refetchStats,
 	} = api.databaseManager.engineOverview.useQuery(
 		{ databaseId, engine: databaseEngine, database: selectedDatabase || undefined },
-		{ enabled: Boolean(databaseId) },
+		{ enabled: canAccess && Boolean(databaseId) },
 	);
 
 	// -------------------------------------------------------------
@@ -217,7 +213,7 @@ export default function DatabaseManagePage() {
 		refetch: refetchList,
 	} = api.databaseManager.listCollectionsOrTables.useQuery(
 		{ databaseId, engine: databaseEngine, database: selectedDatabase || undefined },
-		{ enabled: Boolean(databaseId) && databaseEngine !== "redis" },
+		{ enabled: canAccess && Boolean(databaseId) && databaseEngine !== "redis" },
 	);
 
 	const [selectedEntity, setSelectedEntity] = useState<string>("");
@@ -866,7 +862,7 @@ export default function DatabaseManagePage() {
 	};
 
 	const handleDownloadFailureReport = () => {
-		if (!importResult || !importResult.errors || importResult.errors.length === 0) return;
+		if (!importResult?.errors || importResult.errors.length === 0) return;
 		const report = {
 			databaseId,
 			engine: databaseEngine,
@@ -903,6 +899,10 @@ export default function DatabaseManagePage() {
 		}
 		setActiveTab("explorer");
 	};
+
+	if (!canAccess) {
+		return <DatabaseManagementComingSoon />;
+	}
 
 	return (
 		<>
@@ -2306,7 +2306,7 @@ export default function DatabaseManagePage() {
 
 					<div className="space-y-3 py-2">
 						<div>
-							<label className="text-xs text-slate-400">Key Name</label>
+							<span className="block text-xs text-slate-400">Key Name</span>
 							<Input
 								placeholder="e.g. session:user_123"
 								value={newRedisKey}
@@ -2316,7 +2316,7 @@ export default function DatabaseManagePage() {
 						</div>
 
 						<div>
-							<label className="text-xs text-slate-400">String Value</label>
+							<span className="block text-xs text-slate-400">String Value</span>
 							<Textarea
 								placeholder="Value payload"
 								value={newRedisVal}
@@ -2327,9 +2327,9 @@ export default function DatabaseManagePage() {
 						</div>
 
 						<div>
-							<label className="text-xs text-slate-400">
+							<span className="block text-xs text-slate-400">
 								TTL in seconds (optional)
-							</label>
+							</span>
 							<Input
 								placeholder="e.g. 3600 (leave blank for persistent)"
 								value={newRedisTtl}
@@ -2371,7 +2371,7 @@ export default function DatabaseManagePage() {
 
 					<div className="space-y-3 py-2">
 						<div>
-							<label className="text-xs text-slate-400">Username</label>
+							<span className="block text-xs text-slate-400">Username</span>
 							<Input
 								placeholder="e.g. report_worker"
 								value={newDbUser}
@@ -2381,7 +2381,7 @@ export default function DatabaseManagePage() {
 						</div>
 
 						<div>
-							<label className="text-xs text-slate-400">Password</label>
+							<span className="block text-xs text-slate-400">Password</span>
 							<Input
 								type="text"
 								placeholder="Secure password"
@@ -2392,7 +2392,7 @@ export default function DatabaseManagePage() {
 						</div>
 
 						<div>
-							<label className="text-xs text-slate-400">Role Privilege</label>
+							<span className="block text-xs text-slate-400">Role Privilege</span>
 							<Select
 								value={newDbUserRoles}
 								onValueChange={(val) => setNewDbUserRoles(val)}
@@ -2600,9 +2600,9 @@ export default function DatabaseManagePage() {
 							{/* Or Direct Paste Toggle */}
 							<div className="space-y-2">
 								<div className="flex items-center justify-between">
-									<label className="text-xs font-semibold text-slate-300">
+									<span className="text-xs font-semibold text-slate-300">
 										Or Paste Raw CSV / JSON Data Directly:
-									</label>
+									</span>
 									<div className="flex items-center gap-2">
 										<span className="text-[11px] text-slate-400">Format:</span>
 										<Select
@@ -2673,13 +2673,13 @@ export default function DatabaseManagePage() {
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-900/60 border border-slate-800">
 								{/* Target Entity */}
 								<div>
-									<label className="text-xs font-semibold text-slate-300 block mb-1.5">
+									<span className="text-xs font-semibold text-slate-300 block mb-1.5">
 										{meta.isSql
 											? "Target Table"
 											: databaseEngine === "mongo"
 												? "Target Collection"
 												: "Redis Key Prefix / Target"}
-									</label>
+									</span>
 
 									{databaseEngine === "redis" ? (
 										<Input
@@ -2721,9 +2721,9 @@ export default function DatabaseManagePage() {
 
 								{/* Duplicate Policy */}
 								<div>
-									<label className="text-xs font-semibold text-slate-300 block mb-1.5">
+									<span className="text-xs font-semibold text-slate-300 block mb-1.5">
 										Duplicate Record Handling Policy
-									</label>
+									</span>
 									<Select
 										value={importDuplicatePolicy}
 										onValueChange={(val: "skip" | "update" | "reject") =>
@@ -2759,9 +2759,9 @@ export default function DatabaseManagePage() {
 
 									<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 										<div>
-											<label className="text-[11px] text-slate-300 block mb-1">
+											<span className="text-[11px] text-slate-300 block mb-1">
 												Redis Data Structure
-											</label>
+											</span>
 											<Select
 												value={redisStructure}
 												onValueChange={(val: any) => setRedisStructure(val)}
@@ -2788,9 +2788,9 @@ export default function DatabaseManagePage() {
 										</div>
 
 										<div>
-											<label className="text-[11px] text-slate-300 block mb-1">
+											<span className="text-[11px] text-slate-300 block mb-1">
 												Key Identifier Column
-											</label>
+											</span>
 											<Select
 												value={redisKeyField}
 												onValueChange={(val) => setRedisKeyField(val)}
@@ -2810,9 +2810,9 @@ export default function DatabaseManagePage() {
 
 										{redisStructure === "zset" ? (
 											<div>
-												<label className="text-[11px] text-slate-300 block mb-1">
+												<span className="text-[11px] text-slate-300 block mb-1">
 													Score Column
-												</label>
+												</span>
 												<Select
 													value={redisScoreField}
 													onValueChange={(val) => setRedisScoreField(val)}
@@ -2831,9 +2831,9 @@ export default function DatabaseManagePage() {
 											</div>
 										) : (
 											<div>
-												<label className="text-[11px] text-slate-300 block mb-1">
+												<span className="text-[11px] text-slate-300 block mb-1">
 													TTL in seconds (optional)
-												</label>
+												</span>
 												<Input
 													placeholder="e.g. 86400 (blank = persistent)"
 													value={redisTtl}
@@ -3014,9 +3014,9 @@ export default function DatabaseManagePage() {
 
 							{/* Preview table */}
 							<div className="space-y-2">
-								<label className="text-xs font-semibold text-slate-300 block">
+								<span className="text-xs font-semibold text-slate-300 block">
 									Sample Record Preview (First 5 Rows)
-								</label>
+								</span>
 								<div className="rounded-xl border border-slate-800 overflow-x-auto max-h-60">
 									<table className="w-full text-left text-xs font-mono">
 										<thead className="bg-slate-950 text-slate-400 border-b border-slate-800 text-[10px] uppercase">
@@ -3171,10 +3171,10 @@ export default function DatabaseManagePage() {
 							{importResult.errors && importResult.errors.length > 0 && (
 								<div className="space-y-2">
 									<div className="flex items-center justify-between">
-										<label className="text-xs font-semibold text-red-400 flex items-center gap-1.5">
+										<span className="text-xs font-semibold text-red-400 flex items-center gap-1.5">
 											<AlertTriangle className="w-3.5 h-3.5" />
 											Row Error Details ({importResult.errors.length})
-										</label>
+										</span>
 										<Button
 											size="sm"
 											variant="outline"

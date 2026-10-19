@@ -284,20 +284,8 @@ export const deploymentRouter = createTRPCRouter({
 				});
 			}
 
-			// Determine viewer audience: authorized admin vs customer
-			let isAdmin = false;
-			try {
-				if (ctx.user.isPlatformAdmin) {
-					isAdmin = true;
-				} else if (ctx.session?.activeOrganizationId) {
-					const member = await findMemberByUserId(
-						ctx.user.id,
-						ctx.session.activeOrganizationId,
-					);
-					isAdmin = member?.role === "owner" || member?.role === "admin";
-				}
-			} catch {}
-
+			// Determine viewer audience: platform administrator vs customer
+			const isAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
 			const audience: DeploymentAudience = isAdmin ? "admin" : "customer";
 
 			const command = `tail -n ${input.tail} "${deployment.logPath}" 2>/dev/null || echo ""`;

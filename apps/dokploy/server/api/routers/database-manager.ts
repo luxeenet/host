@@ -1,4 +1,5 @@
 import {
+	assertDatabaseManagementAccess,
 	buildDatabaseConnectionStrings,
 	executeDatabaseImport,
 	getAuthorizedDatabaseRecord,
@@ -39,11 +40,22 @@ const SupportedEngineEnum = z.enum([
 	"libsql",
 ]);
 
+/**
+ * Enforces server-side temporary feature disable policy for ordinary customers
+ * while preserving administrative workflow access for platform operations.
+ */
+const databaseManagementProcedure = protectedProcedure.use(
+	async ({ ctx, next }) => {
+		assertDatabaseManagementAccess(ctx.user);
+		return next({ ctx });
+	},
+);
+
 export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Returns aggregated database overview list for the active organization across all 6 engines.
 	 */
-	overview: protectedProcedure.query(async ({ ctx }) => {
+	overview: databaseManagementProcedure.query(async ({ ctx }) => {
 		const orgId = ctx.session.activeOrganizationId;
 
 		// 1. Fetch all projects belonging to the active organization
@@ -246,7 +258,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Discovers available logical databases for an authorized database resource.
 	 */
-	listDatabases: protectedProcedure
+	listDatabases: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -266,7 +278,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Returns engine-specific stats, storage, and version details.
 	 */
-	engineOverview: protectedProcedure
+	engineOverview: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -304,7 +316,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Lists collections (MongoDB) or tables (PostgreSQL, MySQL, MariaDB, LibSQL).
 	 */
-	listCollectionsOrTables: protectedProcedure
+	listCollectionsOrTables: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -339,7 +351,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Returns schema columns, data types, and indexes for a target table/collection.
 	 */
-	getSchema: protectedProcedure
+	getSchema: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -376,7 +388,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Returns paginated data rows or documents.
 	 */
-	queryData: protectedProcedure
+	queryData: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -445,7 +457,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Inserts a document (MongoDB) or row (SQL).
 	 */
-	insertRecord: protectedProcedure
+	insertRecord: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -493,7 +505,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Updates a document (MongoDB) or row (SQL).
 	 */
-	updateRecord: protectedProcedure
+	updateRecord: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -550,7 +562,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Deletes a document (MongoDB) or row (SQL).
 	 */
-	deleteRecord: protectedProcedure
+	deleteRecord: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -604,7 +616,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Creates a new collection (MongoDB).
 	 */
-	createCollection: protectedProcedure
+	createCollection: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -632,7 +644,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Drops an existing collection (MongoDB).
 	 */
-	dropCollection: protectedProcedure
+	dropCollection: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -660,7 +672,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Executes customer SQL in an isolated database container with row limits and destructive warnings.
 	 */
-	executeSql: protectedProcedure
+	executeSql: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -722,7 +734,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Redis Key Scanning.
 	 */
-	redisScan: protectedProcedure
+	redisScan: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -751,7 +763,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Redis Key Details.
 	 */
-	redisGetKey: protectedProcedure
+	redisGetKey: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -772,7 +784,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Redis Set Key.
 	 */
-	redisSetKey: protectedProcedure
+	redisSetKey: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -808,7 +820,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Redis Delete Key.
 	 */
-	redisDeleteKey: protectedProcedure
+	redisDeleteKey: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -836,7 +848,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Redis Safe Command Runner.
 	 */
-	redisExecute: protectedProcedure
+	redisExecute: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -864,7 +876,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Lists database users.
 	 */
-	listUsers: protectedProcedure
+	listUsers: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -888,7 +900,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Creates a database user.
 	 */
-	createUser: protectedProcedure
+	createUser: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -931,7 +943,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Drops a database user.
 	 */
-	dropUser: protectedProcedure
+	dropUser: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -966,7 +978,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Previews an uploaded CSV or JSON file, detects headers, infers types, and offers sample records.
 	 */
-	previewImportFile: protectedProcedure
+	previewImportFile: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),
@@ -991,7 +1003,7 @@ export const databaseManagerRouter = createTRPCRouter({
 	 * Universally imports CSV or JSON records into any of the 6 supported database engines
 	 * with schema-aware conversion, duplicate handling policies, row-level error reporting, and transactions.
 	 */
-	importData: protectedProcedure
+	importData: databaseManagementProcedure
 		.input(
 			z.object({
 				databaseId: z.string().min(1),

@@ -45,6 +45,13 @@ export const dockerRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input, ctx }) => {
+			if (!input.serverId && !(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Host Docker infrastructure access requires platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const server = await findServerById(input.serverId);
 				if (server.organizationId !== ctx.session?.activeOrganizationId) {
@@ -63,6 +70,13 @@ export const dockerRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input, ctx }) => {
+			if (!input.serverId && !(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Host server health diagnostics require platform administrator privileges.",
+				});
+			}
 			await checkPermission(ctx, { docker: ["read"], server: ["read"] });
 			if (input.serverId) {
 				const server = await findServerById(input.serverId);

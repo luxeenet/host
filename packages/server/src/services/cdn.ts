@@ -1,3 +1,5 @@
+import { isCloudflareIp } from "./origin-protection";
+
 // CDN Provider Interface
 export interface CDNProvider {
 	name: string;
@@ -644,8 +646,7 @@ const CDN_PROVIDERS: CDNProvider[] = [
 	{
 		name: "cloudflare",
 		displayName: "Cloudflare",
-		checkIp: (ip: string) =>
-			CLOUDFLARE_IP_RANGES.some((range) => isIPInCIDR(ip, range)),
+		checkIp: (ip: string) => isCloudflareIp(ip),
 		warningMessage:
 			"Domain is behind Cloudflare - actual IP is masked by Cloudflare proxy",
 	},

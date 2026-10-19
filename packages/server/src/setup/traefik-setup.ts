@@ -10,6 +10,7 @@ import path from "node:path";
 import type { ContainerCreateOptions, CreateServiceOptions } from "dockerode";
 import { stringify } from "yaml";
 import { paths } from "../constants";
+import { TRAEFIK_DEFAULT_TRUSTED_IPS } from "../constants/cloudflare-ips";
 import { getRemoteDocker } from "../utils/servers/remote-docker";
 import type { FileConfig } from "../utils/traefik/file-types";
 import type { MainTraefikConfig } from "../utils/traefik/types";
@@ -282,9 +283,15 @@ export const getDefaultTraefikConfig = () => {
 		entryPoints: {
 			web: {
 				address: `:${TRAEFIK_PORT}`,
+				forwardedHeaders: {
+					trustedIPs: [...TRAEFIK_DEFAULT_TRUSTED_IPS],
+				},
 			},
 			websecure: {
 				address: `:${TRAEFIK_SSL_PORT}`,
+				forwardedHeaders: {
+					trustedIPs: [...TRAEFIK_DEFAULT_TRUSTED_IPS],
+				},
 				http3: {
 					advertisedPort: TRAEFIK_HTTP3_PORT,
 				},
@@ -340,9 +347,15 @@ export const getDefaultServerTraefikConfig = () => {
 		entryPoints: {
 			web: {
 				address: `:${TRAEFIK_PORT}`,
+				forwardedHeaders: {
+					trustedIPs: [...TRAEFIK_DEFAULT_TRUSTED_IPS],
+				},
 			},
 			websecure: {
 				address: `:${TRAEFIK_SSL_PORT}`,
+				forwardedHeaders: {
+					trustedIPs: [...TRAEFIK_DEFAULT_TRUSTED_IPS],
+				},
 				http3: {
 					advertisedPort: TRAEFIK_HTTP3_PORT,
 				},

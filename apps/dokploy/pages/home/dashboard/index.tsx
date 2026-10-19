@@ -1,15 +1,22 @@
-import type { NextPage } from "next";
-import type { ReactElement } from "react";
-import Home, { getServerSideProps as originalGetServerSideProps } from "@/pages/dashboard/home";
+import type { GetServerSidePropsContext } from "next";
+import { useRouter } from "next/router";
+import { useEffect } from "react";
 
-const HomeDashboardPage: NextPage & {
-	getLayout?: (page: ReactElement) => ReactElement;
-} = () => {
-	return <Home />;
-};
+export default function HomeDashboardIndexRedirectPage() {
+	const router = useRouter();
 
-HomeDashboardPage.getLayout = Home.getLayout;
+	useEffect(() => {
+		router.replace("/dashboard/home");
+	}, [router]);
 
-export const getServerSideProps = originalGetServerSideProps;
+	return null;
+}
 
-export default HomeDashboardPage;
+export async function getServerSideProps(_ctx: GetServerSidePropsContext) {
+	return {
+		redirect: {
+			destination: "/dashboard/home",
+			permanent: false,
+		},
+	};
+}

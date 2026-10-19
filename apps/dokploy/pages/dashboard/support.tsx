@@ -14,7 +14,7 @@ import {
 	HelpCircle,
 	BookOpen,
 } from "lucide-react";
-import { CustomerLayout } from "@/components/layouts/customer-layout";
+import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
 
@@ -259,4 +259,6 @@ export default function SupportPage() {
 	);
 }
 
-SupportPage.getLayout = (page: ReactElement) => <CustomerLayout>{page}</CustomerLayout>;
+SupportPage.getLayout = (page: ReactElement) => (
+	<DashboardLayout metaName="Support">{page}</DashboardLayout>
+);

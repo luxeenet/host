@@ -16,7 +16,7 @@ import {
 	Check,
 	Loader2,
 } from "lucide-react";
-import { CustomerLayout } from "@/components/layouts/customer-layout";
+import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
 import { api } from "@/utils/api";
@@ -359,4 +359,6 @@ export default function CustomDomainsPage() {
 	);
 }
 
-CustomDomainsPage.getLayout = (page: ReactElement) => <CustomerLayout>{page}</CustomerLayout>;
+CustomDomainsPage.getLayout = (page: ReactElement) => (
+	<DashboardLayout metaName="Custom Domains">{page}</DashboardLayout>
+);

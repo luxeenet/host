@@ -192,7 +192,7 @@ export const MENU: Menu = {
 		{
 			isSingle: true,
 			title: "Usage",
-			url: "/home/dashboard/usage",
+			url: "/dashboard/usage",
 			icon: Activity,
 		},
 		{
@@ -507,8 +507,16 @@ export function isActiveRoute(opts: {
 	}
 
 	// Canonical usage route and compatibility alias
-	if (normalizedItemUrl === "/home/dashboard/usage") {
-		return normalizedPathname === "/home/dashboard/usage" || normalizedPathname === "/dashboard/usage";
+	if (normalizedItemUrl === "/dashboard/usage" || normalizedItemUrl === "/home/dashboard/usage") {
+		return normalizedPathname === "/dashboard/usage" || normalizedPathname === "/home/dashboard/usage";
+	}
+
+	// Canonical billing route and settings billing alias
+	if (
+		(normalizedItemUrl === "/dashboard/settings/billing" || normalizedItemUrl === "/dashboard/billing") &&
+		(normalizedPathname === "/dashboard/settings/billing" || normalizedPathname === "/dashboard/billing")
+	) {
+		return true;
 	}
 
 	// Backward compatibility alias: /dashboard/databases routes highlight Databases item

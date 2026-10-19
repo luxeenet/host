@@ -14,7 +14,7 @@ import {
 	Trash2,
 	Users,
 } from "lucide-react";
-import { CustomerLayout } from "@/components/layouts/customer-layout";
+import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
 
@@ -169,4 +169,6 @@ export default function AccountPage() {
 	);
 }
 
-AccountPage.getLayout = (page: ReactElement) => <CustomerLayout>{page}</CustomerLayout>;
+AccountPage.getLayout = (page: ReactElement) => (
+	<DashboardLayout metaName="Account">{page}</DashboardLayout>
+);

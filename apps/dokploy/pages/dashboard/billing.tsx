@@ -20,7 +20,12 @@ import {
 	Radio,
 	Sparkles,
 } from "lucide-react";
-import { CustomerLayout } from "@/components/layouts/customer-layout";
+import type { GetServerSidePropsContext } from "next";
+import { validateRequest } from "@dokploy/server/lib/auth";
+import { createServerSideHelpers } from "@trpc/react-query/server";
+import superjson from "superjson";
+import { appRouter } from "@/server/api/root";
+import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
 import { api } from "@/utils/api";
@@ -531,4 +536,42 @@ export default function BillingPage() {
 	);
 }
 
-BillingPage.getLayout = (page: ReactElement) => <CustomerLayout>{page}</CustomerLayout>;
+BillingPage.getLayout = (page: ReactElement) => (
+	<DashboardLayout metaName="Billing & Subscriptions">{page}</DashboardLayout>
+);
+
+export async function getServerSideProps(ctx: GetServerSidePropsContext) {
+	const { req, res } = ctx;
+	const { user, session } = await validateRequest(req);
+
+	if (!user) {
+		return {
+			redirect: {
+				permanent: false,
+				destination: "/",
+			},
+		};
+	}
+
+	const helpers = createServerSideHelpers({
+		router: appRouter,
+		ctx: {
+			req: req as any,
+			res: res as any,
+			db: null as any,
+			session: session as any,
+			user: user as any,
+		},
+		transformer: superjson,
+	});
+
+	await helpers.settings.isCloud.prefetch();
+	await helpers.user.get.prefetch();
+	await helpers.project.onboardingStatus.prefetch();
+
+	return {
+		props: {
+			trpcState: helpers.dehydrate(),
+		},
+	};
+}

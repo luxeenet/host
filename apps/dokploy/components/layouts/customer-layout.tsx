@@ -27,7 +27,7 @@ export const NAV_ITEMS = [
 	{ label: "Projects", icon: Cloud, href: "/dashboard/projects" },
 	{ label: "Databases", icon: Database, href: "/dashboard/home/databases" },
 	{ label: "Domains", icon: Globe, href: "/dashboard/domains" },
-	{ label: "Usage", icon: Activity, href: "/home/dashboard/usage" },
+	{ label: "Usage", icon: Activity, href: "/dashboard/usage" },
 	{ label: "Billing", icon: CreditCard, href: "/dashboard/billing" },
 	{ label: "Support", icon: HeadphonesIcon, href: "/dashboard/support" },
 	{ label: "Account", icon: Settings, href: "/dashboard/account" },
@@ -197,7 +197,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
 					>
 						<Menu className="w-5 h-5" />
 					</Button>
-					<Link href="/dashboard" className="flex items-center gap-2">
+					<Link href="/dashboard/home" className="flex items-center gap-2">
 						<div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center">
 							<svg
 								viewBox="0 0 24 24"

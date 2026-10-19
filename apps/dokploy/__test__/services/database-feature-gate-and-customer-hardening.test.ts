@@ -26,6 +26,15 @@ vi.mock("@dokploy/server/services/permission", () => ({
 	checkServicePermissionAndAccess: vi.fn(async () => undefined),
 }));
 
+vi.mock("@dokploy/server/lib/auth", () => ({
+	validateRequest: vi.fn(async (req) => {
+		if (req?.headers?.cookie?.includes("auth_session=valid")) {
+			return { session: { id: "sess-valid" }, user: { id: "user-1", role: "owner" } };
+		}
+		return { session: null, user: null };
+	}),
+}));
+
 // Mock DatabaseConnectionService so router calls don't hit live databases
 vi.mock("@dokploy/server/services/database-connection", () => ({
 	DatabaseConnectionService: {
@@ -101,8 +110,13 @@ import { databaseManagerRouter } from "@/server/api/routers/database-manager";
 import { dockerRouter } from "@/server/api/routers/docker";
 import { swarmRouter } from "@/server/api/routers/swarm";
 import { isCustomerRouteActive } from "@/components/layouts/customer-layout";
-import { isActiveRoute } from "@/components/layouts/side";
-import { getServerSideProps as usageRedirectGSSP } from "@/pages/dashboard/usage";
+import { MENU, isActiveRoute } from "@/components/layouts/side";
+import ResourceUsagePage from "@/pages/dashboard/usage";
+import BillingPage from "@/pages/dashboard/billing";
+import { getServerSideProps as homeDashboardGSSP } from "@/pages/home/dashboard/index";
+import { getServerSideProps as homeDashboardUsageGSSP } from "@/pages/home/dashboard/usage";
+import { getServerSideProps as dashboardIndexGSSP } from "@/pages/dashboard/index";
+import nextConfig from "../../next.config.mjs";
 
 describe("HatDot Production Hardening & Customer Security", () => {
 	const originalAccessEnv = process.env.ENABLE_PUBLIC_DATABASE_ACCESS;
@@ -387,37 +401,115 @@ describe("HatDot Production Hardening & Customer Security", () => {
 	});
 
 	describe("5. Canonical Routing & Navigation", () => {
-		it("redirects legacy /dashboard/usage to canonical /home/dashboard/usage via getServerSideProps", async () => {
-			const ctx: any = { req: {}, res: {} };
-			const result = await usageRedirectGSSP(ctx);
+		it("redirects competing /home/dashboard to canonical /dashboard/home via getServerSideProps", async () => {
+			const ctx: any = { req: { headers: {} }, res: {} };
+			const result = await homeDashboardGSSP(ctx);
 
 			expect(result).toEqual({
 				redirect: {
-					destination: "/home/dashboard/usage",
+					destination: "/dashboard/home",
 					permanent: false,
 				},
 			});
 		});
 
-		it("accurately detects active route for /home/dashboard/usage in customer layout", () => {
-			expect(isCustomerRouteActive("/home/dashboard/usage", "/home/dashboard/usage")).toBe(true);
-			expect(isCustomerRouteActive("/home/dashboard/usage", "/dashboard/usage")).toBe(true);
-			expect(isCustomerRouteActive("/home/dashboard/usage", "/dashboard/projects")).toBe(false);
+		it("redirects competing /home/dashboard/usage to canonical /dashboard/usage via getServerSideProps", async () => {
+			const ctx: any = { req: { headers: {} }, res: {} };
+			const result = await homeDashboardUsageGSSP(ctx);
+
+			expect(result).toEqual({
+				redirect: {
+					destination: "/dashboard/usage",
+					permanent: false,
+				},
+			});
 		});
 
-		it("accurately detects active route for /home/dashboard in customer layout", () => {
-			expect(isCustomerRouteActive("/dashboard/home", "/home/dashboard")).toBe(true);
-			expect(isCustomerRouteActive("/dashboard/home", "/dashboard/home")).toBe(true);
-			expect(isCustomerRouteActive("/dashboard/home", "/dashboard/home/databases")).toBe(false);
+		it("ensures /dashboard/ resolves to /dashboard/home for authenticated users", async () => {
+			const authCtx: any = { req: { headers: { cookie: "auth_session=valid" } }, res: {} };
+			const result = await dashboardIndexGSSP(authCtx);
+
+			expect(result).toEqual({
+				redirect: {
+					destination: "/dashboard/home",
+					permanent: false,
+				},
+			});
 		});
 
-		it("accurately detects active route in side menu for canonical usage and home", () => {
-			expect(isActiveRoute({ itemUrl: "/home/dashboard/usage", pathname: "/home/dashboard/usage" })).toBe(true);
-			expect(isActiveRoute({ itemUrl: "/home/dashboard/usage", pathname: "/dashboard/usage" })).toBe(true);
-			expect(isActiveRoute({ itemUrl: "/dashboard/home", pathname: "/home/dashboard" })).toBe(true);
+		it("redirects unauthenticated /dashboard/ visits to /", async () => {
+			const unauthCtx: any = { req: { headers: {} }, res: {} };
+			const result = await dashboardIndexGSSP(unauthCtx);
+
+			expect(result).toEqual({
+				redirect: {
+					destination: "/",
+					permanent: false,
+				},
+			});
+		});
+
+		it("has next.config.mjs redirects configured for /home/dashboard and /home/dashboard/usage", async () => {
+			const redirects = nextConfig.redirects ? await nextConfig.redirects() : [];
+			expect(redirects).toContainEqual({
+				source: "/home/dashboard",
+				destination: "/dashboard/home",
+				permanent: false,
+			});
+			expect(redirects).toContainEqual({
+				source: "/home/dashboard/usage",
+				destination: "/dashboard/usage",
+				permanent: false,
+			});
+		});
+
+		it("has /dashboard/usage as canonical route in MENU.home sidebar", () => {
+			const usageItem = MENU.home.find((item) => item.title === "Usage") as any;
+			expect(usageItem).toBeDefined();
+			expect(usageItem?.url).toBe("/dashboard/usage");
+
+			const homeItem = MENU.home.find((item) => item.title === "Home") as any;
+			expect(homeItem).toBeDefined();
+			expect(homeItem?.url).toBe("/dashboard/home");
+		});
+
+		it("renders ResourceUsagePage within the existing DashboardLayout", () => {
+			expect(typeof ResourceUsagePage.getLayout).toBe("function");
+			const layoutResult: any = ResourceUsagePage.getLayout({} as any);
+			expect(layoutResult).toBeDefined();
+			expect(layoutResult.props?.metaName).toBe("Resource Usage");
+		});
+
+		it("renders BillingPage within the existing DashboardLayout preserving SonicPesa", () => {
+			expect(typeof BillingPage.getLayout).toBe("function");
+			const layoutResult: any = BillingPage.getLayout({} as any);
+			expect(layoutResult).toBeDefined();
+			expect(layoutResult.props?.metaName).toBe("Billing & Subscriptions");
+		});
+
+		it("accurately detects active route for /dashboard/usage in side menu and aliases", () => {
+			expect(isActiveRoute({ itemUrl: "/dashboard/usage", pathname: "/dashboard/usage" })).toBe(true);
+			expect(isActiveRoute({ itemUrl: "/dashboard/usage", pathname: "/home/dashboard/usage" })).toBe(true);
+			expect(isActiveRoute({ itemUrl: "/dashboard/usage", pathname: "/dashboard/projects" })).toBe(false);
+		});
+
+		it("accurately detects active route for /dashboard/home in side menu and aliases", () => {
 			expect(isActiveRoute({ itemUrl: "/dashboard/home", pathname: "/dashboard/home" })).toBe(true);
+			expect(isActiveRoute({ itemUrl: "/dashboard/home", pathname: "/home/dashboard" })).toBe(true);
 			// Must isolate /dashboard/home so it does not match subpaths
 			expect(isActiveRoute({ itemUrl: "/dashboard/home", pathname: "/dashboard/home/databases" })).toBe(false);
+		});
+
+		it("accurately detects active route for /dashboard/settings/billing and /dashboard/billing in side menu", () => {
+			expect(isActiveRoute({ itemUrl: "/dashboard/settings/billing", pathname: "/dashboard/settings/billing" })).toBe(true);
+			expect(isActiveRoute({ itemUrl: "/dashboard/settings/billing", pathname: "/dashboard/billing" })).toBe(true);
+		});
+
+		it("accurately detects active route in customer layout helper", () => {
+			expect(isCustomerRouteActive("/dashboard/usage", "/dashboard/usage")).toBe(true);
+			expect(isCustomerRouteActive("/dashboard/usage", "/home/dashboard/usage")).toBe(true);
+			expect(isCustomerRouteActive("/dashboard/home", "/dashboard/home")).toBe(true);
+			expect(isCustomerRouteActive("/dashboard/home", "/home/dashboard")).toBe(true);
 		});
 	});
 

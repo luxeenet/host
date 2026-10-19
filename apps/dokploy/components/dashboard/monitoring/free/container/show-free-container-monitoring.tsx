@@ -278,7 +278,7 @@ export const ContainerFreeMonitoring = ({
 								Resource consumption is tracked at the organization level against your active plan limits rather than individual raw container telemetry.
 							</p>
 						</div>
-						<Link href="/home/dashboard/usage">
+						<Link href="/dashboard/usage">
 							<Button
 								size="sm"
 								className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5 shrink-0"
@@ -299,7 +299,7 @@ export const ContainerFreeMonitoring = ({
 									View authoritative RAM, CPU, storage, and database quotas across all deployed services, check remaining capacity, and upgrade limits instantly.
 								</div>
 							</div>
-							<Link href="/home/dashboard/usage" className="shrink-0">
+							<Link href="/dashboard/usage" className="shrink-0">
 								<Button
 									variant="outline"
 									size="sm"

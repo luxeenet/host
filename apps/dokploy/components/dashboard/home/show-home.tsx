@@ -177,7 +177,7 @@ export const ShowHome = () => {
 						</h1>
 						<div className="flex items-center gap-2">
 							<Button asChild variant="outline" className="w-fit">
-								<Link href="/home/dashboard/usage">
+								<Link href="/dashboard/usage">
 									<Activity className="size-4 mr-2" />
 									Usage
 								</Link>
@@ -261,7 +261,7 @@ export const ShowHome = () => {
 
 							<div className="flex items-center gap-2">
 								<Button asChild size="sm" variant="outline" className="text-xs h-8">
-									<Link href="/home/dashboard/usage">
+									<Link href="/dashboard/usage">
 										View Usage Details
 										<ArrowRight className="size-3.5 ml-1.5" />
 									</Link>
@@ -364,7 +364,7 @@ export const ShowHome = () => {
 						) : (
 							<div className="text-xs text-muted-foreground flex items-center justify-between pt-1">
 								<span>Explore plan limits, remaining capacity, and real-time workload telemetry.</span>
-								<Link href="/home/dashboard/usage" className="text-indigo-400 hover:underline">
+								<Link href="/dashboard/usage" className="text-indigo-400 hover:underline">
 									Open Usage Dashboard →
 								</Link>
 							</div>

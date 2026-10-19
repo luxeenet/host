@@ -1,7 +1,15 @@
 import type { GetServerSidePropsContext } from "next";
+import { useRouter } from "next/router";
+import { useEffect } from "react";
 import { validateRequest } from "@dokploy/server/lib/auth";
 
 export default function DashboardIndexPage() {
+	const router = useRouter();
+
+	useEffect(() => {
+		router.replace("/dashboard/home");
+	}, [router]);
+
 	return null;
 }
 
@@ -17,4 +25,3 @@ export async function getServerSideProps(ctx: GetServerSidePropsContext) {
 		},
 	};
 }
-

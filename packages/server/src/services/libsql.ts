@@ -21,6 +21,7 @@ import {
 	validateDatabaseImage,
 } from "../utils/databases/image-resolution";
 import { reconcileDatabaseSecurity } from "./database-security";
+import { provisionDatabaseService } from "./database-lifecycle";
 import { validUniqueServerAppName } from "./project";
 
 export type Libsql = typeof libsql.$inferSelect;
@@ -152,65 +153,11 @@ export const deployLibsql = async (
 	onData?: (data: any) => void,
 ) => {
 	const libsql = await findLibsqlById(libsqlId);
-	try {
-		await updateLibsqlById(libsqlId, {
-			applicationStatus: "running",
-		});
-		onData?.("Starting libsql deployment...");
-
-		const resolvedImage = resolveDatabaseImage("libsql", libsql.dockerImage);
-		validateDatabaseImage(resolvedImage);
-
-		if (libsql.dockerImage !== resolvedImage) {
-			onData?.(
-				`Resolved database image "${libsql.dockerImage}" to canonical image "${resolvedImage}"`,
-			);
-		}
-
-		if (libsql.serverId) {
-			await execAsyncRemote(
-				libsql.serverId,
-				`docker pull ${quote([resolvedImage])}`,
-				onData,
-			);
-		} else {
-			await pullImage(resolvedImage, onData);
-		}
-
-		await buildLibsql({
-			...libsql,
-			dockerImage: resolvedImage,
-		});
-		await waitForSwarmServiceConvergence(libsql.appName, libsql.serverId);
-		onData?.("Enforcing per-database user isolation and least-privilege roles...");
-		try {
-			const secResult = await reconcileDatabaseSecurity(libsqlId, "libsql", libsql.serverId);
-			if (secResult.appliedRules.length > 0) {
-				onData?.(`Applied security rules: ${secResult.appliedRules.join("; ")}`);
-			}
-			if (secResult.warnings.length > 0) {
-				onData?.(`Security notices: ${secResult.warnings.join("; ")}`);
-			}
-		} catch (secErr) {
-			onData?.(`Warning: Security reconciliation deferred: ${secErr}`);
-		}
-		await updateLibsqlById(libsqlId, {
-			applicationStatus: "done",
-			...(libsql.dockerImage !== resolvedImage
-				? { dockerImage: resolvedImage }
-				: {}),
-		});
-		onData?.("Deployment completed successfully!");
-	} catch (error) {
-		onData?.(`Error: ${error}`);
-		await updateLibsqlById(libsqlId, {
-			applicationStatus: "error",
-		});
-
-		throw new TRPCError({
-			code: "INTERNAL_SERVER_ERROR",
-			message: `Error on deploy libsql${error}`,
-		});
-	}
-	return libsql;
+	await provisionDatabaseService({
+		databaseId: libsqlId,
+		engine: "libsql",
+		serverId: libsql.serverId,
+		onData,
+	});
+	return await findLibsqlById(libsqlId);
 };

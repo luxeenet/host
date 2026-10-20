@@ -32,6 +32,8 @@ import {
 	stopServiceRemote,
 	updateMariadbById,
 	verifyDatabaseConnectivity,
+	provisionDatabaseService,
+	verifyInternalDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -141,6 +143,19 @@ export const mariadbRouter = createTRPCRouter({
 							resourceId: newMariadb.mariadbId,
 							resourceName: newMariadb.appName,
 						});
+
+						// Provision the actual database service immediately so database does not depend on deploying an application
+						provisionDatabaseService({
+							databaseId: newMariadb.mariadbId,
+							engine: "mariadb",
+							serverId: newMariadb.serverId,
+						}).catch((err) => {
+							console.error(
+								`Immediate provisioning failed for mariadb ${newMariadb.mariadbId}:`,
+								err,
+							);
+						});
+
 						return newMariadb;
 					},
 				);
@@ -261,7 +276,26 @@ export const mariadbRouter = createTRPCRouter({
 				password: mariadb.databasePassword,
 				databaseName: mariadb.databaseName || undefined,
 				serverId: mariadb.serverId || undefined,
-				appName: mariadb.appName,
+			});
+		}),
+	verifyInternalConnectivity: protectedProcedure
+		.input(apiFindOneMariaDB)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mariadbId, "read");
+			const mariadb = await findMariadbById(input.mariadbId);
+			if (
+				mariadb.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Mariadb",
+				});
+			}
+			return await verifyInternalDatabaseConnectivity({
+				type: "mariadb",
+				databaseId: input.mariadbId,
+				serverId: mariadb.serverId,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

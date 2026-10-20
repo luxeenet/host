@@ -21,7 +21,8 @@ import {
 	resolveDatabaseImage,
 	validateDatabaseImage,
 } from "../utils/databases/image-resolution";
-import { reconcileDatabaseSecurity } from "./database-security";
+import { reconcileDatabaseSecurity, sanitizeDatabaseIdentifier } from "./database-security";
+import { provisionDatabaseService } from "./database-lifecycle";
 import { validUniqueServerAppName } from "./project";
 
 export function getMountPath(dockerImage?: string | null): string {
@@ -45,11 +46,15 @@ export const createPostgres = async (
 	}
 
 	const resolvedImage = resolveDatabaseImage("postgres", input.dockerImage);
+	const assignedDatabaseName = sanitizeDatabaseIdentifier(
+		input.databaseName || "postgres",
+	);
 
 	const newPostgres = await tx
 		.insert(postgres)
 		.values({
 			...input,
+			databaseName: assignedDatabaseName,
 			dockerImage: resolvedImage,
 			databasePassword: input.databasePassword
 				? input.databasePassword
@@ -155,70 +160,11 @@ export const deployPostgres = async (
 	onData?: (data: any) => void,
 ) => {
 	const postgres = await findPostgresById(postgresId);
-	try {
-		await updatePostgresById(postgresId, {
-			applicationStatus: "running",
-		});
-
-		onData?.("Starting postgres deployment...");
-
-		const resolvedImage = resolveDatabaseImage(
-			"postgres",
-			postgres.dockerImage,
-		);
-		validateDatabaseImage(resolvedImage);
-
-		if (postgres.dockerImage !== resolvedImage) {
-			onData?.(
-				`Resolved database image "${postgres.dockerImage}" to canonical image "${resolvedImage}"`,
-			);
-		}
-
-		if (postgres.serverId) {
-			await execAsyncRemote(
-				postgres.serverId,
-				`docker pull ${quote([resolvedImage])}`,
-				onData,
-			);
-		} else {
-			await pullImage(resolvedImage, onData);
-		}
-
-		await buildPostgres({
-			...postgres,
-			dockerImage: resolvedImage,
-		});
-
-		await waitForSwarmServiceConvergence(postgres.appName, postgres.serverId);
-		onData?.("Enforcing per-database user isolation and least-privilege roles...");
-		try {
-			const secResult = await reconcileDatabaseSecurity(postgresId, "postgres", postgres.serverId);
-			if (secResult.appliedRules.length > 0) {
-				onData?.(`Applied security rules: ${secResult.appliedRules.join("; ")}`);
-			}
-			if (secResult.warnings.length > 0) {
-				onData?.(`Security notices: ${secResult.warnings.join("; ")}`);
-			}
-		} catch (secErr) {
-			onData?.(`Warning: Security reconciliation deferred: ${secErr}`);
-		}
-		await updatePostgresById(postgresId, {
-			applicationStatus: "done",
-			...(postgres.dockerImage !== resolvedImage
-				? { dockerImage: resolvedImage }
-				: {}),
-		});
-
-		onData?.("Deployment completed successfully!");
-	} catch (error) {
-		onData?.(`Error: ${error}`);
-		await updatePostgresById(postgresId, {
-			applicationStatus: "error",
-		});
-		throw new TRPCError({
-			code: "INTERNAL_SERVER_ERROR",
-			message: `Error on deploy postgres${error}`,
-		});
-	}
-	return postgres;
+	await provisionDatabaseService({
+		databaseId: postgresId,
+		engine: "postgres",
+		serverId: postgres.serverId,
+		onData,
+	});
+	return await findPostgresById(postgresId);
 };

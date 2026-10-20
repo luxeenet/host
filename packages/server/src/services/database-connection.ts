@@ -26,6 +26,7 @@ import { findRedisById } from "./redis";
 import { checkPortInUse } from "./settings";
 import { getWebServerSettings } from "./web-server-settings";
 import { redactCredentials, sanitizeDatabaseIdentifier } from "./database-security";
+import { verifyInternalDatabaseConnectivity } from "./database-lifecycle";
 
 export type SupportedDatabaseType =
 	| "postgres"
@@ -443,10 +444,13 @@ export const buildDatabaseConnectionStrings = (
 			? `mongodb://${encodedUser}:${encodedPassword}@${publicHost}:${externalPort}${dbPath}?authSource=${authSource}&directConnection=true`
 			: null;
 		envVariables.DATABASE_URL = internalUrl;
+		envVariables.MONGODB_URI = internalUrl;
 		envVariables.MONGO_URL = internalUrl;
 		envVariables.MONGO_USER = user;
 		envVariables.MONGO_PASSWORD = password;
 		envVariables.MONGO_DATABASE = targetDatabase;
+		envVariables.MONGODB_DATABASE = targetDatabase;
+		envVariables.MONGO_AUTH_SOURCE = resolvedAuthSource;
 		envVariables.MONGO_HOST = appName;
 		envVariables.MONGO_PORT = String(internalPort);
 	} else if (type === "redis") {
@@ -641,6 +645,26 @@ export const connectDatabaseToApplication = async (params: {
 		});
 	}
 
+	if (dbRecord.applicationStatus !== "done") {
+		throw new TRPCError({
+			code: "PRECONDITION_FAILED",
+			message: `Database '${dbRecord.name || dbRecord.appName}' is not ready for application connection. Current status: ${dbRecord.applicationStatus}. Please wait until the database has finished provisioning and reaches Ready state.`,
+		});
+	}
+
+	const connCheck = await verifyInternalDatabaseConnectivity({
+		type: params.databaseType,
+		databaseId: params.databaseId,
+		serverId: dbRecord.serverId,
+	});
+
+	if (!connCheck.isReady) {
+		throw new TRPCError({
+			code: "PRECONDITION_FAILED",
+			message: `Database internal connectivity check failed: ${connCheck.message}. Resolve the connectivity issue before connecting applications.`,
+		});
+	}
+
 	const publicHostInfo = await getPublicDatabaseHost(
 		dbRecord.serverId || undefined,
 		dbRecord.appName || undefined,
@@ -661,6 +685,10 @@ export const connectDatabaseToApplication = async (params: {
 		success: true,
 		appliedVariables: connInfo.envVariables,
 		applicationName: app.name,
+		connectivityVerified: true,
+		targetDatabase:
+			connInfo.isolation?.sanitizedDatabaseName ||
+			connInfo.internal.databaseName,
 	};
 };
 

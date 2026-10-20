@@ -22,6 +22,7 @@ export * from "./services/customer-usage";
 export * from "./services/database-connection";
 export * from "./services/database-feature-gate";
 export * from "./services/database-import";
+export * from "./services/database-lifecycle";
 export * from "./services/database-manager";
 export * from "./services/database-security";
 export * from "./services/deployment";

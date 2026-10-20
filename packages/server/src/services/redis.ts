@@ -20,6 +20,7 @@ import {
 	validateDatabaseImage,
 } from "../utils/databases/image-resolution";
 import { reconcileDatabaseSecurity } from "./database-security";
+import { provisionDatabaseService } from "./database-lifecycle";
 import { validUniqueServerAppName } from "./project";
 
 export type Redis = typeof redis.$inferSelect;
@@ -121,66 +122,11 @@ export const deployRedis = async (
 	onData?: (data: any) => void,
 ) => {
 	const redis = await findRedisById(redisId);
-	try {
-		await updateRedisById(redisId, {
-			applicationStatus: "running",
-		});
-
-		onData?.("Starting redis deployment...");
-
-		const resolvedImage = resolveDatabaseImage("redis", redis.dockerImage);
-		validateDatabaseImage(resolvedImage);
-
-		if (redis.dockerImage !== resolvedImage) {
-			onData?.(
-				`Resolved database image "${redis.dockerImage}" to canonical image "${resolvedImage}"`,
-			);
-		}
-
-		if (redis.serverId) {
-			await execAsyncRemote(
-				redis.serverId,
-				`docker pull ${quote([resolvedImage])}`,
-				onData,
-			);
-		} else {
-			await pullImage(resolvedImage, onData);
-		}
-
-		await buildRedis({
-			...redis,
-			dockerImage: resolvedImage,
-		});
-		await waitForSwarmServiceConvergence(redis.appName, redis.serverId);
-		onData?.("Enforcing per-database user isolation and least-privilege roles...");
-		try {
-			const secResult = await reconcileDatabaseSecurity(redisId, "redis", redis.serverId);
-			if (secResult.appliedRules.length > 0) {
-				onData?.(`Applied security rules: ${secResult.appliedRules.join("; ")}`);
-			}
-			if (secResult.warnings.length > 0) {
-				onData?.(`Security notices: ${secResult.warnings.join("; ")}`);
-			}
-		} catch (secErr) {
-			onData?.(`Warning: Security reconciliation deferred: ${secErr}`);
-		}
-		await updateRedisById(redisId, {
-			applicationStatus: "done",
-			...(redis.dockerImage !== resolvedImage
-				? { dockerImage: resolvedImage }
-				: {}),
-		});
-		onData?.("Deployment completed successfully!");
-	} catch (error) {
-		onData?.(`Error: ${error}`);
-		await updateRedisById(redisId, {
-			applicationStatus: "error",
-		});
-
-		throw new TRPCError({
-			code: "INTERNAL_SERVER_ERROR",
-			message: `Error on deploy redis${error}`,
-		});
-	}
-	return redis;
+	await provisionDatabaseService({
+		databaseId: redisId,
+		engine: "redis",
+		serverId: redis.serverId,
+		onData,
+	});
+	return await findRedisById(redisId);
 };

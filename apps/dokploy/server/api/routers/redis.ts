@@ -31,6 +31,8 @@ import {
 	stopServiceRemote,
 	updateRedisById,
 	verifyDatabaseConnectivity,
+	provisionDatabaseService,
+	verifyInternalDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -138,6 +140,19 @@ export const redisRouter = createTRPCRouter({
 							resourceId: newRedis.redisId,
 							resourceName: newRedis.appName,
 						});
+
+						// Provision the actual database service immediately so database does not depend on deploying an application
+						provisionDatabaseService({
+							databaseId: newRedis.redisId,
+							engine: "redis",
+							serverId: newRedis.serverId,
+						}).catch((err) => {
+							console.error(
+								`Immediate provisioning failed for redis ${newRedis.redisId}:`,
+								err,
+							);
+						});
+
 						return newRedis;
 					},
 				);
@@ -250,7 +265,26 @@ export const redisRouter = createTRPCRouter({
 				user: "default",
 				password: redis.databasePassword,
 				serverId: redis.serverId || undefined,
-				appName: redis.appName,
+			});
+		}),
+	verifyInternalConnectivity: protectedProcedure
+		.input(apiFindOneRedis)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.redisId, "read");
+			const redis = await findRedisById(input.redisId);
+			if (
+				redis.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Redis",
+				});
+			}
+			return await verifyInternalDatabaseConnectivity({
+				type: "redis",
+				databaseId: input.redisId,
+				serverId: redis.serverId,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

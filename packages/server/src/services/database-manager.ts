@@ -138,7 +138,9 @@ export const mongoAdapter = {
 						name: d.name,
 						sizeOnDisk: d.sizeOnDisk || 0,
 						empty: d.empty || false,
-						isInternal: ["admin", "config", "local"].includes(d.name)
+						isInternal: ["admin", "config", "local"].includes(d.name),
+						isSystemDatabase: ["admin", "config", "local"].includes(d.name),
+						isConfiguredDatabase: d.name === ${JSON.stringify(configuredDb)}
 					}));
 				}
 			} catch(e) {
@@ -148,7 +150,9 @@ export const mongoAdapter = {
 						name: n,
 						sizeOnDisk: 0,
 						empty: false,
-						isInternal: ["admin", "config", "local"].includes(n)
+						isInternal: ["admin", "config", "local"].includes(n),
+						isSystemDatabase: ["admin", "config", "local"].includes(n),
+						isConfiguredDatabase: n === ${JSON.stringify(configuredDb)}
 					}));
 				} catch(e2) {
 					restricted = true;
@@ -156,18 +160,18 @@ export const mongoAdapter = {
 				}
 			}
 
-			// Ensure configuredDb, "test", and "app" are included in the discoverable set
-			const candidates = [${JSON.stringify(configuredDb)}, "test", "app"].filter(Boolean);
-			candidates.forEach(cand => {
-				if (!list.some(d => d.name === cand)) {
-					list.push({
-						name: cand,
-						sizeOnDisk: 0,
-						empty: false,
-						isInternal: false
-					});
-				}
-			});
+			// Ensure configured customer database is present in discoverable set even before initial write
+			if (${JSON.stringify(configuredDb)} && !list.some(d => d.name === ${JSON.stringify(configuredDb)})) {
+				list.push({
+					name: ${JSON.stringify(configuredDb)},
+					sizeOnDisk: 0,
+					empty: true,
+					isInternal: false,
+					isSystemDatabase: false,
+					isConfiguredDatabase: true,
+					uninitialized: true
+				});
+			}
 
 			print(JSON.stringify({ databases: list, restricted, error: errorMsg, configuredDatabase: ${JSON.stringify(configuredDb)} }));
 		})();
@@ -177,11 +181,10 @@ export const mongoAdapter = {
 		try {
 			const res = await executeInsideServiceContainer(appName, serverId, cmd);
 			const parsed = extractJsonFromStdout(res.stdout);
-			return parsed.databases || [{ name: configuredDb, sizeOnDisk: 0, empty: false, isInternal: false }];
+			return parsed.databases || [{ name: configuredDb, sizeOnDisk: 0, empty: true, isInternal: false, isConfiguredDatabase: true, uninitialized: true }];
 		} catch {
 			return [
-				{ name: configuredDb, sizeOnDisk: 0, empty: false, isInternal: false },
-				...(configuredDb !== "test" ? [{ name: "test", sizeOnDisk: 0, empty: false, isInternal: false }] : [])
+				{ name: configuredDb, sizeOnDisk: 0, empty: true, isInternal: false, isConfiguredDatabase: true, uninitialized: true }
 			];
 		}
 	},
@@ -1552,6 +1555,9 @@ export interface DiscoveredDatabase {
 	sizeOnDisk?: number | string;
 	empty?: boolean;
 	isInternal?: boolean;
+	isSystemDatabase?: boolean;
+	isConfiguredDatabase?: boolean;
+	uninitialized?: boolean;
 	estimatedCount?: number;
 	keysCount?: number;
 	isDefault?: boolean;
@@ -1579,15 +1585,48 @@ export async function listDatabases(
 			databases = await libsqlAdapter.listDatabases(record);
 		}
 	} catch (err: any) {
-		const fallbackDb = record.databaseName || (engine === "postgres" ? "postgres" : engine === "mongo" ? "app" : engine === "redis" ? "0" : "main");
-		databases = [{ name: fallbackDb, sizeOnDisk: "0 MB", isInternal: false, isDefault: true, error: err.message }];
+		const fallbackDb =
+			record.databaseName ||
+			(engine === "postgres"
+				? "postgres"
+				: engine === "mongo"
+					? sanitizeDatabaseIdentifier(record.name || record.appName) || "app"
+					: engine === "redis"
+						? "0"
+						: "main");
+		databases = [
+			{
+				name: fallbackDb,
+				sizeOnDisk: "0 MB",
+				isInternal: false,
+				isConfiguredDatabase: true,
+				isDefault: true,
+				error: err.message,
+			},
+		];
 	}
 
-	const selectedDatabase = record.databaseName || (engine === "postgres" ? "postgres" : engine === "mongo" ? "app" : engine === "redis" ? "0" : "main");
+	const selectedDatabase =
+		record.databaseName ||
+		(engine === "postgres"
+			? "postgres"
+			: engine === "mongo"
+				? sanitizeDatabaseIdentifier(record.name || record.appName) || "app"
+				: engine === "redis"
+					? "0"
+					: "main");
 
 	for (const db of databases) {
 		if (db.name === selectedDatabase) {
 			db.isDefault = true;
+			db.isConfiguredDatabase = true;
+		}
+		if (
+			engine === "mongo" &&
+			["admin", "config", "local"].includes(db.name)
+		) {
+			db.isInternal = true;
+			db.isSystemDatabase = true;
 		}
 	}
 

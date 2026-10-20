@@ -231,7 +231,7 @@ export default function ManagedDatabasesPage() {
 		const defaultPass = `SecPass_${Math.random().toString(36).substring(2, 10)}!`;
 		setProvEngine("mongo");
 		setProvName(`db-${randSuffix}`);
-		setProvDbName("app");
+		setProvDbName(`db_${randSuffix}`.replace(/[^a-z0-9_]/gi, "_"));
 		setProvUser("mongo_user");
 		setProvPassword(defaultPass);
 		setProvPublic(true);
@@ -274,7 +274,7 @@ export default function ManagedDatabasesPage() {
 					name: provName,
 					appName,
 					environmentId,
-					databaseName: provDbName || "app",
+					databaseName: provDbName || `db_${provName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`,
 					databaseUser: provUser || "mongo_user",
 					databasePassword: provPassword,
 					dockerImage: "mongo:7",
@@ -529,8 +529,8 @@ export default function ManagedDatabasesPage() {
 
 							const authSourceInfo =
 								db.engine === "mongo"
-									? "authSource: admin"
-									: `db: ${db.databaseName || "app"}`;
+									? `auth: ${db.authSource || db.databaseName || "admin"}`
+									: `db: ${db.databaseName || "default"}`;
 
 							return (
 								<div
@@ -551,22 +551,27 @@ export default function ManagedDatabasesPage() {
 													<h3 className="text-base font-bold text-white tracking-tight">
 														{db.name}
 													</h3>
-													<span
-														className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border flex items-center gap-1.5 ${
-															isRunning
-																? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-																: "bg-amber-500/10 text-amber-400 border-amber-500/30"
-														}`}
-													>
-														<span
-															className={`w-1.5 h-1.5 rounded-full ${
-																isRunning
-																	? "bg-emerald-400 animate-pulse"
-																	: "bg-amber-400"
-															}`}
-														/>
-														{db.status ? db.status.toUpperCase() : "ACTIVE"}
-													</span>
+													{db.status === "done" ? (
+														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+															<span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+															READY
+														</span>
+													) : db.status === "running" ? (
+														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30 flex items-center gap-1.5">
+															<span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+															PROVISIONING
+														</span>
+													) : db.status === "error" ? (
+														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center gap-1.5">
+															<span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+															FAILED
+														</span>
+													) : (
+														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1.5">
+															<span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+															PENDING
+														</span>
+													)}
 													<Badge
 														variant="outline"
 														className="text-[10px] border-slate-800 text-slate-400 font-mono"

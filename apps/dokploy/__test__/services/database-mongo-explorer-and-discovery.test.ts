@@ -280,11 +280,11 @@ describe("HatDot Production Fix: Real Database Records, Correct Discovery, and C
 
 			const discovery = await listDatabases(mockMongoRecord, "mongo");
 
-			// Should gracefully return discoverable databases without crashing
+			// Should gracefully return discoverable databases without crashing and without injecting unconfigured 'test'
 			expect(discovery.databases.length).toBeGreaterThan(0);
 			const names = discovery.databases.map((d) => d.name);
-			expect(names).toContain("test");
 			expect(names).toContain("app");
+			expect(names).not.toContain("test");
 		});
 
 		it("handles multiple databases with identical collection names without cross-contamination", async () => {

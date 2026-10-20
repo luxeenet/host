@@ -33,6 +33,8 @@ import {
 	stopServiceRemote,
 	updatePostgresById,
 	verifyDatabaseConnectivity,
+	provisionDatabaseService,
+	verifyInternalDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -144,6 +146,19 @@ export const postgresRouter = createTRPCRouter({
 							resourceId: newPostgres.postgresId,
 							resourceName: newPostgres.appName,
 						});
+
+						// Provision the actual database service immediately so database does not depend on deploying an application
+						provisionDatabaseService({
+							databaseId: newPostgres.postgresId,
+							engine: "postgres",
+							serverId: newPostgres.serverId,
+						}).catch((err) => {
+							console.error(
+								`Immediate provisioning failed for postgres ${newPostgres.postgresId}:`,
+								err,
+							);
+						});
+
 						return newPostgres;
 					},
 				);
@@ -264,7 +279,26 @@ export const postgresRouter = createTRPCRouter({
 				password: postgres.databasePassword,
 				databaseName: postgres.databaseName || undefined,
 				serverId: postgres.serverId || undefined,
-				appName: postgres.appName,
+			});
+		}),
+	verifyInternalConnectivity: protectedProcedure
+		.input(apiFindOnePostgres)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.postgresId, "read");
+			const postgres = await findPostgresById(input.postgresId);
+			if (
+				postgres.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this Postgres",
+				});
+			}
+			return await verifyInternalDatabaseConnectivity({
+				type: "postgres",
+				databaseId: input.postgresId,
+				serverId: postgres.serverId,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

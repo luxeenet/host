@@ -130,7 +130,7 @@ const mySchema = z
 			.object({
 				type: z.literal("mongo"),
 				databaseUser: z.string().default("mongo"),
-				databaseName: z.string().default("app").optional(),
+				databaseName: z.string().optional(),
 				replicaSets: z.boolean().default(false),
 			})
 			.merge(baseDatabaseSchema),
@@ -303,7 +303,7 @@ export const AddDatabase = ({ environmentId, projectName }: Props) => {
 		} else if (data.type === "mongo") {
 			promise = mongoMutation.mutateAsync({
 				...commonParams,
-				databaseName: data.databaseName || "app",
+				databaseName: data.databaseName || undefined,
 				databasePassword: data.databasePassword,
 				databaseUser:
 					data.databaseUser || databasesUserDefaultPlaceholder[data.type],
@@ -570,7 +570,8 @@ export const AddDatabase = ({ environmentId, projectName }: Props) => {
 								/>
 								{(type === "mariadb" ||
 									type === "mysql" ||
-									type === "postgres") && (
+									type === "postgres" ||
+									type === "mongo") && (
 									<FormField
 										control={form.control}
 										name="databaseName"
@@ -578,7 +579,7 @@ export const AddDatabase = ({ environmentId, projectName }: Props) => {
 											<FormItem>
 												<FormLabel>Database Name</FormLabel>
 												<FormControl>
-													<Input placeholder="Database Name" {...field} />
+													<Input placeholder={type === "mongo" ? "Default logical database (e.g. main_db)" : "Database Name"} {...field} />
 												</FormControl>
 
 												<FormMessage />

@@ -21,7 +21,8 @@ import {
 	resolveDatabaseImage,
 	validateDatabaseImage,
 } from "../utils/databases/image-resolution";
-import { reconcileDatabaseSecurity } from "./database-security";
+import { reconcileDatabaseSecurity, sanitizeDatabaseIdentifier } from "./database-security";
+import { provisionDatabaseService } from "./database-lifecycle";
 import { validUniqueServerAppName } from "./project";
 
 export type Mongo = typeof mongo.$inferSelect;
@@ -41,11 +42,15 @@ export const createMongo = async (
 	}
 
 	const resolvedImage = resolveDatabaseImage("mongo", input.dockerImage);
+	const assignedDatabaseName = sanitizeDatabaseIdentifier(
+		input.databaseName || input.name || input.appName,
+	);
 
 	const newMongo = await tx
 		.insert(mongo)
 		.values({
 			...input,
+			databaseName: assignedDatabaseName,
 			dockerImage: resolvedImage,
 			databasePassword: input.databasePassword
 				? input.databasePassword
@@ -171,66 +176,11 @@ export const deployMongo = async (
 	onData?: (data: any) => void,
 ) => {
 	const mongo = await findMongoById(mongoId);
-	try {
-		await updateMongoById(mongoId, {
-			applicationStatus: "running",
-		});
-
-		onData?.("Starting mongo deployment...");
-
-		const resolvedImage = resolveDatabaseImage("mongo", mongo.dockerImage);
-		validateDatabaseImage(resolvedImage);
-
-		if (mongo.dockerImage !== resolvedImage) {
-			onData?.(
-				`Resolved database image "${mongo.dockerImage}" to canonical image "${resolvedImage}"`,
-			);
-		}
-
-		if (mongo.serverId) {
-			await execAsyncRemote(
-				mongo.serverId,
-				`docker pull ${quote([resolvedImage])}`,
-				onData,
-			);
-		} else {
-			await pullImage(resolvedImage, onData);
-		}
-
-		await buildMongo({
-			...mongo,
-			dockerImage: resolvedImage,
-		});
-		await waitForSwarmServiceConvergence(mongo.appName, mongo.serverId);
-		onData?.("Enforcing per-database user isolation and least-privilege roles...");
-		try {
-			const secResult = await reconcileDatabaseSecurity(mongoId, "mongo", mongo.serverId);
-			if (secResult.appliedRules.length > 0) {
-				onData?.(`Applied security rules: ${secResult.appliedRules.join("; ")}`);
-			}
-			if (secResult.warnings.length > 0) {
-				onData?.(`Security notices: ${secResult.warnings.join("; ")}`);
-			}
-		} catch (secErr) {
-			onData?.(`Warning: Security reconciliation deferred: ${secErr}`);
-		}
-		await updateMongoById(mongoId, {
-			applicationStatus: "done",
-			...(mongo.dockerImage !== resolvedImage
-				? { dockerImage: resolvedImage }
-				: {}),
-		});
-		onData?.("Deployment completed successfully!");
-	} catch (error) {
-		onData?.(`Error: ${error}`);
-		await updateMongoById(mongoId, {
-			applicationStatus: "error",
-		});
-
-		throw new TRPCError({
-			code: "INTERNAL_SERVER_ERROR",
-			message: `Error on deploy mongo${error}`,
-		});
-	}
-	return mongo;
+	await provisionDatabaseService({
+		databaseId: mongoId,
+		engine: "mongo",
+		serverId: mongo.serverId,
+		onData,
+	});
+	return await findMongoById(mongoId);
 };

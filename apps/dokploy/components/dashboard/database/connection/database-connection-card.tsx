@@ -71,6 +71,8 @@ export const DatabaseConnectionCard = ({
 	const [isCustomPortOpen, setIsCustomPortOpen] = useState(false);
 	const [testResult, setTestResult] = useState<any>(null);
 	const [isTesting, setIsTesting] = useState(false);
+	const [internalTestResult, setInternalTestResult] = useState<any>(null);
+	const [isInternalTesting, setIsInternalTesting] = useState(false);
 
 	// Mutations for password update
 	const changePasswordPostgres = api.postgres.changePassword.useMutation();
@@ -335,6 +337,37 @@ export const DatabaseConnectionCard = ({
 		}
 	};
 
+	const handleTestInternalConnection = async () => {
+		setIsInternalTesting(true);
+		setInternalTestResult(null);
+		try {
+			let res: any;
+			if (databaseType === "mongo") {
+				res = await (utils.mongo as any).verifyInternalConnectivity.fetch({ mongoId: databaseId });
+			} else if (databaseType === "postgres") {
+				res = await (utils.postgres as any).verifyInternalConnectivity.fetch({ postgresId: databaseId });
+			} else if (databaseType === "mysql") {
+				res = await (utils.mysql as any).verifyInternalConnectivity.fetch({ mysqlId: databaseId });
+			} else if (databaseType === "mariadb") {
+				res = await (utils.mariadb as any).verifyInternalConnectivity.fetch({ mariadbId: databaseId });
+			} else if (databaseType === "redis") {
+				res = await (utils.redis as any).verifyInternalConnectivity.fetch({ redisId: databaseId });
+			} else if (databaseType === "libsql") {
+				res = await (utils.libsql as any).verifyInternalConnectivity.fetch({ libsqlId: databaseId });
+			}
+			setInternalTestResult(res);
+			if (res?.success) {
+				toast.success("Internal database connectivity & read/write verified successfully!");
+			} else {
+				toast.error(res?.message || "Internal connectivity verification failed");
+			}
+		} catch (err: any) {
+			toast.error(err?.message || "Failed to verify internal connectivity");
+		} finally {
+			setIsInternalTesting(false);
+		}
+	};
+
 	const handleDownloadCompassConfig = () => {
 		const targetDb = dbName || (data?.databaseName as string) || "app";
 		const authSource = (data?.authSource as string) || (data?.databaseName as string) || "admin";
@@ -382,6 +415,7 @@ export const DatabaseConnectionCard = ({
 						databaseType={databaseType}
 						environmentId={environmentId}
 						databaseName={dbName}
+						databaseStatus={data?.applicationStatus}
 					/>
 				)}
 			</CardHeader>
@@ -454,12 +488,72 @@ export const DatabaseConnectionCard = ({
 										<Copy className="size-3.5" />
 										Copy URI
 									</Button>
-									<span className="text-xs text-muted-foreground font-mono">
+									<Button
+										variant="secondary"
+										size="sm"
+										className="h-7 text-xs gap-1.5"
+										onClick={handleTestInternalConnection}
+										isLoading={isInternalTesting}
+									>
+										<Activity className="size-3.5" />
+										Test Internal Connectivity
+									</Button>
+									<span className="text-xs text-muted-foreground font-mono hidden sm:inline">
 										Format: {databaseType}://...
 									</span>
 								</div>
 							</div>
 							<ToggleVisibilityInput value={internalUrl} disabled />
+
+							{/* Internal Connection Diagnostics Card */}
+							{internalTestResult && (
+								<div
+									className={`p-3.5 rounded-lg border flex flex-col gap-2 text-xs mt-2 ${
+										internalTestResult.success
+											? "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200"
+											: "bg-destructive/10 border-destructive/30 text-destructive"
+									}`}
+								>
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-2 font-semibold text-sm">
+											{internalTestResult.success ? (
+												<CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+											) : (
+												<AlertCircle className="size-4 text-destructive" />
+											)}
+											<span>
+												{internalTestResult.success
+													? "Internal Connectivity & Permissions Verified"
+													: "Internal Connectivity Test Failed"}
+											</span>
+										</div>
+										<div className="flex items-center gap-1.5">
+											<Badge
+												variant={internalTestResult.success ? "default" : "destructive"}
+												className="text-[10px] py-0 px-1.5"
+											>
+												Status: {internalTestResult.state}
+											</Badge>
+											{internalTestResult.databaseName && (
+												<Badge variant="outline" className="text-[10px] py-0 px-1.5">
+													Target DB: {internalTestResult.databaseName}
+												</Badge>
+											)}
+											{internalTestResult.details?.writeProbeSucceeded !== undefined && (
+												<Badge variant="outline" className="text-[10px] py-0 px-1.5">
+													Probe: {internalTestResult.details.writeProbeSucceeded ? "Read/Write OK" : "Read-Only"}
+												</Badge>
+											)}
+										</div>
+									</div>
+									<p className="leading-relaxed">{internalTestResult.message}</p>
+									{internalTestResult.details?.errorDetails && (
+										<div className="font-mono text-[11px] p-2 bg-black/20 rounded border border-black/10 break-all">
+											{internalTestResult.details.errorDetails}
+										</div>
+									)}
+								</div>
+							)}
 						</div>
 
 						{/* Individual Internal Fields Grid */}

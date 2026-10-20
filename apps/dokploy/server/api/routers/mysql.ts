@@ -32,6 +32,8 @@ import {
 	stopServiceRemote,
 	updateMySqlById,
 	verifyDatabaseConnectivity,
+	provisionDatabaseService,
+	verifyInternalDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -141,6 +143,19 @@ export const mysqlRouter = createTRPCRouter({
 							resourceId: newMysql.mysqlId,
 							resourceName: newMysql.appName,
 						});
+
+						// Provision the actual database service immediately so database does not depend on deploying an application
+						provisionDatabaseService({
+							databaseId: newMysql.mysqlId,
+							engine: "mysql",
+							serverId: newMysql.serverId,
+						}).catch((err) => {
+							console.error(
+								`Immediate provisioning failed for mysql ${newMysql.mysqlId}:`,
+								err,
+							);
+						});
+
 						return newMysql;
 					},
 				);
@@ -265,7 +280,26 @@ export const mysqlRouter = createTRPCRouter({
 				password: mysql.databasePassword,
 				databaseName: mysql.databaseName || undefined,
 				serverId: mysql.serverId || undefined,
-				appName: mysql.appName,
+			});
+		}),
+	verifyInternalConnectivity: protectedProcedure
+		.input(apiFindOneMySql)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mysqlId, "read");
+			const mysql = await findMySqlById(input.mysqlId);
+			if (
+				mysql.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this MySQL",
+				});
+			}
+			return await verifyInternalDatabaseConnectivity({
+				type: "mysql",
+				databaseId: input.mysqlId,
+				serverId: mysql.serverId,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

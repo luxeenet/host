@@ -33,6 +33,7 @@ interface Props {
 		| "libsql";
 	environmentId: string;
 	databaseName?: string;
+	databaseStatus?: string;
 	children?: React.ReactNode;
 }
 
@@ -41,6 +42,7 @@ export const ConnectToApplicationModal = ({
 	databaseType,
 	environmentId,
 	databaseName,
+	databaseStatus,
 	children,
 }: Props) => {
 	const [isOpen, setIsOpen] = useState(false);
@@ -71,6 +73,13 @@ export const ConnectToApplicationModal = ({
 		libsqlConnect.isPending;
 
 	const handleConnect = async () => {
+		if (databaseStatus && databaseStatus !== "done") {
+			toast.error("Database is not ready", {
+				description: `Database status is currently '${databaseStatus}'. Provisioning and readiness checks must complete before connecting an application.`,
+			});
+			return;
+		}
+
 		if (!selectedAppId) {
 			toast.error("Please select a target application");
 			return;
@@ -154,6 +163,16 @@ export const ConnectToApplicationModal = ({
 				</DialogHeader>
 
 				<div className="flex flex-col gap-4 py-2">
+					{databaseStatus && databaseStatus !== "done" && (
+						<AlertBlock type={databaseStatus === "error" ? "error" : "warning"}>
+							{databaseStatus === "running"
+								? "Database is currently provisioning. Please wait until engine initialization and readiness checks complete before connecting an application."
+								: databaseStatus === "error"
+									? "Database provisioning failed. Please resolve the provisioning error before connecting an application."
+									: "Database is not ready. The database must be running and verified before connecting an application."}
+						</AlertBlock>
+					)}
+
 					<div className="flex flex-col gap-2">
 						<label className="text-sm font-medium text-muted-foreground">
 							Select Target Application
@@ -205,6 +224,28 @@ export const ConnectToApplicationModal = ({
 										{databaseType}://... (Internal URL)
 									</span>
 								</div>
+								{databaseType === "mongo" && (
+									<>
+										<div className="flex items-center justify-between py-1 border-b border-muted">
+											<span className="text-primary font-bold">MONGODB_URI</span>
+											<span className="text-muted-foreground truncate max-w-[240px]">
+												mongodb://... (Internal URI)
+											</span>
+										</div>
+										<div className="flex items-center justify-between py-1 border-b border-muted">
+											<span className="text-foreground">MONGODB_DATABASE</span>
+											<span className="text-muted-foreground">
+												{databaseName || "Configured"}
+											</span>
+										</div>
+										<div className="flex items-center justify-between py-1 border-b border-muted">
+											<span className="text-foreground">MONGO_AUTH_SOURCE</span>
+											<span className="text-muted-foreground">
+												{databaseName || "admin"}
+											</span>
+										</div>
+									</>
+								)}
 								{databaseType !== "redis" && databaseType !== "libsql" && (
 									<>
 										<div className="flex items-center justify-between py-1 border-b border-muted">
@@ -257,7 +298,7 @@ export const ConnectToApplicationModal = ({
 					<Button
 						onClick={handleConnect}
 						isLoading={isConnecting}
-						disabled={!selectedAppId || isConnecting}
+						disabled={!selectedAppId || isConnecting || (Boolean(databaseStatus) && databaseStatus !== "done")}
 						className="flex items-center gap-2"
 					>
 						<Check className="size-4" />

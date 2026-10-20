@@ -32,6 +32,8 @@ import {
 	stopServiceRemote,
 	updateMongoById,
 	verifyDatabaseConnectivity,
+	provisionDatabaseService,
+	verifyInternalDatabaseConnectivity,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
@@ -141,6 +143,19 @@ export const mongoRouter = createTRPCRouter({
 							resourceId: newMongo.mongoId,
 							resourceName: newMongo.appName,
 						});
+
+						// Provision the actual database service immediately so database does not depend on deploying an application
+						provisionDatabaseService({
+							databaseId: newMongo.mongoId,
+							engine: "mongo",
+							serverId: newMongo.serverId,
+						}).catch((err) => {
+							console.error(
+								`Immediate provisioning failed for mongo ${newMongo.mongoId}:`,
+								err,
+							);
+						});
+
 						return newMongo;
 					},
 				);
@@ -262,7 +277,26 @@ export const mongoRouter = createTRPCRouter({
 				databaseName: mongo.databaseName || undefined,
 				authSource: mongo.authSource || "admin",
 				serverId: mongo.serverId || undefined,
-				appName: mongo.appName,
+			});
+		}),
+	verifyInternalConnectivity: protectedProcedure
+		.input(apiFindOneMongo)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.mongoId, "read");
+			const mongo = await findMongoById(input.mongoId);
+			if (
+				mongo.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this mongo",
+				});
+			}
+			return await verifyInternalDatabaseConnectivity({
+				type: "mongo",
+				databaseId: input.mongoId,
+				serverId: mongo.serverId,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

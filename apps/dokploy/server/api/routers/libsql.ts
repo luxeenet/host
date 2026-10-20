@@ -28,6 +28,8 @@ import {
 	stopServiceRemote,
 	updateLibsqlById,
 	verifyDatabaseConnectivity,
+	provisionDatabaseService,
+	verifyInternalDatabaseConnectivity,
 } from "@dokploy/server";
 import {
 	addNewService,
@@ -130,6 +132,19 @@ export const libsqlRouter = createTRPCRouter({
 							resourceId: newLibsql.libsqlId,
 							resourceName: newLibsql.appName,
 						});
+
+						// Provision the actual database service immediately so database does not depend on deploying an application
+						provisionDatabaseService({
+							databaseId: newLibsql.libsqlId,
+							engine: "libsql",
+							serverId: newLibsql.serverId,
+						}).catch((err) => {
+							console.error(
+								`Immediate provisioning failed for libsql ${newLibsql.libsqlId}:`,
+								err,
+							);
+						});
+
 						return newLibsql;
 					},
 				);
@@ -249,7 +264,26 @@ export const libsqlRouter = createTRPCRouter({
 				user: libsql.databaseUser,
 				password: libsql.databasePassword,
 				serverId: libsql.serverId || undefined,
-				appName: libsql.appName,
+			});
+		}),
+	verifyInternalConnectivity: protectedProcedure
+		.input(apiFindOneLibsql)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.libsqlId, "read");
+			const libsql = await findLibsqlById(input.libsqlId);
+			if (
+				libsql.environment.project.organizationId !==
+				ctx.session.activeOrganizationId
+			) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this LibSQL",
+				});
+			}
+			return await verifyInternalDatabaseConnectivity({
+				type: "libsql",
+				databaseId: input.libsqlId,
+				serverId: libsql.serverId,
 			});
 		}),
 	enableExternalAccess: protectedProcedure

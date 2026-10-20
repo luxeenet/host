@@ -178,10 +178,10 @@ export default function DatabaseManagePage() {
 		if (discoveredDatabases.length > 0 && !selectedDatabase) {
 			const preferred =
 				databasesData?.selectedDatabase ||
+				discoveredDatabases.find((d) => d.isConfiguredDatabase)?.name ||
 				discoveredDatabases.find((d) => d.isDefault)?.name ||
 				discoveredDatabases.find((d) => d.name === (activeRecord?.databaseName as string))?.name ||
-				discoveredDatabases.find((d) => d.name === "test")?.name ||
-				discoveredDatabases.find((d) => d.name === "app")?.name ||
+				discoveredDatabases.find((d) => !d.isInternal && !d.isSystemDatabase)?.name ||
 				discoveredDatabases[0]?.name ||
 				"";
 			if (preferred) {
@@ -930,9 +930,27 @@ export default function DatabaseManagePage() {
 								<h1 className="text-xl font-bold text-white tracking-tight">
 									{activeRecord?.name || databaseId}
 								</h1>
-								<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-									RUNNING
-								</span>
+								{activeRecord?.status === "done" ? (
+									<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+										<span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+										READY
+									</span>
+								) : activeRecord?.status === "running" ? (
+									<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30 flex items-center gap-1">
+										<span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+										PROVISIONING
+									</span>
+								) : activeRecord?.status === "error" ? (
+									<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center gap-1">
+										<span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+										FAILED
+									</span>
+								) : (
+									<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+										<span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+										PENDING
+									</span>
+								)}
 								<Badge
 									variant="outline"
 									className="text-[10px] border-slate-800 text-slate-400 font-mono"
@@ -1303,11 +1321,28 @@ export default function DatabaseManagePage() {
 													<SelectItem key={db.name} value={db.name} className="text-xs font-mono">
 														<div className="flex items-center justify-between gap-2 w-full">
 															<span>{db.name}</span>
-															{db.isDefault && (
-																<span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-sans">
-																	Default
-																</span>
-															)}
+															<div className="flex items-center gap-1">
+																{db.isConfiguredDatabase && (
+																	<span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-sans font-medium">
+																		Assigned
+																	</span>
+																)}
+																{db.isDefault && !db.isConfiguredDatabase && (
+																	<span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-sans">
+																		Default
+																	</span>
+																)}
+																{(db.isSystemDatabase || db.isInternal) && (
+																	<span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-sans">
+																		System
+																	</span>
+																)}
+																{(db.uninitialized || db.empty) && (
+																	<span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-sans">
+																		Empty
+																	</span>
+																)}
+															</div>
 														</div>
 													</SelectItem>
 												))}

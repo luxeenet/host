@@ -94,17 +94,24 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 
 			if (detected.language === "Python") {
 				preResolvedProvider = "python";
-				preResolvedPythonVersion = detected.runtimeVersion || "3.11";
+				preResolvedPythonVersion = detected.runtimeVersion || (detected.packageManager === "uv" ? "3.12" : "3.11");
 				preResolvedInstallCmd =
 					detected.installCommand ||
 					"test -f /opt/venv/bin/pip && /opt/venv/bin/pip install -r requirements.txt || python3 -m pip install -r requirements.txt || pip install -r requirements.txt";
 				preResolvedStartCmd = detected.startCommand;
 				preResolvedBuildCmd = detected.buildCommand;
-				preResolvedPort = detected.suggestedPort || 8501;
-				preResolvedSetupCmds = [
-					"python3 -m venv --copies /opt/venv 2>/dev/null || python -m venv --copies /opt/venv || true",
-					"/opt/venv/bin/python -m ensurepip --upgrade 2>/dev/null || true",
-				];
+				preResolvedPort = detected.suggestedPort || (detected.framework === "Django" ? 8000 : 8501);
+				if (detected.packageManager === "uv") {
+					preResolvedSetupCmds = [
+						"curl -LsSf https://astral.sh/uv/install.sh | sh 2>/dev/null || true",
+						"export PATH=\"$HOME/.local/bin:$HOME/.cargo/bin:$PATH\"",
+					];
+				} else {
+					preResolvedSetupCmds = [
+						"python3 -m venv --copies /opt/venv 2>/dev/null || python -m venv --copies /opt/venv || true",
+						"/opt/venv/bin/python -m ensurepip --upgrade 2>/dev/null || true",
+					];
+				}
 			} else if (detected.language === "Go") {
 				preResolvedProvider = "go";
 				preResolvedStartCmd = detected.startCommand;
@@ -504,14 +511,24 @@ if [ -d ${quote([buildAppDirectory])} ]; then
     } catch(e) { console.log('false'); }
   " 2>/dev/null || echo 'false')
 
-  # Enforce Node provider for JS/TS apps to prevent Caddy injection (except for static SPAs)
-  if [ -f "${buildAppDirectory}/package.json" ] && [ "$IS_STATIC_SPA" != "true" ]; then
+  # Enforce Node provider for JS/TS apps to prevent Caddy injection (except for static SPAs or Python backends)
+  if [ -f "${buildAppDirectory}/package.json" ] && [ "$IS_STATIC_SPA" != "true" ] && [ "$NIXPACKS_PROVIDER" != "python" ] && [ ! -f "${buildAppDirectory}/manage.py" ] && [ ! -f "${buildAppDirectory}/manage_server.py" ] && [ ! -f "${buildAppDirectory}/wsgi.py" ]; then
     export NIXPACKS_PROVIDER="node"
     if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
       printf 'providers = ["node"]\n' > "${buildAppDirectory}/nixpacks.toml" ;
     elif ! grep -q "providers" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
       TMP_TOML=$(mktemp 2>/dev/null || echo "${buildAppDirectory}/nixpacks.toml.tmp")
       printf 'providers = ["node"]\n\n' > "$TMP_TOML"
+      cat "${buildAppDirectory}/nixpacks.toml" >> "$TMP_TOML"
+      mv -f "$TMP_TOML" "${buildAppDirectory}/nixpacks.toml"
+    fi
+  elif [ "$NIXPACKS_PROVIDER" = "python" ] || [ -f "${buildAppDirectory}/manage.py" ] || [ -f "${buildAppDirectory}/manage_server.py" ] || [ -f "${buildAppDirectory}/wsgi.py" ]; then
+    export NIXPACKS_PROVIDER="python"
+    if [ ! -f "${buildAppDirectory}/nixpacks.toml" ]; then
+      printf 'providers = ["python"]\n' > "${buildAppDirectory}/nixpacks.toml" ;
+    elif ! grep -q "providers" "${buildAppDirectory}/nixpacks.toml" 2>/dev/null; then
+      TMP_TOML=$(mktemp 2>/dev/null || echo "${buildAppDirectory}/nixpacks.toml.tmp")
+      printf 'providers = ["python"]\n\n' > "$TMP_TOML"
       cat "${buildAppDirectory}/nixpacks.toml" >> "$TMP_TOML"
       mv -f "$TMP_TOML" "${buildAppDirectory}/nixpacks.toml"
     fi
@@ -777,6 +794,25 @@ if [ -d ${quote([buildAppDirectory])} ]; then
         echo "✓ HatDot detected entrypoint: node index.js" ;
       fi
     fi
+  elif [ -f "${buildAppDirectory}/manage.py" ] || [ -f "${buildAppDirectory}/manage_server.py" ] || [ -f "${buildAppDirectory}/wsgi.py" ]; then
+    WSGI_APP=$(find "${buildAppDirectory}" -maxdepth 2 -name "wsgi.py" 2>/dev/null | head -n1)
+    if [ -n "$WSGI_APP" ]; then
+      WSGI_DIR=$(dirname "$WSGI_APP")
+      if [ "$WSGI_DIR" = "${buildAppDirectory}" ]; then
+        WSGI_TARGET="wsgi:application"
+      else
+        WSGI_MOD=$(basename "$WSGI_DIR")
+        WSGI_TARGET="\${WSGI_MOD}.wsgi:application"
+      fi
+      if [ -f "${buildAppDirectory}/uv.lock" ]; then
+        export NIXPACKS_START_CMD="uv run gunicorn \${WSGI_TARGET} --bind 0.0.0.0:8000 --workers 2"
+      else
+        export NIXPACKS_START_CMD="gunicorn \${WSGI_TARGET} --bind 0.0.0.0:8000 --workers 2"
+      fi
+      export PORT=8000
+      export NIXPACKS_PORT=8000
+      echo "✓ HatDot resolved Django WSGI startup command: $NIXPACKS_START_CMD" ;
+    fi
   fi
 fi
 `;
@@ -801,9 +837,15 @@ if [ "$NIX_STATUS" != "0" ]; then
     echo "❌ Deployment Error: The requested runtime has reached End-Of-Life and was removed from the package repository." ;
     echo "💡 Remediation: Specify a compatible package archive or upgrade to a modern supported runtime in settings." ;
   elif grep -qi "no start command could be found" "$TMP_LOG" 2>/dev/null; then
-    if [ "$NIXPACKS_PROVIDER" = "python" ] || [ -f "${buildAppDirectory}/requirements.txt" ] || [ -f "${buildAppDirectory}/app.py" ]; then
+    if [ "$NIXPACKS_PROVIDER" = "python" ] || [ -f "${buildAppDirectory}/manage.py" ] || [ -f "${buildAppDirectory}/manage_server.py" ] || [ -f "${buildAppDirectory}/wsgi.py" ]; then
+      echo "❌ Start Command Error [DJANGO_START_COMMAND_NOT_FOUND]: No production start command could be resolved for this Django application." ;
+      echo "💡 Detected Framework: Django (Python)" ;
+      echo "💡 Project Directory: ${buildAppDirectory}" ;
+      echo "💡 Production Server: Gunicorn (WSGI/ASGI)" ;
+      echo "💡 Remediation: Configure a production start command in Application Settings (e.g. 'uv run gunicorn <module>.wsgi:application --bind 0.0.0.0:8000 --workers 2' or 'gunicorn <module>.wsgi:application --bind 0.0.0.0:8000'). Do NOT use 'python manage.py runserver' in production." ;
+    elif [ "$NIXPACKS_PROVIDER" = "python" ] || [ -f "${buildAppDirectory}/requirements.txt" ] || [ -f "${buildAppDirectory}/app.py" ] || [ -f "${buildAppDirectory}/pyproject.toml" ]; then
       echo "❌ Start Command Error: No start command could be found for this Python application." ;
-      echo "💡 Remediation: Ensure your application provides a recognized entry point (app.py, main.py) or configure a Custom Start Command in Application Settings (e.g. 'streamlit run app.py --server.port=8501 --server.address=0.0.0.0')." ;
+      echo "💡 Remediation: Ensure your application provides a recognized entry point (app.py, main.py) or configure a Custom Start Command in Application Settings (e.g. 'uv run uvicorn main:app --host 0.0.0.0 --port 8000' or 'streamlit run app.py --server.port=8501 --server.address=0.0.0.0')." ;
     else
       echo "❌ Start Command Error: No start command could be found for this application." ;
       echo "💡 Remediation: Add a 'start' script to your package.json (e.g. 'node server.js' or 'next start'), configure a Custom Start Command in Application Settings, or configure a Publish Directory if deploying a static web app." ;

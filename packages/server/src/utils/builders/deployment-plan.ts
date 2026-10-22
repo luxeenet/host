@@ -5,6 +5,8 @@ import {
 	detectFrameworkFromDirectorySync,
 	detectFrameworkFromFiles,
 	type FileEntry,
+	type RequiredService,
+	type MonorepoComponent,
 } from "../../services/app-detector";
 import {
 	extractPortFromCommand,
@@ -75,6 +77,8 @@ export interface PlanConflict {
 	item: string;
 	description: string;
 	resolution: string;
+	customerValue?: string;
+	resolvedValue?: string;
 }
 
 export interface PlanDiagnostic {
@@ -135,6 +139,13 @@ export interface DeploymentPlan {
 		https: boolean;
 		expectedBehavior: string;
 	};
+
+	requiredServices?: RequiredService[];
+	secondaryComponents?: MonorepoComponent[];
+	migrationCommand?: string;
+	collectStaticCommand?: string;
+	wsgiEntryPoint?: string;
+	djangoSettingsModule?: string;
 
 	decisions: PlanDecision[];
 	conflicts: PlanConflict[];
@@ -265,6 +276,20 @@ export const resolveDeploymentPlan = (
 	let detectedBuild: string | undefined;
 	let detectedInstall: string | undefined;
 	let isSpa = Boolean(app.isStaticSpa);
+	let requiredServices: RequiredService[] | undefined;
+	let secondaryComponents: MonorepoComponent[] | undefined;
+	let migrationCommand: string | undefined;
+	let collectStaticCommand: string | undefined;
+	let wsgiEntryPoint: string | undefined;
+	let djangoSettingsModule: string | undefined;
+
+	let pm: SupportedPackageManager = "npm";
+	let runtimeInfo = {
+		name: "Node.js",
+		version: "standard",
+		archive: undefined as string | undefined,
+		warning: undefined as string | undefined,
+	};
 
 	if (buildAppDirectory && fs.existsSync(buildAppDirectory)) {
 		try {
@@ -275,7 +300,15 @@ export const resolveDeploymentPlan = (
 			detectedStart = det.startCommand;
 			detectedBuild = det.buildCommand;
 			detectedInstall = det.installCommand;
+			if (det.packageManager) pm = det.packageManager;
+			if (det.runtimeVersion) runtimeInfo.version = det.runtimeVersion;
 			if (det.isStaticSpa) isSpa = true;
+			requiredServices = det.requiredServices;
+			secondaryComponents = det.secondaryComponents;
+			migrationCommand = det.migrationCommand;
+			collectStaticCommand = det.collectStaticCommand;
+			wsgiEntryPoint = det.wsgiEntryPoint;
+			djangoSettingsModule = det.djangoSettingsModule;
 
 			decisions.push({
 				stage: "detection",
@@ -292,28 +325,34 @@ export const resolveDeploymentPlan = (
 		detectedStart = det.startCommand;
 		detectedBuild = det.buildCommand;
 		detectedInstall = det.installCommand;
+		if (det.packageManager) pm = det.packageManager;
+		if (det.runtimeVersion) runtimeInfo.version = det.runtimeVersion;
 		if (det.isStaticSpa) isSpa = true;
+		requiredServices = det.requiredServices;
+		secondaryComponents = det.secondaryComponents;
+		migrationCommand = det.migrationCommand;
+		collectStaticCommand = det.collectStaticCommand;
+		wsgiEntryPoint = det.wsgiEntryPoint;
+		djangoSettingsModule = det.djangoSettingsModule;
 	}
 
 	// 3. Package Manager & Runtime Resolution
-	let pm: SupportedPackageManager = "npm";
 	let resolvedInstallCommand: string | undefined;
-	let runtimeInfo = {
-		name: language === "Python" ? "Python" : "Node.js",
-		version: "standard",
-		archive: undefined as string | undefined,
-		warning: undefined as string | undefined,
-	};
 
 	if (language === "Python") {
-		pm = files.some((f) => f.name === "uv.lock")
-			? "uv"
-			: files.some((f) => f.name === "poetry.lock")
-				? "poetry"
-				: files.some((f) => f.name === "Pipfile")
-					? "pipenv"
-					: "pip";
-		runtimeInfo.version = "3.11";
+		runtimeInfo.name = "Python";
+		if (files.some((f) => f.name === "uv.lock" || f.path.endsWith("/uv.lock"))) {
+			pm = "uv";
+		} else if (files.some((f) => f.name === "poetry.lock" || f.path.endsWith("/poetry.lock"))) {
+			pm = "poetry";
+		} else if (files.some((f) => f.name === "Pipfile" || f.path.endsWith("/Pipfile"))) {
+			pm = "pipenv";
+		} else if (!pm || pm === "npm") {
+			pm = "pip";
+		}
+		if (!runtimeInfo.version || runtimeInfo.version === "standard") {
+			runtimeInfo.version = "3.12";
+		}
 	} else if (parsedPkg || files.some((f) => f.name.endsWith(".js") || f.name.endsWith(".ts"))) {
 		const pmRes = resolvePackageManagerAndCommands({
 			files,
@@ -362,17 +401,6 @@ export const resolveDeploymentPlan = (
 		strategy = "static-artifact";
 	} else if (app.buildType === "dockerfile") {
 		strategy = "dockerfile";
-	} else if (isVite || isAstro || (!pkgScripts.start && pkgScripts.preview)) {
-		const rawStart = pkgScripts.start?.trim() || "";
-		const isViteDev =
-			rawStart === "vite" || /^vite(?:\s+(?:dev|serve))?\b/i.test(rawStart);
-		if (isViteDev || (!rawStart && pkgScripts.preview)) {
-			strategy = "vite-preview";
-		} else if (rawStart) {
-			strategy = "node-server";
-		} else {
-			strategy = "vite-preview";
-		}
 	} else if (language === "Python") {
 		strategy = "python-server";
 	} else if (language === "Go" || language === "Rust") {
@@ -385,6 +413,17 @@ export const resolveDeploymentPlan = (
 		strategy = "jvm-server";
 	} else if (language === "C#" || language === ".NET") {
 		strategy = "dotnet-server";
+	} else if (isVite || isAstro || (!pkgScripts.start && pkgScripts.preview)) {
+		const rawStart = pkgScripts.start?.trim() || "";
+		const isViteDev =
+			rawStart === "vite" || /^vite(?:\s+(?:dev|serve))?\b/i.test(rawStart);
+		if (isViteDev || (!rawStart && pkgScripts.preview)) {
+			strategy = "vite-preview";
+		} else if (rawStart) {
+			strategy = "node-server";
+		} else {
+			strategy = "vite-preview";
+		}
 	}
 
 	// 5. Workload Classification (HTTP vs Worker)
@@ -555,6 +594,26 @@ export const resolveDeploymentPlan = (
 			evidence: `package.json scripts.preview: "${previewStr}"`,
 		});
 	} else if (
+		detectedStart &&
+		(language === "Python" ||
+			language === "Go" ||
+			language === "Rust" ||
+			language === "PHP" ||
+			language === "Ruby" ||
+			language === "Java" ||
+			language === ".NET" ||
+			language === "C#")
+	) {
+		intendedCmd = detectedStart;
+		effectiveCmd = detectedStart;
+		cmdSource = "framework_default";
+		decisions.push({
+			stage: "startup",
+			decision: `Startup command: "${effectiveCmd}"`,
+			reason: `${framework} auto-detected production startup command`,
+			evidence: `Detector resolved: "${detectedStart}"`,
+		});
+	} else if (
 		pkgScripts["start:prod"] &&
 		(Boolean(pkgDeps["@nestjs/core"] || pkgDeps["@nestjs/common"]) ||
 			!pkgScripts.start ||
@@ -642,7 +701,61 @@ export const resolveDeploymentPlan = (
 		});
 	}
 
-	// 8. Host Validation
+	if (
+		customerCmd &&
+		(framework.toLowerCase().includes("django") || language === "Python") &&
+		customerCmd.toLowerCase().startsWith("npm")
+	) {
+		const recommendedStart =
+			detectedStart ||
+			(wsgiEntryPoint
+				? `gunicorn ${wsgiEntryPoint} --bind 0.0.0.0:8000 --workers 2`
+				: "gunicorn wsgi:application --bind 0.0.0.0:8000 --workers 2");
+		conflicts.push({
+			item: "startup_command",
+			customerValue: customerCmd,
+			resolvedValue: recommendedStart,
+			description:
+				`Application Settings specify '${customerCmd}' but detected framework is ${framework} (${language}), which requires a production WSGI/ASGI Python server.`,
+			resolution:
+				`Customer override is preserved, but ensure your container has Node.js or switch startup command to '${recommendedStart}'.`,
+		});
+		diagnostics.push({
+			code: "WRONG_START_COMMAND",
+			message: `Configured start command '${customerCmd}' conflicts with detected ${framework} Python application, which requires a production WSGI server (e.g. Gunicorn).`,
+			severity: "error",
+			remediation: `Configure a production Python WSGI/ASGI command (e.g. '${recommendedStart}') in Application Settings.`,
+		});
+	}
+
+	// 8. Service Dependency Validation (Postgres, Redis, Celery, etc.)
+	if (requiredServices && requiredServices.length > 0) {
+		const allEnv = [
+			app.env,
+			app.environment?.env,
+			app.environment?.project?.env,
+		]
+			.filter(Boolean)
+			.join("\n");
+
+		for (const svc of requiredServices) {
+			if (svc.required) {
+				const hasAnyEnv = svc.envVars.some((v) =>
+					new RegExp(`^\\s*${v}\\s*=`, "m").test(allEnv),
+				);
+				if (!hasAnyEnv) {
+					diagnostics.push({
+						code: "MISSING_REQUIRED_SERVICE",
+						message: `Application requires supporting service: ${svc.name} (${svc.envVars.join(" or ")} not configured in environment).`,
+						severity: "warning",
+						remediation: `Configure ${svc.name} connection settings in Application Environment (${svc.envVars.join(", ")}) or connect a managed ${svc.type} service.`,
+					});
+				}
+			}
+		}
+	}
+
+	// 9. Host Validation
 	const authorizedHosts = getAuthorizedHostsSync(app, platformDomain);
 	const userEnvList = (app.env || "").split("\n").map((s) => s.trim()).filter(Boolean);
 	const runsViteServer =
@@ -667,11 +780,11 @@ export const resolveDeploymentPlan = (
 		});
 	}
 
-	// 9. Health Check Strategy
+	// 10. Health Check Strategy
 	const healthPath = process.env.HATDOT_HEALTH_PATH || "/";
 	const expectedStatuses = [200, 201, 204, 301, 302, 307, 308, 401, 403, 404];
 
-	// 10. Routing & Public Endpoint
+	// 11. Routing & Public Endpoint
 	const primaryHost =
 		authorizedHosts[0] ||
 		`${appName}.${platformDomain || process.env.PLATFORM_DOMAIN || "hatdot.cloud"}`;
@@ -725,6 +838,12 @@ export const resolveDeploymentPlan = (
 				? "HTTP 2xx, 3xx, 401, 403, or 404 expected on readiness path"
 				: "Non-HTTP workload / Worker process",
 		},
+		requiredServices,
+		secondaryComponents,
+		migrationCommand,
+		collectStaticCommand,
+		wsgiEntryPoint,
+		djangoSettingsModule,
 		decisions,
 		conflicts,
 		diagnostics,
@@ -784,12 +903,34 @@ export const formatDeploymentPlanLog = (plan: DeploymentPlan): string => {
 		`Deployment Strategy:  ${plan.deploymentStrategy}`,
 		`Runtime / Version:    ${plan.runtime.name} ${plan.runtime.version}`,
 		`Package Manager:      ${plan.packageManager}`,
+		`Project Root:         ${plan.rootDirectory}`,
+		...(plan.wsgiEntryPoint ? [`WSGI Entrypoint:     ${plan.wsgiEntryPoint}`] : []),
+		...(plan.djangoSettingsModule ? [`Django Settings:     ${plan.djangoSettingsModule}`] : []),
+		...(plan.migrationCommand ? [`Database Migrations: ${plan.migrationCommand}`] : []),
+		...(plan.collectStaticCommand ? [`Static Assets:       ${plan.collectStaticCommand}`] : []),
 		`Intended Command:     ${plan.startCommand.intended || "(none)"}`,
 		`Effective Command:    ${plan.startCommand.effective || "(none)"} [${plan.startCommand.source}]`,
 		`Listening Port:       ${plan.port.value} [${plan.port.source}] (Bind: ${plan.port.bindAddress})`,
 		`Authorized Hosts:     ${plan.routing.allAuthorizedHosts.join(", ") || "(none)"}`,
 		`Host Validation:      ${plan.hostValidation.mechanism} (${plan.hostValidation.reason})`,
 	];
+
+	if (plan.requiredServices && plan.requiredServices.length > 0) {
+		lines.push("--------------------------------------------------------------------------------");
+		lines.push("Required Supporting Services:");
+		for (const s of plan.requiredServices) {
+			const reqLabel = s.required ? "Required" : "Optional";
+			lines.push(`  - [${s.type.toUpperCase()}] ${s.name} (${reqLabel}) — ${s.description}`);
+		}
+	}
+
+	if (plan.secondaryComponents && plan.secondaryComponents.length > 0) {
+		lines.push("--------------------------------------------------------------------------------");
+		lines.push("Monorepo Secondary Components:");
+		for (const comp of plan.secondaryComponents) {
+			lines.push(`  - [${comp.type.toUpperCase()}] ${comp.name} (Path: ${comp.path}, Framework: ${comp.framework})`);
+		}
+	}
 
 	if (plan.conflicts.length > 0) {
 		lines.push("--------------------------------------------------------------------------------");

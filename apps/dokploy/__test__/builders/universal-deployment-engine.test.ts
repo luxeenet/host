@@ -1008,7 +1008,8 @@ dependencies = [
 			expect(detected.language).toBe("Python");
 			expect(detected.packageManager).toBe("pip");
 			expect(detected.suggestedPort).toBe(8000);
-			expect(detected.startCommand).toBe("python manage.py runserver 0.0.0.0:8000");
+			expect(detected.startCommand).toContain("gunicorn");
+			expect(detected.startCommand).toContain("--bind 0.0.0.0:8000");
 		});
 
 		it("detects Flask application with requirements.txt", () => {

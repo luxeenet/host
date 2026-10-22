@@ -23,6 +23,9 @@ export type DiagnosticCode =
 	| "UNSUPPORTED_NATIVE_ARCHITECTURE"
 	| "NATIVE_BINDING_RESOLUTION_FAILED"
 	| "INCOMPATIBLE_NATIVE_BINDING_VERSION"
+	| "MISSING_REQUIRED_SERVICE"
+	| "DATABASE_MIGRATION_FAILED"
+	| "FRAMEWORK_CONFIGURATION_ERROR"
 	| "UNKNOWN_BUILD_ERROR";
 
 export type DeploymentState =
@@ -191,6 +194,30 @@ export const DIAGNOSTIC_CATALOG: Record<DiagnosticCode, DiagnosticInfo> = {
 			"The installed native binary version does not match the version required by your bundler or framework.",
 		remediation:
 			"Run npm update or align optional dependency versions in your package manifest.",
+	},
+	MISSING_REQUIRED_SERVICE: {
+		code: "MISSING_REQUIRED_SERVICE",
+		title: "Missing Required Supporting Service",
+		explanation:
+			"The application requires a supporting service (such as PostgreSQL database, Redis task broker, or Memcached) that is not connected or configured.",
+		remediation:
+			"Provision or connect the required managed service in HatDot or configure its connection URL in Application Environment.",
+	},
+	DATABASE_MIGRATION_FAILED: {
+		code: "DATABASE_MIGRATION_FAILED",
+		title: "Database Migration Failed",
+		explanation:
+			"Application database schema migrations failed to execute against the target database.",
+		remediation:
+			"Verify database connection credentials, ensure database server is running, and review migration error logs.",
+	},
+	FRAMEWORK_CONFIGURATION_ERROR: {
+		code: "FRAMEWORK_CONFIGURATION_ERROR",
+		title: "Framework Configuration Error",
+		explanation:
+			"The detected framework could not find its configuration module, WSGI/ASGI entry point, or settings.",
+		remediation:
+			"Verify settings module path and WSGI/ASGI entry point in your application configuration.",
 	},
 	UNKNOWN_BUILD_ERROR: {
 		code: "UNKNOWN_BUILD_ERROR",

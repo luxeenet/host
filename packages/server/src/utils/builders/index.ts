@@ -148,6 +148,27 @@ export const buildContainerEnvironmentVariables = (
 		}
 	}
 
+	// Inject Django production defaults (SECURE_PROXY_SSL_HEADER, DJANGO_SETTINGS_MODULE, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS)
+	// if not explicitly defined by customer.
+	if (plan?.framework === "Django" || plan?.language === "Python") {
+		if (plan.djangoSettingsModule && !envVariables.some((e: string) => e.startsWith("DJANGO_SETTINGS_MODULE="))) {
+			envVariables.push(`DJANGO_SETTINGS_MODULE=${plan.djangoSettingsModule}`);
+		}
+		if (!envVariables.some((e: string) => e.startsWith("SECURE_PROXY_SSL_HEADER="))) {
+			envVariables.push("SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https");
+		}
+		const hosts = plan.routing?.allAuthorizedHosts || [];
+		if (hosts.length > 0) {
+			if (!envVariables.some((e: string) => e.startsWith("DJANGO_ALLOWED_HOSTS=")) && !envVariables.some((e: string) => e.startsWith("ALLOWED_HOSTS="))) {
+				envVariables.push(`DJANGO_ALLOWED_HOSTS=${hosts.join(",")}`);
+				envVariables.push(`ALLOWED_HOSTS=${hosts.join(",")}`);
+			}
+			if (!envVariables.some((e: string) => e.startsWith("CSRF_TRUSTED_ORIGINS="))) {
+				envVariables.push(`CSRF_TRUSTED_ORIGINS=${hosts.map((h: string) => `https://${h}`).join(",")}`);
+			}
+		}
+	}
+
 	return envVariables;
 };
 

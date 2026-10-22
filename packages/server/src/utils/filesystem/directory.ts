@@ -128,29 +128,31 @@ export const getBuildAppDirectory = (application: Application) => {
 		buildPath = application?.giteaBuildPath || "";
 	} else if (sourceType === "drop") {
 		buildPath = application?.dropBuildPath || "";
-		if (!buildPath) {
-			const baseCodeDir = path.join(APPLICATIONS_PATH, appName, "code");
-			if (fs.existsSync(baseCodeDir)) {
-				try {
-					let resolveProjectRoot: any;
-					try {
-						resolveProjectRoot = require("../../services/app-detector").resolveProjectRoot;
-					} catch {
-						try {
-							resolveProjectRoot = require("@dokploy/server/services/app-detector").resolveProjectRoot;
-						} catch {}
-					}
-					if (resolveProjectRoot) {
-						const { resolvedRoot } = resolveProjectRoot(baseCodeDir);
-						if (resolvedRoot) {
-							buildPath = resolvedRoot;
-						}
-					}
-				} catch {}
-			}
-		}
 	} else if (sourceType === "git") {
 		buildPath = customGitBuildPath || "";
+	}
+
+	const isDefaultRoot = !buildPath || buildPath.trim() === "" || buildPath.trim() === "/";
+	if (isDefaultRoot) {
+		const baseCodeDir = path.join(APPLICATIONS_PATH, appName, "code");
+		if (fs.existsSync(baseCodeDir)) {
+			try {
+				let resolveProjectRoot: any;
+				try {
+					resolveProjectRoot = require("../../services/app-detector").resolveProjectRoot;
+				} catch {
+					try {
+						resolveProjectRoot = require("@dokploy/server/services/app-detector").resolveProjectRoot;
+					} catch {}
+				}
+				if (resolveProjectRoot) {
+					const { resolvedRoot } = resolveProjectRoot(baseCodeDir);
+					if (resolvedRoot) {
+						buildPath = resolvedRoot;
+					}
+				}
+			} catch {}
+		}
 	}
 	if (buildType === "dockerfile") {
 		return path.join(

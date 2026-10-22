@@ -868,7 +868,19 @@ export const resolvePackageManagerAndCommands = (params: {
 
 	// Check if this project is non-JavaScript when package.json and JS lockfiles are absent
 	const hasJsManifest = Boolean(params.packageJsonContent) || hasBunLock || hasPnpmLock || hasYarnLock || hasNpmLock;
-	const isPythonProject = fileNames.has("requirements.txt") || fileNames.has("pyproject.toml") || fileNames.has("pipfile") || fileNames.has("poetry.lock") || fileNames.has("uv.lock") || fileNames.has("app.py") || fileNames.has("main.py");
+	const isDjangoProject =
+		fileNames.has("manage.py") ||
+		fileNames.has("manage_server.py") ||
+		Array.from(fileNames).some((f) => f.endsWith("/manage.py") || f.endsWith("/manage_server.py") || f.endsWith("wsgi.py"));
+	const isPythonProject =
+		isDjangoProject ||
+		fileNames.has("requirements.txt") ||
+		fileNames.has("pyproject.toml") ||
+		fileNames.has("pipfile") ||
+		fileNames.has("poetry.lock") ||
+		fileNames.has("uv.lock") ||
+		fileNames.has("app.py") ||
+		fileNames.has("main.py");
 	const isGoProject = fileNames.has("go.mod");
 	const isRustProject = fileNames.has("cargo.toml");
 	const isJavaProject = fileNames.has("pom.xml") || fileNames.has("build.gradle") || fileNames.has("build.gradle.kts") || fileNames.has("gradlew");
@@ -883,7 +895,21 @@ export const resolvePackageManagerAndCommands = (params: {
 	let selectedPm: SupportedPackageManager = "npm";
 	let selectedLockfile: string | undefined;
 
-	if (explicitPm) {
+	if (isDjangoProject || (isPythonProject && (!hasJsManifest || (!hasNpmLock && !hasPnpmLock && !hasYarnLock && !hasBunLock)))) {
+		if (fileNames.has("uv.lock")) {
+			selectedPm = "uv";
+			selectedLockfile = "uv.lock";
+		} else if (fileNames.has("poetry.lock")) {
+			selectedPm = "poetry";
+			selectedLockfile = "poetry.lock";
+		} else if (fileNames.has("pipfile.lock") || fileNames.has("pipfile")) {
+			selectedPm = "pipenv";
+			selectedLockfile = fileNames.has("pipfile.lock") ? "pipfile.lock" : "pipfile";
+		} else {
+			selectedPm = "pip";
+			selectedLockfile = fileNames.has("requirements.txt") ? "requirements.txt" : undefined;
+		}
+	} else if (explicitPm) {
 		selectedPm = explicitPm;
 		if (explicitPm === "pnpm" && hasPnpmLock)
 			selectedLockfile = "pnpm-lock.yaml";
@@ -969,7 +995,7 @@ export const resolvePackageManagerAndCommands = (params: {
 			? "npm ci --include=dev --include=optional"
 			: "npm install --include=dev --include=optional";
 	} else if (selectedPm === "uv") {
-		installCommand = "uv sync";
+		installCommand = fileNames.has("uv.lock") ? "uv sync --frozen" : "uv sync";
 	} else if (selectedPm === "poetry") {
 		installCommand = "poetry install --no-interaction";
 	} else if (selectedPm === "pipenv") {
@@ -1127,10 +1153,46 @@ export const resolvePackageManagerAndCommands = (params: {
 		startCommandSource = "package.json scripts.preview";
 	}
 
+	if (isDjangoProject && !startCommand) {
+		let wsgiModule = "";
+		for (const name of fileNames) {
+			if (name.toLowerCase().endsWith("wsgi.py")) {
+				const parts = name.split("/");
+				if (parts.length >= 2) {
+					wsgiModule = `${parts[parts.length - 2]}.wsgi`;
+					break;
+				} else {
+					wsgiModule = "wsgi";
+					break;
+				}
+			}
+		}
+		if (!wsgiModule) {
+			for (const name of fileNames) {
+				if (name.toLowerCase().endsWith("settings.py") || name.toLowerCase().endsWith("settings_server.py")) {
+					const parts = name.split("/");
+					if (parts.length >= 2) {
+						wsgiModule = `${parts[parts.length - 2]}.wsgi`;
+						break;
+					}
+				}
+			}
+		}
+		if (!wsgiModule) {
+			wsgiModule = "wsgi";
+		}
+		const targetEntry = wsgiModule.endsWith(":application") ? wsgiModule : `${wsgiModule}:application`;
+		startCommand =
+			selectedPm === "uv"
+				? `uv run gunicorn ${targetEntry} --bind 0.0.0.0:8000 --workers 2`
+				: `gunicorn ${targetEntry} --bind 0.0.0.0:8000 --workers 2`;
+		startCommandSource = "Django production Gunicorn server";
+	}
+
 	let missingStartCommandDiagnostic:
 		| PackageManagerResolution["missingStartCommandDiagnostic"]
 		| undefined;
-	if (!startCommand) {
+	if (!startCommand && !isPythonProject) {
 		const availableScripts = Object.keys(scripts);
 		if (isFrontendSpa) {
 			missingStartCommandDiagnostic = {

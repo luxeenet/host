@@ -73,9 +73,9 @@ export default function ResourceUsagePage() {
 		setIsRefreshing(true);
 		try {
 			await refetch();
-			toast.success("Resource telemetry refreshed");
+			toast.success("Resource usage refreshed");
 		} catch (err: any) {
-			toast.error(err?.message || "Failed to refresh telemetry");
+			toast.error(err?.message || "Failed to refresh resource usage");
 		} finally {
 			setIsRefreshing(false);
 		}
@@ -115,7 +115,7 @@ export default function ResourceUsagePage() {
 							)}
 						</div>
 						<p className="text-slate-400 text-sm mt-1">
-							Live tenant resource telemetry, quota consumption, and effective subscription limits.
+							Live resource usage, quota tracking, and subscription limits.
 						</p>
 					</div>
 
@@ -198,10 +198,10 @@ export default function ResourceUsagePage() {
 					<div className="p-8 rounded-xl bg-red-950/20 border border-red-500/20 text-center space-y-3">
 						<AlertTriangle className="w-8 h-8 text-red-400 mx-auto" />
 						<h3 className="text-sm font-semibold text-white">
-							Unable to Load Resource Telemetry
+							Unable to Load Resource Usage
 						</h3>
 						<p className="text-xs text-slate-400 max-w-md mx-auto">
-							{error?.message || "An unexpected error occurred while querying organization metrics."}
+							{error?.message || "An unexpected error occurred while loading resource metrics."}
 						</p>
 						<Button
 							size="sm"
@@ -221,7 +221,7 @@ export default function ResourceUsagePage() {
 						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
 							<div className="flex items-center justify-between">
 								<span className="text-xs font-semibold text-slate-300">
-									RAM Quota Usage
+									RAM Usage
 								</span>
 								<div className="w-8 h-8 rounded-lg bg-indigo-950/80 border border-indigo-500/20 flex items-center justify-center">
 									<Activity className="w-4 h-4 text-indigo-400" />
@@ -241,7 +241,7 @@ export default function ResourceUsagePage() {
 								<div className="flex items-center justify-between mt-1 text-[11px]">
 									<span className={`font-semibold flex items-center gap-1 ${ramColors.text}`}>
 										<TrendingUp className="w-3 h-3" />
-										{usage.ram.percentage}% Plan Capacity
+										{usage.ram.percentage}% Used
 									</span>
 									<span className="text-slate-400 font-medium">
 										{usage.ram.formattedRemaining} remaining
@@ -258,7 +258,7 @@ export default function ResourceUsagePage() {
 
 							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
 								<ShieldCheck className="w-3 h-3 text-emerald-500/80 shrink-0" />
-								{usage.ram.statusLabel || "Strictly measured for your workloads; host physical RAM is never exposed."}
+								{usage.ram.statusLabel || "Memory used by your active applications."}
 							</p>
 						</div>
 
@@ -266,7 +266,7 @@ export default function ResourceUsagePage() {
 						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
 							<div className="flex items-center justify-between">
 								<span className="text-xs font-semibold text-slate-300">
-									CPU Quota Allocation
+									CPU Usage
 								</span>
 								<div className="w-8 h-8 rounded-lg bg-blue-950/80 border border-blue-500/20 flex items-center justify-center">
 									<Cpu className="w-4 h-4 text-blue-400" />
@@ -311,7 +311,7 @@ export default function ResourceUsagePage() {
 						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
 							<div className="flex items-center justify-between">
 								<span className="text-xs font-semibold text-slate-300">
-									Volume & Database Storage
+									Storage Usage
 								</span>
 								<div className="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-500/20 flex items-center justify-center">
 									<HardDrive className="w-4 h-4 text-purple-400" />
@@ -324,14 +324,14 @@ export default function ResourceUsagePage() {
 										{usage.storage.formattedUsed}
 									</h3>
 									<span className="text-xs font-medium text-slate-400">
-										/ {usage.storage.formattedLimit} Quota
+										/ {usage.storage.formattedLimit}
 									</span>
 								</div>
 
 								<div className="flex items-center justify-between mt-1 text-[11px]">
 									<span className={`font-semibold flex items-center gap-1 ${storageColors.text}`}>
 										<TrendingUp className="w-3 h-3" />
-										{usage.storage.percentage}% Allocated
+										{usage.storage.percentage}% Used
 									</span>
 									<span className="text-slate-400 font-medium">
 										{usage.storage.formattedRemaining} remaining
@@ -348,7 +348,7 @@ export default function ResourceUsagePage() {
 
 							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
 								<CheckCircle className="w-3 h-3 text-purple-400/80 shrink-0" />
-								{usage.storage.statusLabel || "Persistent volume footprints and backups for this tenant."}
+								{usage.storage.statusLabel || "Storage used by your files, applications, and backups."}
 							</p>
 						</div>
 
@@ -356,7 +356,7 @@ export default function ResourceUsagePage() {
 						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
 							<div className="flex items-center justify-between">
 								<span className="text-xs font-semibold text-slate-300">
-									Monthly Egress Bandwidth
+									Bandwidth Usage
 								</span>
 								<div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-500/20 flex items-center justify-center">
 									<Globe className="w-4 h-4 text-cyan-400" />
@@ -494,10 +494,10 @@ export default function ResourceUsagePage() {
 					<div className="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 						<div>
 							<h3 className="text-base font-semibold text-white">
-								Tenant Workload Breakdown
+								Application & Database Usage
 							</h3>
 							<p className="text-xs text-slate-400 mt-0.5">
-								Attributed resource telemetry measured strictly for your organization's active services.
+								Resource metrics for your active applications and services.
 							</p>
 						</div>
 
@@ -519,7 +519,7 @@ export default function ResourceUsagePage() {
 										<th className="px-6 py-3.5 font-medium">Measured RAM</th>
 										<th className="px-6 py-3.5 font-medium">CPU Load</th>
 										<th className="px-6 py-3.5 font-medium">Bandwidth</th>
-										<th className="px-6 py-3.5 font-medium">Telemetry</th>
+										<th className="px-6 py-3.5 font-medium">Status</th>
 										<th className="px-6 py-3.5 font-medium text-right">Status</th>
 									</tr>
 								</thead>
@@ -588,37 +588,37 @@ export default function ResourceUsagePage() {
 												{w.telemetryStatus === "measured" ? (
 													<span
 														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-														title={w.telemetryReason || "Live container metrics"}
+														title={w.telemetryReason || "Active"}
 													>
-														Measured
+														Active
 													</span>
 												) : w.telemetryStatus === "collecting" ? (
 													<span
 														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"
-														title={w.telemetryReason || "Initial metrics pending"}
+														title={w.telemetryReason || "Starting up"}
 													>
-														Collecting
+														Starting
 													</span>
 												) : w.telemetryStatus === "stale" ? (
 													<span
 														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
-														title={w.telemetryReason || "Telemetry older than 2m"}
+														title={w.telemetryReason || "Updating"}
 													>
-														Stale
+														Updating
 													</span>
 												) : w.telemetryStatus === "zero" ? (
 													<span
 														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"
-														title={w.telemetryReason || "Verified zero consumption"}
+														title={w.telemetryReason || "Idle"}
 													>
-														Zero Usage
+														Idle
 													</span>
 												) : (
 													<span
 														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700"
-														title={w.telemetryReason || "Telemetry unavailable"}
+														title={w.telemetryReason || "Offline"}
 													>
-														Unavailable
+														Offline
 													</span>
 												)}
 											</td>
@@ -646,10 +646,10 @@ export default function ResourceUsagePage() {
 						<div className="p-12 text-center space-y-3">
 							<Box className="w-10 h-10 text-slate-600 mx-auto" />
 							<h4 className="text-sm font-semibold text-white">
-								No Deployed Workloads Found
+								No Deployed Applications Found
 							</h4>
 							<p className="text-xs text-slate-400 max-w-sm mx-auto">
-								Deploy an application or create a service in this workspace to see live resource telemetry and meter consumption against your plan.
+								Deploy an application or database to view real-time resource usage and plan limits.
 							</p>
 							<div className="pt-2">
 								<Link href="/dashboard/home">
@@ -664,11 +664,11 @@ export default function ResourceUsagePage() {
 						</div>
 					)}
 
-					{/* Isolation Disclosure Footer */}
+					{/* Resource Tracking Footer */}
 					<div className="p-4 bg-slate-950/40 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
 						<span className="flex items-center gap-1.5">
 							<ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-							<strong>Strict Isolation:</strong> Physical server hardware capacity and other tenants' workloads are fully concealed and excluded from your dashboard.
+							<strong>Resource Tracking:</strong> Usage is calculated in real time based on your active services.
 						</span>
 						<span>
 							Units: MB / GB • Rounding: 1 decimal place

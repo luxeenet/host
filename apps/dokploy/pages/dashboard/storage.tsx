@@ -385,11 +385,11 @@ export default function StorageManagementPage() {
 								Storage Management
 							</h1>
 							<span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-								Isolated Storage
+								File Storage
 							</span>
 						</div>
 						<p className="text-slate-400 text-sm mt-1">
-							Browse, manage, upload, and organize persistent tenant files and authorized volumes.
+							Upload, manage, and organize your files.
 						</p>
 					</div>
 
@@ -427,7 +427,7 @@ export default function StorageManagementPage() {
 					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
 						<div className="flex items-center justify-between">
 							<span className="text-xs font-semibold text-slate-300">
-								Storage Quota Consumption
+								Storage Usage
 							</span>
 							<div className="w-8 h-8 rounded-lg bg-indigo-950/80 border border-indigo-500/20 flex items-center justify-center">
 								<HardDrive className="w-4 h-4 text-indigo-400" />
@@ -440,7 +440,7 @@ export default function StorageManagementPage() {
 									{overview?.quota?.formattedUsed || "0 MB"}
 								</h3>
 								<span className="text-xs font-medium text-slate-400">
-									/ {overview?.quota?.formattedLimit || "20 GB"} Quota
+									/ {overview?.quota?.formattedLimit || "20 GB"}
 								</span>
 							</div>
 
@@ -463,7 +463,7 @@ export default function StorageManagementPage() {
 
 						<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
 							<ShieldCheck className="w-3 h-3 text-emerald-500/80 shrink-0" />
-							Strictly measured for your workloads; host storage is fully concealed.
+							Your storage usage is updated automatically.
 						</p>
 					</div>
 
@@ -471,7 +471,7 @@ export default function StorageManagementPage() {
 					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
 						<div className="flex items-center justify-between">
 							<span className="text-xs font-semibold text-slate-300">
-								Customer File Inventory
+								Files & Folders
 							</span>
 							<div className="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-500/20 flex items-center justify-center">
 								<Layers className="w-4 h-4 text-purple-400" />
@@ -486,7 +486,7 @@ export default function StorageManagementPage() {
 								</div>
 							</div>
 							<div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-								<span className="text-[11px] text-slate-400 font-medium">Directories</span>
+								<span className="text-[11px] text-slate-400 font-medium">Folders</span>
 								<div className="text-xl font-bold text-white mt-1">
 									{overview?.stats?.folderCount ?? 0}
 								</div>
@@ -495,7 +495,7 @@ export default function StorageManagementPage() {
 
 						<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
 							<Clock className="w-3 h-3 text-purple-400 shrink-0" />
-							Live filesystem statistics updated on every operation.
+							Summary of your stored files and folders.
 						</p>
 					</div>
 
@@ -503,16 +503,16 @@ export default function StorageManagementPage() {
 					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
 						<div className="flex items-center justify-between">
 							<span className="text-xs font-semibold text-slate-300">
-								Storage Location
+								Storage
 							</span>
-							<span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-slate-800 text-slate-300 border border-slate-700">
-								{overview?.locations?.find((l) => l.id === activeLocationId)?.type || "file_storage"}
+							<span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+								{activeLocationId === "default" ? "File Storage" : "Attached Storage"}
 							</span>
 						</div>
 
 						<div>
 							<label className="text-[11px] text-slate-400 block mb-1.5 font-medium">
-								Select Target Storage Area
+								Choose Storage
 							</label>
 							<select
 								value={activeLocationId}
@@ -521,7 +521,7 @@ export default function StorageManagementPage() {
 							>
 								{(overview?.locations || []).map((loc) => (
 									<option key={loc.id} value={loc.id}>
-										{loc.name} {loc.formattedUsed ? `(${loc.formattedUsed})` : ""}
+										{loc.name === "Customer File Storage" ? "File Storage" : loc.name} {loc.formattedUsed ? `(${loc.formattedUsed})` : ""}
 									</option>
 								))}
 							</select>
@@ -530,8 +530,8 @@ export default function StorageManagementPage() {
 						<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
 							<Info className="w-3 h-3 text-cyan-400 shrink-0" />
 							{activeLocationId === "default"
-								? "Durable customer-managed file storage."
-								: "Tenant application persistent volume mount."}
+								? "Store and manage your files."
+								: "Files attached to your applications."}
 						</p>
 					</div>
 				</div>
@@ -746,7 +746,7 @@ export default function StorageManagementPage() {
 					{isDirLoading && !directoryData ? (
 						<div className="p-12 text-center text-slate-400 space-y-3">
 							<RefreshCw className="w-8 h-8 animate-spin mx-auto text-indigo-400" />
-							<p className="text-xs">Loading storage directory contents...</p>
+							<p className="text-xs">Loading files...</p>
 						</div>
 					) : directoryData?.entries && directoryData.entries.length > 0 ? (
 						viewMode === "list" ? (
@@ -978,7 +978,7 @@ export default function StorageManagementPage() {
 							<div>
 								<h4 className="text-base font-semibold text-white">This folder is empty</h4>
 								<p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-									Upload files or create subdirectories to organize datasets, assets, or persistent files.
+									Upload files or create folders to organize your assets and data.
 								</p>
 							</div>
 							<div className="flex items-center justify-center gap-2 pt-2">
@@ -1007,10 +1007,10 @@ export default function StorageManagementPage() {
 					<div className="p-4 bg-slate-950/40 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
 						<span className="flex items-center gap-1.5">
 							<ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-							<strong>Strict Isolation:</strong> All filesystem operations are securely bounded within your tenant quota.
+							<span>All uploads and changes are saved to your account.</span>
 						</span>
 						<span>
-							Max single upload: 100 MB • Auto-Quota Check
+							Maximum file size: 100 MB
 						</span>
 					</div>
 				</div>
@@ -1037,7 +1037,7 @@ export default function StorageManagementPage() {
 							/>
 						</div>
 						<p className="text-[11px] text-slate-500">
-							Target location: <span className="font-mono text-slate-300">{currentPath}</span>
+							Folder: <span className="font-mono text-slate-300">{currentPath}</span>
 						</p>
 					</div>
 					<DialogFooter>
@@ -1073,7 +1073,7 @@ export default function StorageManagementPage() {
 					<DialogHeader>
 						<DialogTitle className="text-base font-bold flex items-center gap-2">
 							<Upload className="w-4 h-4 text-indigo-400" />
-							Upload Files to Storage
+							Upload Files
 						</DialogTitle>
 					</DialogHeader>
 					<div className="space-y-4 py-2">
@@ -1085,7 +1085,7 @@ export default function StorageManagementPage() {
 							<Upload className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
 							<p className="text-xs font-semibold text-white">Click or drag files here to upload</p>
 							<p className="text-[11px] text-slate-500 mt-1">
-								Supports documents, images, archives, data files up to 100 MB each.
+								Upload documents, images, archives, or code files up to 100 MB each.
 							</p>
 							<input
 								ref={fileInputRef}
@@ -1115,7 +1115,7 @@ export default function StorageManagementPage() {
 						)}
 
 						<div className="p-3 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-between text-xs">
-							<span className="text-slate-400">Available Quota:</span>
+							<span className="text-slate-400">Available Storage:</span>
 							<span className="font-semibold text-white">
 								{overview?.quota?.formattedRemaining || "Unlimited"}
 							</span>
@@ -1213,7 +1213,7 @@ export default function StorageManagementPage() {
 					</DialogHeader>
 					<div className="space-y-4 py-2">
 						<div>
-							<label className="text-xs text-slate-400 block mb-1">Destination Folder Path</label>
+							<label className="text-xs text-slate-400 block mb-1">Destination Folder</label>
 							<Input
 								placeholder="e.g. / or /documents"
 								value={moveCopyTargetFolder}
@@ -1354,7 +1354,7 @@ export default function StorageManagementPage() {
 								</pre>
 								{previewFile?.truncated && (
 									<p className="text-[11px] text-amber-400">
-										Preview truncated at 1 MB. Download file for complete contents.
+										Showing first 1 MB. Download the file to view complete contents.
 									</p>
 								)}
 							</div>

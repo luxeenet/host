@@ -13,12 +13,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 	try {
 		const { session } = await validateRequest(req);
 		if (!session || !session.activeOrganizationId) {
-			return res.status(401).json({ message: "Unauthorized. Active session required." });
+			return res.status(401).json({ message: "Please sign in to access your files." });
 		}
 
 		const filePath = (req.query.path as string) || "";
 		if (!filePath) {
-			return res.status(400).json({ message: "Query parameter 'path' is required." });
+			return res.status(400).json({ message: "Please specify a file path." });
 		}
 
 		const storageRoot = CustomerStorageService.getTenantStorageRoot(
@@ -32,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 		const stat = fs.statSync(fullPath);
 		if (stat.isDirectory()) {
-			return res.status(400).json({ message: "Cannot download directory directly. Use folder archive." });
+			return res.status(400).json({ message: "Folders cannot be downloaded directly. Please download as an archive." });
 		}
 
 		const fileName = path.basename(fullPath);

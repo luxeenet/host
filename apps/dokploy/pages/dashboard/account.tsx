@@ -64,7 +64,7 @@ export default function AccountPage() {
 						</div>
 						<div>
 							<h3 className="text-base font-bold text-white">Profile Details</h3>
-							<p className="text-xs text-slate-400">Your personal customer account details.</p>
+							<p className="text-xs text-slate-400">Your personal account details.</p>
 						</div>
 					</div>
 

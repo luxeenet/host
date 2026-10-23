@@ -245,7 +245,7 @@ export const ShowHome = () => {
 								<div>
 									<div className="flex items-center gap-2">
 										<h2 className="text-sm font-semibold tracking-tight">
-											Subscription Quota & Usage
+											Plan & Resource Usage
 										</h2>
 										{usage?.planName && (
 											<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
@@ -254,7 +254,7 @@ export const ShowHome = () => {
 										)}
 									</div>
 									<p className="text-xs text-muted-foreground mt-0.5">
-										Real-time tenant resource consumption vs. plan capacity.
+										Track your real-time resource usage and plan limits.
 									</p>
 								</div>
 							</div>
@@ -279,7 +279,7 @@ export const ShowHome = () => {
 							<div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
 								<div className="p-3 rounded-lg border bg-muted/20 flex flex-col gap-1.5">
 									<div className="flex items-center justify-between text-xs text-muted-foreground">
-										<span>RAM Quota</span>
+										<span>RAM</span>
 										<span className="font-semibold text-foreground">{usage.ram.percentage}%</span>
 									</div>
 									<div className="text-base font-semibold tracking-tight tabular-nums">
@@ -299,7 +299,7 @@ export const ShowHome = () => {
 
 								<div className="p-3 rounded-lg border bg-muted/20 flex flex-col gap-1.5">
 									<div className="flex items-center justify-between text-xs text-muted-foreground">
-										<span>CPU Load</span>
+										<span>CPU</span>
 										<span className="font-semibold text-foreground">{usage.cpu.percentage}%</span>
 									</div>
 									<div className="text-base font-semibold tracking-tight tabular-nums">
@@ -319,7 +319,7 @@ export const ShowHome = () => {
 
 								<div className="p-3 rounded-lg border bg-muted/20 flex flex-col gap-1.5">
 									<div className="flex items-center justify-between text-xs text-muted-foreground">
-										<span>Application Slots</span>
+										<span>Applications</span>
 										<span className="font-semibold text-foreground">{usage.applications.percentage}%</span>
 									</div>
 									<div className="text-base font-semibold tracking-tight tabular-nums">
@@ -341,7 +341,7 @@ export const ShowHome = () => {
 
 								<div className="p-3 rounded-lg border bg-muted/20 flex flex-col gap-1.5">
 									<div className="flex items-center justify-between text-xs text-muted-foreground">
-										<span>Database Quota</span>
+										<span>Databases</span>
 										<span className="font-semibold text-foreground">{usage.databases.percentage}%</span>
 									</div>
 									<div className="text-base font-semibold tracking-tight tabular-nums">
@@ -363,7 +363,7 @@ export const ShowHome = () => {
 							</div>
 						) : (
 							<div className="text-xs text-muted-foreground flex items-center justify-between pt-1">
-								<span>Explore plan limits, remaining capacity, and real-time workload telemetry.</span>
+								<span>View your plan limits, remaining capacity, and active resource usage.</span>
 								<Link href="/dashboard/usage" className="text-indigo-400 hover:underline">
 									Open Usage Dashboard →
 								</Link>

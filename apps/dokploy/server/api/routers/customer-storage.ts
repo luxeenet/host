@@ -21,7 +21,7 @@ export const customerStorageRouter = createTRPCRouter({
 		if (!orgId) {
 			throw new TRPCError({
 				code: "UNAUTHORIZED",
-				message: "No active organization selected.",
+				message: "We could not load your account information. Please sign in again.",
 			});
 		}
 		return await CustomerStorageService.getStorageOverview(orgId);

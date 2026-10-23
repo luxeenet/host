@@ -360,11 +360,10 @@ export default function ManagedDatabasesPage() {
 							</div>
 							<div>
 								<h1 className="text-2xl font-bold text-white tracking-tight">
-									Database Management Platform
+									Databases
 								</h1>
 								<p className="text-slate-400 text-sm mt-0.5">
-									Enterprise multi-engine hosting: MongoDB, PostgreSQL, MySQL,
-									MariaDB, Redis, and LibSQL with native isolation.
+									Manage your MongoDB, PostgreSQL, MySQL, MariaDB, Redis, and LibSQL databases.
 								</p>
 							</div>
 						</div>
@@ -387,7 +386,7 @@ export default function ManagedDatabasesPage() {
 							onClick={handleOpenProvisionModal}
 							className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-medium text-xs px-4 h-9 rounded-lg shadow-lg shadow-indigo-600/20 gap-1.5"
 						>
-							<Plus className="w-4 h-4" /> Provision Database
+							<Plus className="w-4 h-4" /> New Database
 						</Button>
 					</div>
 				</div>
@@ -396,12 +395,12 @@ export default function ManagedDatabasesPage() {
 				<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4">
 						<div className="flex items-center justify-between text-slate-400 text-xs">
-							<span>Total Instances</span>
+							<span>Total Databases</span>
 							<Layers className="w-4 h-4 text-indigo-400" />
 						</div>
 						<p className="text-2xl font-bold text-white mt-2">{stats.total}</p>
 						<span className="text-[11px] text-slate-500 mt-1 block">
-							Dedicated customer databases
+							Active databases in your account
 						</span>
 					</div>
 
@@ -414,20 +413,20 @@ export default function ManagedDatabasesPage() {
 							{stats.running}
 						</p>
 						<span className="text-[11px] text-slate-500 mt-1 block">
-							Healthy & listening
+							Healthy & running
 						</span>
 					</div>
 
 					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4">
 						<div className="flex items-center justify-between text-slate-400 text-xs">
-							<span>Public Endpoints</span>
+							<span>External Access</span>
 							<Radio className="w-4 h-4 text-cyan-400" />
 						</div>
 						<p className="text-2xl font-bold text-white mt-2">
 							{stats.publicCount}
 						</p>
 						<span className="text-[11px] text-slate-500 mt-1 block">
-							Routed via db.hatdot.cloud
+							Available for external connections
 						</span>
 					</div>
 
@@ -488,7 +487,7 @@ export default function ManagedDatabasesPage() {
 					<div className="flex flex-col items-center justify-center p-16 rounded-xl border border-slate-800 bg-slate-900/30 text-center space-y-3">
 						<RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
 						<p className="text-sm text-slate-400">
-							Loading database instances...
+							Loading databases...
 						</p>
 					</div>
 				) : filteredDatabases.length === 0 ? (
@@ -498,7 +497,7 @@ export default function ManagedDatabasesPage() {
 						</div>
 						<div>
 							<h3 className="text-base font-semibold text-white">
-								No database instances found
+								No databases found
 							</h3>
 							<p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
 								{searchQuery || selectedEngineFilter !== "all"
@@ -510,7 +509,7 @@ export default function ManagedDatabasesPage() {
 							onClick={handleOpenProvisionModal}
 							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5 h-8 px-4"
 						>
-							<Plus className="w-3.5 h-3.5" /> Provision First Database
+							<Plus className="w-3.5 h-3.5" /> Create Database
 						</Button>
 					</div>
 				) : (
@@ -559,7 +558,7 @@ export default function ManagedDatabasesPage() {
 													) : db.status === "running" ? (
 														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30 flex items-center gap-1.5">
 															<span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-															PROVISIONING
+															STARTING
 														</span>
 													) : db.status === "error" ? (
 														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center gap-1.5">
@@ -736,7 +735,7 @@ export default function ManagedDatabasesPage() {
 								</span>
 							</DialogTitle>
 							<DialogDescription className="text-slate-400 text-xs">
-								Authenticated credentials and multi-tenant connection URIs.
+								Connection details and credentials for your database.
 								External connections are routed via db.hatdot.cloud with direct
 								connection support.
 							</DialogDescription>
@@ -760,11 +759,10 @@ export default function ManagedDatabasesPage() {
 					<DialogHeader>
 						<DialogTitle className="flex items-center gap-2">
 							<Plus className="w-5 h-5 text-indigo-400" />
-							<span>Provision Dedicated Database Instance</span>
+							<span>Create Database</span>
 						</DialogTitle>
 						<DialogDescription className="text-slate-400 text-xs">
-							Deploy an enterprise-grade isolated container with least-privilege
-							credentials and optional public connectivity.
+							Set up a database with secure credentials and optional external connection.
 						</DialogDescription>
 					</DialogHeader>
 

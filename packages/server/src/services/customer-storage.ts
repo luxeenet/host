@@ -572,7 +572,7 @@ export class CustomerStorageService {
 		const locations: StorageLocationInfo[] = [
 			{
 				id: "default",
-				name: "Customer File Storage",
+				name: "File Storage",
 				type: "file_storage",
 				isDefault: true,
 				usedBytes: fileStorageStats.totalBytes,
@@ -584,7 +584,7 @@ export class CustomerStorageService {
 			const volBytes = volumeSizeMap.get(tv.volumeName) || 0;
 			locations.push({
 				id: `vol_${tv.volumeName}`,
-				name: `${tv.serviceName} (${tv.volumeName})`,
+				name: `${tv.serviceName} Storage`,
 				type: "persistent_volume",
 				volumeName: tv.volumeName,
 				serviceName: tv.serviceName,
@@ -642,7 +642,7 @@ export class CustomerStorageService {
 		if (overview.quota.remainingBytes < incomingBytes) {
 			throw new TRPCError({
 				code: "FORBIDDEN",
-				message: `Storage quota exceeded. Required: ${formatStorageBytes(incomingBytes)}, Available: ${formatStorageBytes(overview.quota.remainingBytes)}. Please upgrade your plan or delete existing files.`,
+				message: `You have reached your storage limit. Required: ${formatStorageBytes(incomingBytes)}, Available: ${formatStorageBytes(overview.quota.remainingBytes)}. Please upgrade your plan or delete existing files.`,
 			});
 		}
 	}
@@ -682,7 +682,7 @@ export class CustomerStorageService {
 			if (!isAuthorized) {
 				throw new TRPCError({
 					code: "FORBIDDEN",
-					message: "Access denied to unauthorized volume.",
+					message: "The selected storage location is not accessible.",
 				});
 			}
 
@@ -747,7 +747,7 @@ export class CustomerStorageService {
 				console.error(`[CustomerStorageService] Error listing volume: ${err?.message}`);
 				throw new TRPCError({
 					code: "INTERNAL_SERVER_ERROR",
-					message: "Unable to inspect application volume contents.",
+					message: "Unable to load storage contents.",
 				});
 			}
 		}
@@ -880,7 +880,7 @@ export class CustomerStorageService {
 		if (locationId !== "default") {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: "Folder creation is currently supported on Customer File Storage.",
+				message: "Folder creation is supported in File Storage.",
 			});
 		}
 
@@ -967,7 +967,7 @@ export class CustomerStorageService {
 				executor,
 			);
 			if (!authorizedVols.some((v) => v.volumeName === volumeName)) {
-				throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized volume access." });
+				throw new TRPCError({ code: "FORBIDDEN", message: "The selected storage location is not accessible." });
 			}
 
 			const targetPath =
@@ -1030,7 +1030,7 @@ export class CustomerStorageService {
 				executor,
 			);
 			if (!authorizedVols.some((v) => v.volumeName === volumeName)) {
-				throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized volume access." });
+				throw new TRPCError({ code: "FORBIDDEN", message: "The selected storage location is not accessible." });
 			}
 
 			const { content, truncated } = await readVolumeFile(volumeName, input.filePath);
@@ -1126,7 +1126,7 @@ export class CustomerStorageService {
 		if (locationId !== "default") {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: "Renaming is currently supported on Customer File Storage.",
+				message: "Renaming is supported in File Storage.",
 			});
 		}
 
@@ -1188,7 +1188,7 @@ export class CustomerStorageService {
 		if (locationId !== "default") {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: "Move operations are supported on Customer File Storage.",
+				message: "Move operations are supported in File Storage.",
 			});
 		}
 
@@ -1246,7 +1246,7 @@ export class CustomerStorageService {
 		if (locationId !== "default") {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: "Copy operations are supported on Customer File Storage.",
+				message: "Copy operations are supported in File Storage.",
 			});
 		}
 
@@ -1328,7 +1328,7 @@ export class CustomerStorageService {
 				executor,
 			);
 			if (!authorizedVols.some((v) => v.volumeName === volumeName)) {
-				throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized volume access." });
+				throw new TRPCError({ code: "FORBIDDEN", message: "The selected storage location is not accessible." });
 			}
 
 			let deletedCount = 0;
@@ -1388,7 +1388,7 @@ export class CustomerStorageService {
 		if (locationId !== "default") {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: "Archive download is supported on Customer File Storage.",
+				message: "Archive download is supported in File Storage.",
 			});
 		}
 
@@ -1406,12 +1406,12 @@ export class CustomerStorageService {
 		if (stats.totalBytes > 100 * 1024 * 1024) {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: "Folder exceeds maximum downloadable archive limit of 100 MB.",
+				message: "Folder exceeds the 100 MB archive download limit.",
 			});
 		}
 
 		const folderName =
-			folderFullPath === path.resolve(storageRoot) ? "storage-root" : path.basename(folderFullPath);
+			folderFullPath === path.resolve(storageRoot) ? "storage" : path.basename(folderFullPath);
 
 		try {
 			const zip = new AdmZip();

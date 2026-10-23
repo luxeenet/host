@@ -357,7 +357,7 @@ describe("Customer Storage Management Feature", () => {
 			expect(overview.stats.fileCount).toBeGreaterThanOrEqual(1);
 			expect(overview.quota.usedBytes).toBeGreaterThan(0);
 			expect(overview.locations).toHaveLength(1);
-			expect(overview.locations[0]!.name).toBe("Customer File Storage");
+			expect(overview.locations[0]!.name).toBe("File Storage");
 		});
 
 		it("verifies formatStorageBytes helper output across units", () => {

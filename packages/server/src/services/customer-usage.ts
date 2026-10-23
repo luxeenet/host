@@ -241,18 +241,18 @@ async function resolveWorkloadTelemetry(
 	const effectiveAgeMs = effectiveTime ? Date.now() - new Date(effectiveTime).getTime() : Infinity;
 
 	let telemetryStatus: "measured" | "collecting" | "stale" | "unavailable" | "zero" = "collecting";
-	let telemetryReason = "Awaiting initial telemetry collection";
+	let telemetryReason = "Starting up";
 
 	if (hasStats) {
 		if (effectiveAgeMs > 300_000) {
 			telemetryStatus = "stale";
-			telemetryReason = "Telemetry sample is older than 5 minutes";
+			telemetryReason = "Updating";
 		} else if (measuredRamMb === 0 && measuredCpuPercent === 0) {
 			telemetryStatus = "zero";
-			telemetryReason = "Active workload with 0% utilization";
+			telemetryReason = "Idle";
 		} else {
 			telemetryStatus = "measured";
-			telemetryReason = "Live container telemetry";
+			telemetryReason = "Active";
 		}
 	}
 
@@ -689,7 +689,7 @@ export class CustomerUsageService {
 			ramTelemetryState = "collecting";
 			isRamAvailable = false;
 			formattedRamUsed = "Collecting...";
-			ramStatusLabel = "Telemetry Collecting";
+			ramStatusLabel = "Collecting Data";
 		} else if (anyWorkloadsRunning && anyLiveRamTelemetry) {
 			effectiveRamUsedMb = 0;
 			ramTelemetryState = "zero";
@@ -702,7 +702,7 @@ export class CustomerUsageService {
 			ramTelemetryState = "zero";
 			isRamAvailable = true;
 			formattedRamUsed = "0 MB";
-			ramStatusLabel = "No Active Workloads";
+			ramStatusLabel = "No Active Applications";
 		}
 
 		const ramRemainingMb =
@@ -756,7 +756,7 @@ export class CustomerUsageService {
 			cpuTelemetryState = "collecting";
 			isCpuAvailable = false;
 			formattedCpuUsed = "Collecting...";
-			cpuStatusLabel = "Telemetry Collecting";
+			cpuStatusLabel = "Collecting Data";
 		} else if (anyWorkloadsRunning && anyLiveCpuTelemetry) {
 			cpuTelemetryState = "zero";
 			isCpuAvailable = true;
@@ -928,7 +928,7 @@ export class CustomerUsageService {
 			bandwidthTelemetryState = "collecting";
 			isBandwidthAvailable = false;
 			formattedBandwidthUsed = "Collecting...";
-			bandwidthStatusLabel = "Telemetry Collecting";
+			bandwidthStatusLabel = "Collecting Data";
 		} else if (anyWorkloadsRunning && anyLiveNetworkTelemetry) {
 			bandwidthTelemetryState = "zero";
 			isBandwidthAvailable = true;
@@ -938,7 +938,7 @@ export class CustomerUsageService {
 			bandwidthTelemetryState = "zero";
 			isBandwidthAvailable = true;
 			formattedBandwidthUsed = "0.0 MB";
-			bandwidthStatusLabel = "No Active Traffic";
+			bandwidthStatusLabel = "Within Included Bandwidth";
 		}
 
 		return {
@@ -985,10 +985,10 @@ export class CustomerUsageService {
 				telemetryState: storageUsedBytes > 0 ? "measured" : "zero",
 				statusLabel:
 					storagePct >= 90
-						? "Quota Warning"
+						? "Near Storage Limit"
 						: storagePct >= 70
 							? "Moderate Usage"
-							: "Within Quota",
+							: "Normal Usage",
 			},
 			bandwidth: {
 				used: bandwidthUsedGb,

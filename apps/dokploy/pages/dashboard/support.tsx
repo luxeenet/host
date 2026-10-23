@@ -65,13 +65,13 @@ export default function SupportPage() {
 	return (
 		<>
 			<Head>
-				<title>Customer Support - {brand.APP_NAME}</title>
+				<title>Support - {brand.APP_NAME}</title>
 			</Head>
 			<div className="space-y-8">
 				{/* Page Header */}
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 					<div>
-						<h1 className="text-2xl font-bold text-white tracking-tight">Customer Support</h1>
+						<h1 className="text-2xl font-bold text-white tracking-tight">Support</h1>
 						<p className="text-slate-400 text-sm mt-1">
 							Need help with deployments, custom domains, or database configuration? Our team is here 24/7.
 						</p>

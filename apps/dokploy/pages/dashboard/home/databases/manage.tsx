@@ -166,29 +166,37 @@ export default function DatabaseManagePage() {
 		refetch: refetchDatabases,
 	} = api.databaseManager.listDatabases.useQuery(
 		{ databaseId, engine: databaseEngine },
-		{ enabled: Boolean(databaseId) },
+		{ enabled: Boolean(databaseId) && isPlatformAdmin },
 	);
 
 	const discoveredDatabases = useMemo(() => {
 		return databasesData?.databases || [];
 	}, [databasesData]);
 
-	// Auto-select preferred default database
+	// Auto-select preferred default database (customer assigned database by default)
 	useEffect(() => {
-		if (discoveredDatabases.length > 0 && !selectedDatabase) {
+		if (!selectedDatabase) {
+			const assigned =
+				(activeRecord?.databaseName as string) ||
+				(databaseEngine === "postgres"
+					? "postgres"
+					: databaseEngine === "mongo"
+						? ((activeRecord?.name as string) || (activeRecord?.appName as string) || "app")
+						: databaseEngine === "redis"
+							? "0"
+							: "main");
+
 			const preferred =
 				databasesData?.selectedDatabase ||
 				discoveredDatabases.find((d) => d.isConfiguredDatabase)?.name ||
 				discoveredDatabases.find((d) => d.isDefault)?.name ||
-				discoveredDatabases.find((d) => d.name === (activeRecord?.databaseName as string))?.name ||
-				discoveredDatabases.find((d) => !d.isInternal && !d.isSystemDatabase)?.name ||
-				discoveredDatabases[0]?.name ||
-				"";
+				assigned;
+
 			if (preferred) {
 				setSelectedDatabase(preferred);
 			}
 		}
-	}, [discoveredDatabases, databasesData, selectedDatabase, activeRecord]);
+	}, [discoveredDatabases, databasesData, selectedDatabase, activeRecord, databaseEngine]);
 
 	// Engine stats query
 	const {
@@ -1291,64 +1299,66 @@ export default function DatabaseManagePage() {
 							<div className="grid grid-cols-1 md:grid-cols-4 gap-5">
 								{/* Left: Logical Database & Collections / Tables List */}
 								<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4 space-y-3">
-									{/* Logical Database Selector */}
-									<div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/90 space-y-1.5">
-										<div className="flex items-center justify-between text-[11px]">
-											<span className="font-semibold uppercase tracking-wider flex items-center gap-1.5 text-slate-300">
-												<Database className="w-3.5 h-3.5 text-indigo-400" /> Logical DB
-											</span>
-											{isDatabasesLoading ? (
-												<RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
-											) : (
-												<span className="text-[10px] text-slate-500 font-mono">
-													{discoveredDatabases.length} found
+									{/* Logical Database Selector - Only for Platform Admins */}
+									{isPlatformAdmin && (
+										<div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/90 space-y-1.5">
+											<div className="flex items-center justify-between text-[11px]">
+												<span className="font-semibold uppercase tracking-wider flex items-center gap-1.5 text-slate-300">
+													<Database className="w-3.5 h-3.5 text-indigo-400" /> Logical DB
 												</span>
-											)}
-										</div>
-										<Select
-											value={selectedDatabase}
-											onValueChange={(val) => {
-												setSelectedDatabase(val);
-												setSelectedEntity("");
-												setCurrentPage(1);
-											}}
-										>
-											<SelectTrigger className="w-full bg-slate-900 border-slate-800 text-xs h-8 font-mono text-white">
-												<SelectValue placeholder="Select Database" />
-											</SelectTrigger>
-											<SelectContent className="bg-slate-900 border-slate-800 text-white">
-												{discoveredDatabases.map((db) => (
-													<SelectItem key={db.name} value={db.name} className="text-xs font-mono">
-														<div className="flex items-center justify-between gap-2 w-full">
-															<span>{db.name}</span>
-															<div className="flex items-center gap-1">
-																{db.isConfiguredDatabase && (
-																	<span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-sans font-medium">
-																		Assigned
-																	</span>
-																)}
-																{db.isDefault && !db.isConfiguredDatabase && (
-																	<span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-sans">
-																		Default
-																	</span>
-																)}
-																{(db.isSystemDatabase || db.isInternal) && (
-																	<span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-sans">
-																		System
-																	</span>
-																)}
-																{(db.uninitialized || db.empty) && (
-																	<span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-sans">
-																		Empty
-																	</span>
-																)}
+												{isDatabasesLoading ? (
+													<RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
+												) : (
+													<span className="text-[10px] text-slate-500 font-mono">
+														{discoveredDatabases.length} found
+													</span>
+												)}
+											</div>
+											<Select
+												value={selectedDatabase}
+												onValueChange={(val) => {
+													setSelectedDatabase(val);
+													setSelectedEntity("");
+													setCurrentPage(1);
+												}}
+											>
+												<SelectTrigger className="w-full bg-slate-900 border-slate-800 text-xs h-8 font-mono text-white">
+													<SelectValue placeholder="Select Database" />
+												</SelectTrigger>
+												<SelectContent className="bg-slate-900 border-slate-800 text-white">
+													{discoveredDatabases.map((db) => (
+														<SelectItem key={db.name} value={db.name} className="text-xs font-mono">
+															<div className="flex items-center justify-between gap-2 w-full">
+																<span>{db.name}</span>
+																<div className="flex items-center gap-1">
+																	{db.isConfiguredDatabase && (
+																		<span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-sans font-medium">
+																			Assigned
+																		</span>
+																	)}
+																	{db.isDefault && !db.isConfiguredDatabase && (
+																		<span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-sans">
+																			Default
+																		</span>
+																	)}
+																	{(db.isSystemDatabase || db.isInternal) && (
+																		<span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-sans">
+																			System
+																		</span>
+																	)}
+																	{(db.uninitialized || db.empty) && (
+																		<span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-sans">
+																			Empty
+																		</span>
+																	)}
+																</div>
 															</div>
-														</div>
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+										</div>
+									)}
 
 									<div className="flex items-center justify-between pt-1">
 										<h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">

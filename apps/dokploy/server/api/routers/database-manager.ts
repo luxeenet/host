@@ -51,6 +51,34 @@ const databaseManagementProcedure = protectedProcedure.use(
 	},
 );
 
+/**
+ * Scopes the target database for operations.
+ * Ordinary customers are restricted strictly to their assigned database instance.
+ * Platform administrators retain the ability to target discovered logical databases.
+ */
+export function resolveAuthorizedDatabase(
+	record: any,
+	engine: SupportedDatabaseType,
+	requestedDatabase?: string | null,
+	isPlatformAdmin?: boolean,
+): string {
+	const assignedName =
+		record.databaseName ||
+		(engine === "postgres"
+			? "postgres"
+			: engine === "mongo"
+				? (record.name || record.appName || "app")
+				: engine === "redis"
+					? "0"
+					: "main");
+
+	if (!isPlatformAdmin) {
+		return assignedName;
+	}
+
+	return requestedDatabase || assignedName;
+}
+
 export const databaseManagerRouter = createTRPCRouter({
 	/**
 	 * Returns aggregated database overview list for the active organization across all 6 engines.
@@ -272,7 +300,29 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.engine,
 				ctx.session.activeOrganizationId,
 			);
-			return await listDatabases(record, input.engine);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			if (isPlatformAdmin) {
+				return await listDatabases(record, input.engine);
+			}
+
+			const assignedName = resolveAuthorizedDatabase(
+				record,
+				input.engine,
+				undefined,
+				false,
+			);
+			return {
+				databases: [
+					{
+						name: assignedName,
+						sizeOnDisk: "0 MB",
+						isInternal: false,
+						isConfiguredDatabase: true,
+						isDefault: true,
+					},
+				],
+				selectedDatabase: assignedName,
+			};
 		}),
 
 	/**
@@ -293,19 +343,26 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.engine,
 				ctx.session.activeOrganizationId,
 			);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(
+				record,
+				input.engine,
+				input.database,
+				isPlatformAdmin,
+			);
 
 			if (input.engine === "mongo") {
-				return await mongoAdapter.getOverview(record, input.database);
+				return await mongoAdapter.getOverview(record, targetDb);
 			}
 			if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
 				input.engine === "mariadb"
 			) {
-				return await sqlAdapter.getOverview(record, input.engine, input.database);
+				return await sqlAdapter.getOverview(record, input.engine, targetDb);
 			}
 			if (input.engine === "redis") {
-				return await redisAdapter.getOverview(record, input.database);
+				return await redisAdapter.getOverview(record, targetDb);
 			}
 			if (input.engine === "libsql") {
 				return await libsqlAdapter.getOverview(record);
@@ -331,16 +388,23 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.engine,
 				ctx.session.activeOrganizationId,
 			);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(
+				record,
+				input.engine,
+				input.database,
+				isPlatformAdmin,
+			);
 
 			if (input.engine === "mongo") {
-				return await mongoAdapter.listCollections(record, input.database);
+				return await mongoAdapter.listCollections(record, targetDb);
 			}
 			if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
 				input.engine === "mariadb"
 			) {
-				return await sqlAdapter.listTables(record, input.engine, input.database);
+				return await sqlAdapter.listTables(record, input.engine, targetDb);
 			}
 			if (input.engine === "libsql") {
 				return await libsqlAdapter.listTables(record);
@@ -367,22 +431,29 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.engine,
 				ctx.session.activeOrganizationId,
 			);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(
+				record,
+				input.engine,
+				input.database,
+				isPlatformAdmin,
+			);
 
 			if (input.engine === "mongo") {
-				const indexes = await mongoAdapter.listIndexes(record, input.name, input.database);
-				return { tableName: input.name, database: input.database, columns: [], indexes };
+				const indexes = await mongoAdapter.listIndexes(record, input.name, targetDb);
+				return { tableName: input.name, database: targetDb, columns: [], indexes };
 			}
 			if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
 				input.engine === "mariadb"
 			) {
-				return await sqlAdapter.getTableSchema(record, input.engine, input.name, input.database);
+				return await sqlAdapter.getTableSchema(record, input.engine, input.name, targetDb);
 			}
 			if (input.engine === "libsql") {
 				return await libsqlAdapter.getTableSchema(record, input.name);
 			}
-			return { tableName: input.name, database: input.database, columns: [], indexes: [] };
+			return { tableName: input.name, database: targetDb, columns: [], indexes: [] };
 		}),
 
 	/**
@@ -410,6 +481,13 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.engine,
 				ctx.session.activeOrganizationId,
 			);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(
+				record,
+				input.engine,
+				input.database,
+				isPlatformAdmin,
+			);
 
 			let res: any;
 			if (input.engine === "mongo") {
@@ -418,7 +496,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					limit: input.limit,
 					filter: input.filter,
 					sort: input.sort,
-					database: input.database,
+					database: targetDb,
 				});
 			} else if (
 				input.engine === "postgres" ||
@@ -430,7 +508,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					limit: input.limit,
 					searchColumn: input.searchColumn,
 					searchValue: input.searchValue,
-					database: input.database,
+					database: targetDb,
 				});
 			} else if (input.engine === "libsql") {
 				res = await libsqlAdapter.queryRows(record, input.name, {
@@ -450,7 +528,7 @@ export const databaseManagerRouter = createTRPCRouter({
 				limit: res.limit ?? input.limit,
 				rows,
 				documents,
-				database: res.database || input.database,
+				database: res.database || targetDb,
 			};
 		}),
 
@@ -475,9 +553,11 @@ export const databaseManagerRouter = createTRPCRouter({
 				ctx.session.activeOrganizationId,
 			);
 
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, input.engine, input.database, isPlatformAdmin);
 			let res: any;
 			if (input.engine === "mongo") {
-				res = await mongoAdapter.insertDocument(record, input.name, input.data, input.database);
+				res = await mongoAdapter.insertDocument(record, input.name, input.data, targetDb);
 			} else if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
@@ -488,7 +568,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					input.engine,
 					input.name,
 					input.data,
-					input.database,
+					targetDb,
 				);
 			}
 
@@ -525,6 +605,8 @@ export const databaseManagerRouter = createTRPCRouter({
 				ctx.session.activeOrganizationId,
 			);
 
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, input.engine, input.database, isPlatformAdmin);
 			let res: any;
 			if (input.engine === "mongo") {
 				res = await mongoAdapter.updateDocument(
@@ -532,7 +614,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					input.name,
 					String(input.id),
 					input.data,
-					input.database,
+					targetDb,
 				);
 			} else if (
 				input.engine === "postgres" ||
@@ -545,7 +627,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					input.name,
 					{ column: input.primaryKeyColumn || "id", value: input.id },
 					input.data,
-					input.database,
+					targetDb,
 				);
 			}
 
@@ -581,13 +663,15 @@ export const databaseManagerRouter = createTRPCRouter({
 				ctx.session.activeOrganizationId,
 			);
 
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, input.engine, input.database, isPlatformAdmin);
 			let res: any;
 			if (input.engine === "mongo") {
 				res = await mongoAdapter.deleteDocument(
 					record,
 					input.name,
 					String(input.id),
-					input.database,
+					targetDb,
 				);
 			} else if (
 				input.engine === "postgres" ||
@@ -599,7 +683,7 @@ export const databaseManagerRouter = createTRPCRouter({
 					input.engine,
 					input.name,
 					{ column: input.primaryKeyColumn || "id", value: input.id },
-					input.database,
+					targetDb,
 				);
 			}
 
@@ -631,7 +715,9 @@ export const databaseManagerRouter = createTRPCRouter({
 				"mongo",
 				ctx.session.activeOrganizationId,
 			);
-			const res = await mongoAdapter.createCollection(record, input.name, input.database);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, "mongo", input.database, isPlatformAdmin);
+			const res = await mongoAdapter.createCollection(record, input.name, targetDb);
 			await audit(ctx, {
 				action: "create",
 				resourceType: "service",
@@ -659,7 +745,9 @@ export const databaseManagerRouter = createTRPCRouter({
 				"mongo",
 				ctx.session.activeOrganizationId,
 			);
-			const res = await mongoAdapter.dropCollection(record, input.name, input.database);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, "mongo", input.database, isPlatformAdmin);
+			const res = await mongoAdapter.dropCollection(record, input.name, targetDb);
 			await audit(ctx, {
 				action: "delete",
 				resourceType: "service",
@@ -711,12 +799,14 @@ export const databaseManagerRouter = createTRPCRouter({
 			}
 
 			let res: any;
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, input.engine, input.database, isPlatformAdmin);
 			if (
 				input.engine === "postgres" ||
 				input.engine === "mysql" ||
 				input.engine === "mariadb"
 			) {
-				res = await sqlAdapter.executeSql(record, input.engine, input.sql, input.database);
+				res = await sqlAdapter.executeSql(record, input.engine, input.sql, targetDb);
 			} else if (input.engine === "libsql") {
 				res = await libsqlAdapter.executeSql(record, input.sql);
 			}
@@ -751,12 +841,14 @@ export const databaseManagerRouter = createTRPCRouter({
 				"redis",
 				ctx.session.activeOrganizationId,
 			);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, "redis", input.database, isPlatformAdmin);
 			return await redisAdapter.scanKeys(
 				record,
 				input.pattern,
 				input.cursor,
 				input.count,
-				input.database,
+				targetDb,
 			);
 		}),
 
@@ -778,7 +870,9 @@ export const databaseManagerRouter = createTRPCRouter({
 				"redis",
 				ctx.session.activeOrganizationId,
 			);
-			return await redisAdapter.getKey(record, input.key, input.database);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, "redis", input.database, isPlatformAdmin);
+			return await redisAdapter.getKey(record, input.key, targetDb);
 		}),
 
 	/**
@@ -801,12 +895,14 @@ export const databaseManagerRouter = createTRPCRouter({
 				"redis",
 				ctx.session.activeOrganizationId,
 			);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, "redis", input.database, isPlatformAdmin);
 			const res = await redisAdapter.setKey(
 				record,
 				input.key,
 				input.value,
 				input.ttl,
-				input.database,
+				targetDb,
 			);
 			await audit(ctx, {
 				action: "create",
@@ -835,7 +931,9 @@ export const databaseManagerRouter = createTRPCRouter({
 				"redis",
 				ctx.session.activeOrganizationId,
 			);
-			const res = await redisAdapter.deleteKey(record, input.key, input.database);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, "redis", input.database, isPlatformAdmin);
+			const res = await redisAdapter.deleteKey(record, input.key, targetDb);
 			await audit(ctx, {
 				action: "delete",
 				resourceType: "service",
@@ -863,7 +961,9 @@ export const databaseManagerRouter = createTRPCRouter({
 				"redis",
 				ctx.session.activeOrganizationId,
 			);
-			const res = await redisAdapter.executeCommand(record, input.command, input.database);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, "redis", input.database, isPlatformAdmin);
+			const res = await redisAdapter.executeCommand(record, input.command, targetDb);
 			await audit(ctx, {
 				action: "run",
 				resourceType: "service",
@@ -891,8 +991,10 @@ export const databaseManagerRouter = createTRPCRouter({
 				input.engine,
 				ctx.session.activeOrganizationId,
 			);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, input.engine, input.database, isPlatformAdmin);
 			if (input.engine === "mongo") {
-				return await mongoAdapter.listUsers(record, input.database);
+				return await mongoAdapter.listUsers(record, targetDb);
 			}
 			return [];
 		}),
@@ -920,13 +1022,15 @@ export const databaseManagerRouter = createTRPCRouter({
 			);
 
 			let res: any;
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, input.engine, input.database, isPlatformAdmin);
 			if (input.engine === "mongo") {
 				res = await mongoAdapter.createUser(
 					record,
 					input.username,
 					input.password,
 					input.role,
-					input.database,
+					targetDb,
 				);
 			}
 
@@ -961,8 +1065,10 @@ export const databaseManagerRouter = createTRPCRouter({
 			);
 
 			let res: any;
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, input.engine, input.database, isPlatformAdmin);
 			if (input.engine === "mongo") {
-				res = await mongoAdapter.dropUser(record, input.username, input.database);
+				res = await mongoAdapter.dropUser(record, input.username, targetDb);
 			}
 
 			await audit(ctx, {
@@ -1033,7 +1139,9 @@ export const databaseManagerRouter = createTRPCRouter({
 				ctx.session.activeOrganizationId,
 			);
 
-			const result = await executeDatabaseImport(record, input);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const targetDb = resolveAuthorizedDatabase(record, input.engine, input.database, isPlatformAdmin);
+			const result = await executeDatabaseImport(record, { ...input, database: targetDb });
 
 			await audit(ctx, {
 				action: "create",

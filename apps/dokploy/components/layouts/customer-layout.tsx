@@ -6,6 +6,7 @@ import {
 	CreditCard,
 	Database,
 	Globe,
+	HardDrive,
 	HeadphonesIcon,
 	LayoutDashboard,
 	LogOut,
@@ -28,6 +29,7 @@ export const NAV_ITEMS = [
 	{ label: "Databases", icon: Database, href: "/dashboard/home/databases" },
 	{ label: "Domains", icon: Globe, href: "/dashboard/domains" },
 	{ label: "Usage", icon: Activity, href: "/dashboard/usage" },
+	{ label: "Storage", icon: HardDrive, href: "/dashboard/storage" },
 	{ label: "Billing", icon: CreditCard, href: "/dashboard/billing" },
 	{ label: "Support", icon: HeadphonesIcon, href: "/dashboard/support" },
 	{ label: "Account", icon: Settings, href: "/dashboard/account" },
@@ -46,6 +48,13 @@ export function isCustomerRouteActive(href: string, pathname: string): boolean {
 		return (
 			pathname === "/home/dashboard/usage" ||
 			pathname === "/dashboard/usage"
+		);
+	}
+
+	if (href === "/home/dashboard/storage" || href === "/dashboard/storage") {
+		return (
+			pathname === "/home/dashboard/storage" ||
+			pathname === "/dashboard/storage"
 		);
 	}
 

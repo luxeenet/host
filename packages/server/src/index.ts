@@ -19,6 +19,7 @@ export * from "./services/cdn";
 export * from "./services/cluster";
 export * from "./services/compose";
 export * from "./services/customer-usage";
+export * from "./services/customer-storage";
 export * from "./services/database-connection";
 export * from "./services/database-feature-gate";
 export * from "./services/database-import";

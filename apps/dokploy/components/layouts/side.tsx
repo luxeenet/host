@@ -197,6 +197,12 @@ export const MENU: Menu = {
 		},
 		{
 			isSingle: true,
+			title: "Storage",
+			url: "/dashboard/storage",
+			icon: HardDrive,
+		},
+		{
+			isSingle: true,
 			title: "Overview",
 			url: "/dashboard/overview",
 			icon: LayoutGrid,

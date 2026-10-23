@@ -7,15 +7,19 @@
  * CRITICAL ARCHITECTURAL CONSTRAINTS:
  * 1. Only workloads belonging strictly to the specified organization are ever measured or counted.
  * 2. Never exposes host-wide physical RAM, CPU cores, root filesystem disks, or other tenants' workloads.
- * 3. Never invents values: if a metric cannot be reliably measured, it is flagged as unavailable.
+ * 3. Never invents values: if a metric cannot be reliably measured, it is flagged as unavailable or collecting.
  * 4. Limits always come from trusted server-side plan definitions, never client parameters.
+ * 5. Accurate accounting: real container statistics, volume storage matching, and outbound egress.
  */
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, or } from "drizzle-orm";
 import { db } from "../db";
 import * as schema from "../db/schema";
-import { readLastValueStatsFile } from "../monitoring/utils";
+import { readLastValueStatsFile, recordAdvancedStats } from "../monitoring/utils";
 import { toMb } from "../monitoring/units";
 import { BackupStorageService } from "./backup-storage";
+import { docker } from "../constants";
+import { execAsync } from "../utils/process/execAsync";
+import { getVolumesSize } from "./docker-volume";
 
 export interface WorkloadTelemetry {
 	id: string;
@@ -25,10 +29,16 @@ export interface WorkloadTelemetry {
 	engine?: string;
 	projectName: string;
 	environmentName: string;
-	status: "running" | "idle" | "error";
+	status: "running" | "idle" | "error" | "stopped";
+	lifecycleStatus: "running" | "stopped" | "failed" | "pending";
+	telemetryStatus: "measured" | "collecting" | "stale" | "unavailable" | "zero";
+	telemetryReason?: string;
+	lastMeasuredAt?: string | null;
 	measuredRamMb: number;
 	measuredCpuPercent: number;
+	measuredCpuMcores?: number;
 	measuredNetworkMb: number;
+	measuredEgressMb?: number;
 	allocatedRamMb: number | null;
 	allocatedCpuMillicores: number | null;
 	hasLiveTelemetry: boolean;
@@ -44,6 +54,8 @@ export interface MetricGauge {
 	formattedRemaining: string;
 	isAvailable: boolean;
 	statusLabel: string;
+	telemetryState?: "measured" | "collecting" | "stale" | "unavailable" | "zero";
+	unavailabilityReason?: string;
 }
 
 export interface CustomerResourceUsageReport {
@@ -103,6 +115,161 @@ function parseCpuPercentToNumber(raw: unknown): number {
 	return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/**
+ * Resolves live container statistics with disk file fallback and freshness tracking.
+ */
+async function resolveWorkloadTelemetry(
+	appName: string,
+	rawStatus: string | null | undefined,
+	serviceType: "application" | "compose" | "database",
+	allocatedMemoryLimit?: string | null,
+): Promise<{
+	lifecycleStatus: "running" | "stopped" | "failed" | "pending";
+	status: "running" | "idle" | "error" | "stopped";
+	telemetryStatus: "measured" | "collecting" | "stale" | "unavailable" | "zero";
+	telemetryReason?: string;
+	lastMeasuredAt?: string | null;
+	measuredRamMb: number;
+	measuredCpuPercent: number;
+	measuredNetworkMb: number;
+	measuredEgressMb: number;
+	hasLiveTelemetry: boolean;
+}> {
+	const isDone = rawStatus === "done";
+	const isRunning = rawStatus === "running" || isDone;
+	const isError = rawStatus === "error";
+
+	const lifecycleStatus: "running" | "stopped" | "failed" | "pending" = isError
+		? "failed"
+		: isRunning
+			? "running"
+			: "stopped";
+
+	// Backward-compatible status ("running", "idle", "error")
+	const status: "running" | "idle" | "error" | "stopped" = isRunning
+		? "running"
+		: isError
+			? "error"
+			: "idle";
+
+	if (lifecycleStatus === "stopped") {
+		return {
+			lifecycleStatus: "stopped",
+			status: "idle",
+			telemetryStatus: "unavailable",
+			telemetryReason: "Workload is stopped",
+			lastMeasuredAt: null,
+			measuredRamMb: 0,
+			measuredCpuPercent: 0,
+			measuredNetworkMb: 0,
+			measuredEgressMb: 0,
+			hasLiveTelemetry: false,
+		};
+	}
+
+	if (lifecycleStatus === "failed") {
+		return {
+			lifecycleStatus: "failed",
+			status: "error",
+			telemetryStatus: "unavailable",
+			telemetryReason: "Workload has deployment error",
+			lastMeasuredAt: null,
+			measuredRamMb: 0,
+			measuredCpuPercent: 0,
+			measuredNetworkMb: 0,
+			measuredEgressMb: 0,
+			hasLiveTelemetry: false,
+		};
+	}
+
+	// 1. Check existing stats file first
+	let memStat: any = null;
+	let cpuStat: any = null;
+	let netStat: any = null;
+	try {
+		memStat = await readLastValueStatsFile(appName, "memory");
+		cpuStat = await readLastValueStatsFile(appName, "cpu");
+		netStat = await readLastValueStatsFile(appName, "network");
+	} catch {
+		// Handled safely
+	}
+
+	const sampleTime = memStat?.time || cpuStat?.time || netStat?.time;
+	const sampleAgeMs = sampleTime ? Date.now() - new Date(sampleTime).getTime() : Infinity;
+
+	// 2. If stats file is missing or older than 2 minutes, try live container sampling
+	if (!memStat || sampleAgeMs >= 120_000) {
+		try {
+			const filter = {
+				status: ["running"],
+				...(serviceType === "compose"
+					? { label: [`com.docker.compose.project=${appName}`] }
+					: { label: [`com.docker.swarm.service.name=${appName}`] }),
+			};
+
+			const containers = await docker.listContainers({
+				filters: JSON.stringify(filter),
+			});
+
+			const container = containers?.[0];
+			if (container?.Id) {
+				const { stdout } = await execAsync(
+					`docker stats ${container.Id} --no-stream --format '{"BlockIO":"{{.BlockIO}}","CPUPerc":"{{.CPUPerc}}","Container":"{{.Container}}","ID":"{{.ID}}","MemPerc":"{{.MemPerc}}","MemUsage":"{{.MemUsage}}","Name":"{{.Name}}","NetIO":"{{.NetIO}}"} '`,
+				);
+				if (stdout?.trim()) {
+					const stat = JSON.parse(stdout.trim());
+					await recordAdvancedStats(stat, appName, allocatedMemoryLimit);
+					memStat = await readLastValueStatsFile(appName, "memory");
+					cpuStat = await readLastValueStatsFile(appName, "cpu");
+					netStat = await readLastValueStatsFile(appName, "network");
+				}
+			}
+		} catch {
+			// Container sampling failure handled safely (e.g. test environment or swarm manager)
+		}
+	}
+
+	const hasStats = Boolean(memStat?.value || cpuStat?.value || netStat?.value);
+	const measuredRamMb = memStat?.value?.used ? parseMemoryStringToMb(memStat.value.used) : 0;
+	const measuredCpuPercent = cpuStat?.value ? parseCpuPercentToNumber(cpuStat.value) : 0;
+	const netInput = Number(netStat?.value?.inputMb ?? 0);
+	const netOutput = Number(netStat?.value?.outputMb ?? 0);
+	const measuredNetworkMb = Number((netInput + netOutput).toFixed(2));
+	const measuredEgressMb = Number(netOutput.toFixed(2));
+
+	const effectiveTime = memStat?.time || cpuStat?.time || netStat?.time;
+	const effectiveAgeMs = effectiveTime ? Date.now() - new Date(effectiveTime).getTime() : Infinity;
+
+	let telemetryStatus: "measured" | "collecting" | "stale" | "unavailable" | "zero" = "collecting";
+	let telemetryReason = "Awaiting initial telemetry collection";
+
+	if (hasStats) {
+		if (effectiveAgeMs > 300_000) {
+			telemetryStatus = "stale";
+			telemetryReason = "Telemetry sample is older than 5 minutes";
+		} else if (measuredRamMb === 0 && measuredCpuPercent === 0) {
+			telemetryStatus = "zero";
+			telemetryReason = "Active workload with 0% utilization";
+		} else {
+			telemetryStatus = "measured";
+			telemetryReason = "Live container telemetry";
+		}
+	}
+
+	return {
+		lifecycleStatus: "running",
+		status: "running",
+		telemetryStatus,
+		telemetryReason,
+		lastMeasuredAt: effectiveTime ? new Date(effectiveTime).toISOString() : null,
+		measuredRamMb,
+		measuredCpuPercent,
+		measuredNetworkMb,
+		measuredEgressMb,
+		hasLiveTelemetry: hasStats,
+	};
+}
+
 export class CustomerUsageService {
 	/**
 	 * Aggregates live tenant resource telemetry and matches it with the organization's effective plan limits.
@@ -144,7 +311,7 @@ export class CustomerUsageService {
 
 		const ramLimitMb = planResources["max_ram_mb"] ?? 2048; // Default 2 GB if unset
 		const cpuLimitMillicores = planResources["max_cpu_millicores"] ?? 2000; // Default 2 Cores
-		const storageLimitGb = planResources["max_storage_gb"] ?? 10; // Default 10 GB
+		const storageLimitGb = planResources["max_storage_gb"] ?? 20; // Default 20 GB
 		const bandwidthLimitGb = planResources["max_bandwidth_gb"] ?? 250; // Default 250 GB
 		const appLimit = planResources["max_applications"] ?? 5;
 		const dbLimit = planResources["max_databases"] ?? 3;
@@ -186,6 +353,9 @@ export class CustomerUsageService {
 		const workloads: WorkloadTelemetry[] = [];
 		let totalAppsCount = 0;
 		let totalDbsCount = 0;
+		const allDbRecords: { id: string; engine: string }[] = [];
+		let appRows: any[] = [];
+		let compRows: any[] = [];
 
 		if (orgProjects.length > 0) {
 			const projectIds = orgProjects.map((p) => p.projectId);
@@ -238,7 +408,6 @@ export class CustomerUsageService {
 				}
 
 				// Applications query (explicit non-sensitive columns only)
-				let appRows: any[] = [];
 				try {
 					if (typeof executor.select === "function") {
 						appRows = await executor
@@ -281,29 +450,13 @@ export class CustomerUsageService {
 						? Math.ceil(Number(app.cpuLimit) / 1_000_000)
 						: null;
 
-					let memStat: any = null;
-					let cpuStat: any = null;
-					let netStat: any = null;
-					try {
-						memStat = await readLastValueStatsFile(appName, "memory");
-						cpuStat = await readLastValueStatsFile(appName, "cpu");
-						netStat = await readLastValueStatsFile(appName, "network");
-					} catch {
-						// Docker telemetry failure is handled safely
-					}
+					const telemetry = await resolveWorkloadTelemetry(
+						appName,
+						app.applicationStatus,
+						"application",
+						app.memoryLimit,
+					);
 
-					const measuredRamMb = memStat?.value?.used
-						? parseMemoryStringToMb(memStat.value.used)
-						: 0;
-					const measuredCpuPercent = cpuStat?.value
-						? parseCpuPercentToNumber(cpuStat.value)
-						: 0;
-					const netInput = Number(netStat?.value?.inputMb ?? 0);
-					const netOutput = Number(netStat?.value?.outputMb ?? 0);
-					const measuredNetworkMb = Number((netInput + netOutput).toFixed(2));
-
-					const isRunning = app.applicationStatus === "done";
-					const isError = app.applicationStatus === "error";
 					const envInfo = envMap.get(app.environmentId) || {
 						name: "production",
 						projectName: "Default Project",
@@ -316,18 +469,23 @@ export class CustomerUsageService {
 						serviceType: "application",
 						projectName: envInfo.projectName,
 						environmentName: envInfo.name,
-						status: isRunning ? "running" : isError ? "error" : "idle",
-						measuredRamMb,
-						measuredCpuPercent,
-						measuredNetworkMb,
+						status: telemetry.status,
+						lifecycleStatus: telemetry.lifecycleStatus,
+						telemetryStatus: telemetry.telemetryStatus,
+						telemetryReason: telemetry.telemetryReason,
+						lastMeasuredAt: telemetry.lastMeasuredAt,
+						measuredRamMb: telemetry.measuredRamMb,
+						measuredCpuPercent: telemetry.measuredCpuPercent,
+						measuredCpuMcores: Math.round(telemetry.measuredCpuPercent * 10),
+						measuredNetworkMb: telemetry.measuredNetworkMb,
+						measuredEgressMb: telemetry.measuredEgressMb,
 						allocatedRamMb,
 						allocatedCpuMillicores,
-						hasLiveTelemetry: Boolean(memStat || cpuStat),
+						hasLiveTelemetry: telemetry.hasLiveTelemetry,
 					});
 				}
 
 				// Docker Compose Workloads (explicit non-sensitive columns only)
-				let compRows: any[] = [];
 				try {
 					if (typeof executor.select === "function") {
 						compRows = await executor
@@ -360,29 +518,12 @@ export class CustomerUsageService {
 					totalAppsCount++;
 					const appName = comp.appName || comp.name;
 
-					let memStat: any = null;
-					let cpuStat: any = null;
-					let netStat: any = null;
-					try {
-						memStat = await readLastValueStatsFile(appName, "memory");
-						cpuStat = await readLastValueStatsFile(appName, "cpu");
-						netStat = await readLastValueStatsFile(appName, "network");
-					} catch {
-						// Docker telemetry failure is handled safely
-					}
+					const telemetry = await resolveWorkloadTelemetry(
+						appName,
+						comp.composeStatus,
+						"compose",
+					);
 
-					const measuredRamMb = memStat?.value?.used
-						? parseMemoryStringToMb(memStat.value.used)
-						: 0;
-					const measuredCpuPercent = cpuStat?.value
-						? parseCpuPercentToNumber(cpuStat.value)
-						: 0;
-					const netInput = Number(netStat?.value?.inputMb ?? 0);
-					const netOutput = Number(netStat?.value?.outputMb ?? 0);
-					const measuredNetworkMb = Number((netInput + netOutput).toFixed(2));
-
-					const isRunning = comp.composeStatus === "done";
-					const isError = comp.composeStatus === "error";
 					const envInfo = envMap.get(comp.environmentId) || {
 						name: "production",
 						projectName: "Default Project",
@@ -395,13 +536,19 @@ export class CustomerUsageService {
 						serviceType: "compose",
 						projectName: envInfo.projectName,
 						environmentName: envInfo.name,
-						status: isRunning ? "running" : isError ? "error" : "idle",
-						measuredRamMb,
-						measuredCpuPercent,
-						measuredNetworkMb,
+						status: telemetry.status,
+						lifecycleStatus: telemetry.lifecycleStatus,
+						telemetryStatus: telemetry.telemetryStatus,
+						telemetryReason: telemetry.telemetryReason,
+						lastMeasuredAt: telemetry.lastMeasuredAt,
+						measuredRamMb: telemetry.measuredRamMb,
+						measuredCpuPercent: telemetry.measuredCpuPercent,
+						measuredCpuMcores: Math.round(telemetry.measuredCpuPercent * 10),
+						measuredNetworkMb: telemetry.measuredNetworkMb,
+						measuredEgressMb: telemetry.measuredEgressMb,
 						allocatedRamMb: null,
 						allocatedCpuMillicores: null,
-						hasLiveTelemetry: Boolean(memStat || cpuStat),
+						hasLiveTelemetry: telemetry.hasLiveTelemetry,
 					});
 				}
 
@@ -456,6 +603,8 @@ export class CustomerUsageService {
 
 					for (const dbRecord of dbRows || []) {
 						totalDbsCount++;
+						const recordId = dbRecord.id || dbRecord[cfg.idKey];
+						allDbRecords.push({ id: recordId, engine: cfg.engine });
 						const appName = dbRecord.appName || dbRecord.name;
 						const allocatedRamMb = dbRecord.memoryLimit
 							? Math.ceil(Number(dbRecord.memoryLimit) / (1024 * 1024))
@@ -464,49 +613,39 @@ export class CustomerUsageService {
 							? Math.ceil(Number(dbRecord.cpuLimit) / 1_000_000)
 							: null;
 
-						let memStat: any = null;
-						let cpuStat: any = null;
-						let netStat: any = null;
-						try {
-							memStat = await readLastValueStatsFile(appName, "memory");
-							cpuStat = await readLastValueStatsFile(appName, "cpu");
-							netStat = await readLastValueStatsFile(appName, "network");
-						} catch {
-							// Docker telemetry failure is handled safely
-						}
+						const telemetry = await resolveWorkloadTelemetry(
+							appName,
+							dbRecord.applicationStatus,
+							"database",
+							dbRecord.memoryLimit,
+						);
 
-						const measuredRamMb = memStat?.value?.used
-							? parseMemoryStringToMb(memStat.value.used)
-							: 0;
-						const measuredCpuPercent = cpuStat?.value
-							? parseCpuPercentToNumber(cpuStat.value)
-							: 0;
-						const netInput = Number(netStat?.value?.inputMb ?? 0);
-						const netOutput = Number(netStat?.value?.outputMb ?? 0);
-						const measuredNetworkMb = Number((netInput + netOutput).toFixed(2));
-
-						const isRunning = dbRecord.applicationStatus === "done";
-						const isError = dbRecord.applicationStatus === "error";
 						const envInfo = envMap.get(dbRecord.environmentId) || {
 							name: "production",
 							projectName: "Default Project",
 						};
 
 						workloads.push({
-							id: dbRecord.id || dbRecord[cfg.idKey],
+							id: recordId,
 							name: dbRecord.name,
 							appName,
 							serviceType: "database",
 							engine: cfg.engine,
 							projectName: envInfo.projectName,
 							environmentName: envInfo.name,
-							status: isRunning ? "running" : isError ? "error" : "idle",
-							measuredRamMb,
-							measuredCpuPercent,
-							measuredNetworkMb,
+							status: telemetry.status,
+							lifecycleStatus: telemetry.lifecycleStatus,
+							telemetryStatus: telemetry.telemetryStatus,
+							telemetryReason: telemetry.telemetryReason,
+							lastMeasuredAt: telemetry.lastMeasuredAt,
+							measuredRamMb: telemetry.measuredRamMb,
+							measuredCpuPercent: telemetry.measuredCpuPercent,
+							measuredCpuMcores: Math.round(telemetry.measuredCpuPercent * 10),
+							measuredNetworkMb: telemetry.measuredNetworkMb,
+							measuredEgressMb: telemetry.measuredEgressMb,
 							allocatedRamMb,
 							allocatedCpuMillicores,
-							hasLiveTelemetry: Boolean(memStat || cpuStat),
+							hasLiveTelemetry: telemetry.hasLiveTelemetry,
 						});
 					}
 				}
@@ -515,18 +654,56 @@ export class CustomerUsageService {
 
 		// 3. Aggregate RAM
 		const totalMeasuredRamMb = workloads.reduce(
-			(acc, w) => acc + w.measuredRamMb,
+			(acc, w) => acc + (w.hasLiveTelemetry ? w.measuredRamMb : 0),
 			0,
 		);
-		// If workloads are running without telemetry yet, fall back to allocated reservation or 0
-		const totalAllocatedRamMb = workloads.reduce(
-			(acc, w) => acc + (w.allocatedRamMb ?? 0),
-			0,
+		const anyWorkloadsRunning = workloads.some(
+			(w) => w.lifecycleStatus === "running" || w.status === "running",
 		);
-		const effectiveRamUsedMb =
-			totalMeasuredRamMb > 0
-				? Number(totalMeasuredRamMb.toFixed(1))
-				: Math.min(totalAllocatedRamMb, ramLimitMb > 0 ? ramLimitMb : totalAllocatedRamMb);
+		const anyLiveRamTelemetry = workloads.some((w) => w.hasLiveTelemetry);
+
+		let effectiveRamUsedMb = 0;
+		let ramTelemetryState: "measured" | "collecting" | "zero" | "unavailable" = "zero";
+		let formattedRamUsed = "0 MB";
+		let isRamAvailable = true;
+		let ramStatusLabel = "Optimal Allocation";
+
+		if (totalMeasuredRamMb > 0) {
+			effectiveRamUsedMb = Number(totalMeasuredRamMb.toFixed(1));
+			ramTelemetryState = "measured";
+			isRamAvailable = true;
+			formattedRamUsed =
+				effectiveRamUsedMb >= 1024
+					? `${(effectiveRamUsedMb / 1024).toFixed(2)} GB`
+					: `${effectiveRamUsedMb.toFixed(1)} MB`;
+			const ramRatio = ramLimitMb > 0 ? effectiveRamUsedMb / ramLimitMb : 0;
+			ramStatusLabel =
+				ramRatio >= 0.9
+					? "Near Capacity"
+					: ramRatio >= 0.75
+						? "Elevated"
+						: "Normal Allocation";
+		} else if (anyWorkloadsRunning && !anyLiveRamTelemetry) {
+			// Workloads are active but initial telemetry sampling is pending
+			effectiveRamUsedMb = 0;
+			ramTelemetryState = "collecting";
+			isRamAvailable = false;
+			formattedRamUsed = "Collecting...";
+			ramStatusLabel = "Telemetry Collecting";
+		} else if (anyWorkloadsRunning && anyLiveRamTelemetry) {
+			effectiveRamUsedMb = 0;
+			ramTelemetryState = "zero";
+			isRamAvailable = true;
+			formattedRamUsed = "0.0 MB";
+			ramStatusLabel = "Optimal Allocation";
+		} else {
+			// No workloads deployed or all stopped
+			effectiveRamUsedMb = 0;
+			ramTelemetryState = "zero";
+			isRamAvailable = true;
+			formattedRamUsed = "0 MB";
+			ramStatusLabel = "No Active Workloads";
+		}
 
 		const ramRemainingMb =
 			ramLimitMb === -1 ? -1 : Math.max(0, Number((ramLimitMb - effectiveRamUsedMb).toFixed(1)));
@@ -535,11 +712,6 @@ export class CustomerUsageService {
 				? 0
 				: Math.min(100, Math.round((effectiveRamUsedMb / ramLimitMb) * 1000) / 10);
 
-		// Format strings for RAM
-		const formattedRamUsed =
-			effectiveRamUsedMb >= 1024
-				? `${(effectiveRamUsedMb / 1024).toFixed(2)} GB`
-				: `${Math.round(effectiveRamUsedMb)} MB`;
 		const formattedRamLimit =
 			ramLimitMb === -1
 				? "Unlimited"
@@ -554,11 +726,49 @@ export class CustomerUsageService {
 					: `${Math.round(ramRemainingMb)} MB`;
 
 		// 4. Aggregate CPU
-		// Sum millicores: 1% CPU on a core = 10 millicores
+		// 1% CPU utilization on a core = 10 millicores
 		const totalCpuMillicores = workloads.reduce(
-			(acc, w) => acc + Math.round(w.measuredCpuPercent * 10),
+			(acc, w) => acc + (w.hasLiveTelemetry ? Math.round(w.measuredCpuPercent * 10) : 0),
 			0,
 		);
+		const anyLiveCpuTelemetry = workloads.some((w) => w.hasLiveTelemetry);
+
+		let cpuTelemetryState: "measured" | "collecting" | "zero" | "unavailable" = "zero";
+		let formattedCpuUsed = "0 mCPU";
+		let isCpuAvailable = true;
+		let cpuStatusLabel = "Optimal Load";
+
+		if (totalCpuMillicores > 0) {
+			cpuTelemetryState = "measured";
+			isCpuAvailable = true;
+			formattedCpuUsed =
+				totalCpuMillicores >= 1000
+					? `${(totalCpuMillicores / 1000).toFixed(2)} Cores`
+					: `${totalCpuMillicores} mCPU`;
+			const cpuRatio = cpuLimitMillicores > 0 ? totalCpuMillicores / cpuLimitMillicores : 0;
+			cpuStatusLabel =
+				cpuRatio >= 0.9
+					? "High Load"
+					: cpuRatio >= 0.5
+						? "Moderate Load"
+						: "Optimal Load";
+		} else if (anyWorkloadsRunning && !anyLiveCpuTelemetry) {
+			cpuTelemetryState = "collecting";
+			isCpuAvailable = false;
+			formattedCpuUsed = "Collecting...";
+			cpuStatusLabel = "Telemetry Collecting";
+		} else if (anyWorkloadsRunning && anyLiveCpuTelemetry) {
+			cpuTelemetryState = "zero";
+			isCpuAvailable = true;
+			formattedCpuUsed = "0 mCPU";
+			cpuStatusLabel = "Optimal Load";
+		} else {
+			cpuTelemetryState = "zero";
+			isCpuAvailable = true;
+			formattedCpuUsed = "0 mCPU";
+			cpuStatusLabel = "Optimal Load";
+		}
+
 		const cpuRemainingMillicores =
 			cpuLimitMillicores === -1
 				? -1
@@ -571,10 +781,6 @@ export class CustomerUsageService {
 						Math.round((totalCpuMillicores / cpuLimitMillicores) * 1000) / 10,
 					);
 
-		const formattedCpuUsed =
-			totalCpuMillicores >= 1000
-				? `${(totalCpuMillicores / 1000).toFixed(2)} Cores`
-				: `${totalCpuMillicores} mCPU`;
 		const formattedCpuLimit =
 			cpuLimitMillicores === -1
 				? "Unlimited"
@@ -582,18 +788,83 @@ export class CustomerUsageService {
 					? `${(cpuLimitMillicores / 1000).toFixed(1)} Cores`
 					: `${cpuLimitMillicores} mCPU`;
 
-		// 5. Aggregate Storage
-		let storageUsedBytes = 0;
+		// 5. Aggregate Storage (Persistent Volumes + Database Storage + Backups)
+		let volumeStorageBytes = 0;
 		try {
-			storageUsedBytes =
+			const allAppIds = (appRows || []).map((a: any) => a.applicationId).filter(Boolean);
+			const allCompIds = (compRows || []).map((c: any) => c.composeId).filter(Boolean);
+			const allDbIds = (allDbRecords || []).map((d: any) => d.id).filter(Boolean);
+
+			const conditions: any[] = [];
+			if (allAppIds.length > 0) conditions.push(inArray(schema.mounts.applicationId, allAppIds));
+			if (allCompIds.length > 0) conditions.push(inArray(schema.mounts.composeId, allCompIds));
+			if (allDbIds.length > 0) {
+				conditions.push(inArray(schema.mounts.postgresId, allDbIds));
+				conditions.push(inArray(schema.mounts.mysqlId, allDbIds));
+				conditions.push(inArray(schema.mounts.mariadbId, allDbIds));
+				conditions.push(inArray(schema.mounts.mongoId, allDbIds));
+				conditions.push(inArray(schema.mounts.redisId, allDbIds));
+				conditions.push(inArray(schema.mounts.libsqlId, allDbIds));
+			}
+
+			if (conditions.length > 0) {
+				let tenantMounts: any[] = [];
+				if (typeof executor.select === "function") {
+					tenantMounts = await executor
+						.select({
+							volumeName: schema.mounts.volumeName,
+							type: schema.mounts.type,
+						})
+						.from(schema.mounts)
+						.where(or(...conditions));
+				} else if (executor?.query?.mounts?.findMany) {
+					tenantMounts = await executor.query.mounts.findMany({
+						where: or(...conditions),
+						columns: { volumeName: true, type: true },
+					});
+				}
+
+				const tenantVolumeNames = new Set(
+					(tenantMounts || [])
+						.filter((m: any) => m.type === "volume" && m.volumeName)
+						.map((m: any) => m.volumeName as string),
+				);
+
+				if (tenantVolumeNames.size > 0) {
+					const volumesSizeList = await getVolumesSize();
+					for (const v of volumesSizeList || []) {
+						if (v.name && tenantVolumeNames.has(v.name) && v.size) {
+							volumeStorageBytes += Math.round(toMb(v.size) * 1024 * 1024);
+						}
+					}
+				}
+			}
+		} catch (err: any) {
+			console.error("[CustomerUsageService] Error measuring volume storage:", err?.message);
+		}
+
+		let backupStorageBytes = 0;
+		try {
+			backupStorageBytes =
 				await BackupStorageService.getOrganizationBackupStorageUsage(
 					organizationId,
 					executor,
 				);
 		} catch {
-			storageUsedBytes = 0;
+			backupStorageBytes = 0;
 		}
 
+		let customerFileStorageBytes = 0;
+		try {
+			const { CustomerStorageService } = await import("./customer-storage");
+			customerFileStorageBytes =
+				await CustomerStorageService.getTenantStorageUsage(organizationId);
+		} catch {
+			customerFileStorageBytes = 0;
+		}
+
+		const storageUsedBytes =
+			customerFileStorageBytes + volumeStorageBytes + backupStorageBytes;
 		const storageLimitBytes =
 			storageLimitGb === -1 ? -1 : storageLimitGb * 1024 * 1024 * 1024;
 		const storageRemainingBytes =
@@ -610,9 +881,11 @@ export class CustomerUsageService {
 
 		const storageUsedGb = storageUsedBytes / (1024 * 1024 * 1024);
 		const formattedStorageUsed =
-			storageUsedGb >= 1
-				? `${storageUsedGb.toFixed(2)} GB`
-				: `${Math.round(storageUsedBytes / (1024 * 1024))} MB`;
+			storageUsedBytes === 0
+				? "0 MB"
+				: storageUsedGb >= 1
+					? `${storageUsedGb.toFixed(2)} GB`
+					: `${(storageUsedBytes / (1024 * 1024)).toFixed(1)} MB`;
 		const formattedStorageLimit =
 			storageLimitGb === -1 ? "Unlimited" : `${storageLimitGb} GB`;
 		const formattedStorageRemaining =
@@ -620,12 +893,14 @@ export class CustomerUsageService {
 				? "Unlimited"
 				: `${(Math.max(0, storageRemainingBytes) / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 
-		// 6. Aggregate Network Bandwidth
-		const totalNetworkMb = workloads.reduce(
-			(acc, w) => acc + w.measuredNetworkMb,
+		// 6. Aggregate Network Egress Bandwidth
+		const totalEgressMb = workloads.reduce(
+			(acc, w) => acc + (w.hasLiveTelemetry ? (w.measuredEgressMb ?? (w.measuredNetworkMb || 0)) : 0),
 			0,
 		);
-		const bandwidthUsedGb = Number((totalNetworkMb / 1024).toFixed(2));
+		const anyLiveNetworkTelemetry = workloads.some((w) => w.hasLiveTelemetry);
+
+		const bandwidthUsedGb = Number((totalEgressMb / 1024).toFixed(2));
 		const bandwidthRemainingGb =
 			bandwidthLimitGb === -1
 				? -1
@@ -635,7 +910,36 @@ export class CustomerUsageService {
 				? 0
 				: Math.min(100, Math.round((bandwidthUsedGb / bandwidthLimitGb) * 1000) / 10);
 
-		const hasNetworkTelemetry = workloads.some((w) => w.measuredNetworkMb > 0);
+		let bandwidthTelemetryState: "measured" | "collecting" | "zero" | "unavailable" = "zero";
+		let formattedBandwidthUsed = "0.0 MB";
+		let isBandwidthAvailable = true;
+		let bandwidthStatusLabel = "Within Included Bandwidth";
+
+		if (totalEgressMb > 0) {
+			bandwidthTelemetryState = "measured";
+			isBandwidthAvailable = true;
+			formattedBandwidthUsed =
+				bandwidthUsedGb >= 1 ? `${bandwidthUsedGb} GB` : `${totalEgressMb.toFixed(1)} MB`;
+			bandwidthStatusLabel =
+				(bandwidthUsedGb / bandwidthLimitGb) >= 0.9
+					? "Near Included Quota"
+					: "Normal Consumption";
+		} else if (anyWorkloadsRunning && !anyLiveNetworkTelemetry) {
+			bandwidthTelemetryState = "collecting";
+			isBandwidthAvailable = false;
+			formattedBandwidthUsed = "Collecting...";
+			bandwidthStatusLabel = "Telemetry Collecting";
+		} else if (anyWorkloadsRunning && anyLiveNetworkTelemetry) {
+			bandwidthTelemetryState = "zero";
+			isBandwidthAvailable = true;
+			formattedBandwidthUsed = "0.0 MB";
+			bandwidthStatusLabel = "Within Included Bandwidth";
+		} else {
+			bandwidthTelemetryState = "zero";
+			isBandwidthAvailable = true;
+			formattedBandwidthUsed = "0.0 MB";
+			bandwidthStatusLabel = "No Active Traffic";
+		}
 
 		return {
 			organizationId,
@@ -650,13 +954,9 @@ export class CustomerUsageService {
 				formattedUsed: formattedRamUsed,
 				formattedLimit: formattedRamLimit,
 				formattedRemaining: formattedRamRemaining,
-				isAvailable: true,
-				statusLabel:
-					ramPct >= 90
-						? "Near Capacity"
-						: ramPct >= 75
-							? "Elevated"
-							: "Normal Allocation",
+				isAvailable: isRamAvailable,
+				telemetryState: ramTelemetryState,
+				statusLabel: ramStatusLabel,
 			},
 			cpu: {
 				used: totalCpuMillicores,
@@ -669,13 +969,9 @@ export class CustomerUsageService {
 					cpuLimitMillicores === -1
 						? "Unlimited"
 						: `${cpuRemainingMillicores} mCPU`,
-				isAvailable: true,
-				statusLabel:
-					cpuPct >= 90
-						? "High Load"
-						: cpuPct >= 50
-							? "Moderate Load"
-							: "Optimal Load",
+				isAvailable: isCpuAvailable,
+				telemetryState: cpuTelemetryState,
+				statusLabel: cpuStatusLabel,
 			},
 			storage: {
 				used: storageUsedBytes,
@@ -686,6 +982,7 @@ export class CustomerUsageService {
 				formattedLimit: formattedStorageLimit,
 				formattedRemaining: formattedStorageRemaining,
 				isAvailable: true,
+				telemetryState: storageUsedBytes > 0 ? "measured" : "zero",
 				statusLabel:
 					storagePct >= 90
 						? "Quota Warning"
@@ -698,17 +995,14 @@ export class CustomerUsageService {
 				limit: bandwidthLimitGb,
 				remaining: bandwidthRemainingGb,
 				percentage: bandwidthPct,
-				formattedUsed: hasNetworkTelemetry
-					? `${bandwidthUsedGb} GB`
-					: "Collecting...",
+				formattedUsed: formattedBandwidthUsed,
 				formattedLimit:
 					bandwidthLimitGb === -1 ? "Unlimited" : `${bandwidthLimitGb} GB`,
 				formattedRemaining:
 					bandwidthLimitGb === -1 ? "Unlimited" : `${bandwidthRemainingGb} GB`,
-				isAvailable: hasNetworkTelemetry,
-				statusLabel: hasNetworkTelemetry
-					? "Normal Consumption"
-					: "Telemetry Collecting",
+				isAvailable: isBandwidthAvailable,
+				telemetryState: bandwidthTelemetryState,
+				statusLabel: bandwidthStatusLabel,
 			},
 			applications: {
 				used: totalAppsCount,

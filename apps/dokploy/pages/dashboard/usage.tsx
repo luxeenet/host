@@ -258,7 +258,7 @@ export default function ResourceUsagePage() {
 
 							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
 								<ShieldCheck className="w-3 h-3 text-emerald-500/80 shrink-0" />
-								Strictly measured for your workloads; host physical RAM is never exposed.
+								{usage.ram.statusLabel || "Strictly measured for your workloads; host physical RAM is never exposed."}
 							</p>
 						</div>
 
@@ -348,7 +348,7 @@ export default function ResourceUsagePage() {
 
 							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
 								<CheckCircle className="w-3 h-3 text-purple-400/80 shrink-0" />
-								Persistent volume footprints and backups for this tenant.
+								{usage.storage.statusLabel || "Persistent volume footprints and backups for this tenant."}
 							</p>
 						</div>
 
@@ -393,7 +393,7 @@ export default function ResourceUsagePage() {
 
 							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
 								<Globe className="w-3 h-3 text-cyan-400/80 shrink-0" />
-								Outbound HTTP and service egress for the active billing cycle.
+								{usage.bandwidth.statusLabel || "Outbound HTTP and service egress for the active billing cycle."}
 							</p>
 						</div>
 
@@ -546,44 +546,95 @@ export default function ResourceUsagePage() {
 												{w.projectName} / {w.environmentName}
 											</td>
 											<td className="px-6 py-4 font-mono font-medium text-indigo-300">
-												{w.measuredRamMb > 0
-													? `${w.measuredRamMb.toFixed(1)} MB`
-													: w.allocatedRamMb
-														? `${w.allocatedRamMb} MB (res)`
-														: "0 MB"}
+												{w.telemetryStatus === "collecting" ? (
+													<span className="text-amber-400">Collecting...</span>
+												) : w.telemetryStatus === "unavailable" ? (
+													<span className="text-slate-500">
+														{w.allocatedRamMb ? `${w.allocatedRamMb} MB (limit)` : "Unavailable"}
+													</span>
+												) : w.telemetryStatus === "zero" || w.measuredRamMb === 0 ? (
+													"0.0 MB"
+												) : w.telemetryStatus === "stale" ? (
+													<span>{`${w.measuredRamMb.toFixed(1)} MB (stale)`}</span>
+												) : (
+													`${w.measuredRamMb < 0.1 ? "<0.1" : w.measuredRamMb.toFixed(1)} MB`
+												)}
 											</td>
 											<td className="px-6 py-4 font-mono">
-												{w.measuredCpuPercent > 0
-													? `${w.measuredCpuPercent.toFixed(1)}%`
-													: "Idle"}
+												{w.telemetryStatus === "collecting" ? (
+													<span className="text-amber-400">Collecting...</span>
+												) : w.telemetryStatus === "unavailable" ? (
+													<span className="text-slate-500">Unavailable</span>
+												) : w.telemetryStatus === "zero" || (w.measuredCpuPercent === 0 && (!w.measuredCpuMcores || w.measuredCpuMcores === 0)) ? (
+													<span className="text-slate-400">0 mCPU (0.0%)</span>
+												) : w.telemetryStatus === "stale" ? (
+													<span>{`${(w.measuredCpuPercent * 10).toFixed(0)} mCPU (${w.measuredCpuPercent.toFixed(1)}% stale)`}</span>
+												) : (
+													`${(w.measuredCpuPercent * 10).toFixed(0)} mCPU (${w.measuredCpuPercent.toFixed(1)}%)`
+												)}
 											</td>
 											<td className="px-6 py-4 font-mono text-slate-300">
-												{w.measuredNetworkMb > 0
-													? `${w.measuredNetworkMb.toFixed(1)} MB`
-													: "0 MB"}
+												{w.telemetryStatus === "collecting" ? (
+													<span className="text-amber-400">Collecting...</span>
+												) : w.telemetryStatus === "unavailable" ? (
+													<span className="text-slate-500">Unavailable</span>
+												) : w.telemetryStatus === "zero" || ((w.measuredEgressMb ?? w.measuredNetworkMb) === 0) ? (
+													"0.0 MB"
+												) : (
+													`${(w.measuredEgressMb ?? w.measuredNetworkMb).toFixed(1)} MB`
+												)}
 											</td>
 											<td className="px-6 py-4">
-												{w.hasLiveTelemetry ? (
-													<span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-														Live Metrics
+												{w.telemetryStatus === "measured" ? (
+													<span
+														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+														title={w.telemetryReason || "Live container metrics"}
+													>
+														Measured
+													</span>
+												) : w.telemetryStatus === "collecting" ? (
+													<span
+														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"
+														title={w.telemetryReason || "Initial metrics pending"}
+													>
+														Collecting
+													</span>
+												) : w.telemetryStatus === "stale" ? (
+													<span
+														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+														title={w.telemetryReason || "Telemetry older than 2m"}
+													>
+														Stale
+													</span>
+												) : w.telemetryStatus === "zero" ? (
+													<span
+														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"
+														title={w.telemetryReason || "Verified zero consumption"}
+													>
+														Zero Usage
 													</span>
 												) : (
-													<span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
-														Standby / Reserved
+													<span
+														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700"
+														title={w.telemetryReason || "Telemetry unavailable"}
+													>
+														Unavailable
 													</span>
 												)}
 											</td>
 											<td className="px-6 py-4 text-right">
 												<span
 													className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-														w.status === "running"
+														(w.lifecycleStatus || w.status) === "running"
 															? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-															: w.status === "idle"
+															: (w.lifecycleStatus || w.status) === "stopped"
 																? "bg-slate-800 text-slate-400 border-slate-700"
-																: "bg-red-500/20 text-red-400 border-red-500/30"
+																: (w.lifecycleStatus || w.status) === "pending"
+																	? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+																	: "bg-red-500/20 text-red-400 border-red-500/30"
 													}`}
 												>
-													{w.status.toUpperCase()}
+													{(w.lifecycleStatus || w.status || "idle").toUpperCase()}
 												</span>
 											</td>
 										</tr>

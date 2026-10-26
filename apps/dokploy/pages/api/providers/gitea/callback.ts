@@ -1,8 +1,14 @@
-import { updateGitea } from "@dokploy/server";
+import { updateGitea, validateRequest } from "@dokploy/server";
+import { assertIntegrationAvailable } from "@dokploy/server/services/integration-settings";
+import {
+	buildClearNonceCookie,
+	readNonceCookie,
+	verifyOAuthState,
+} from "@dokploy/server/lib/oauth-state";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { findGitea, type Gitea, redirectWithError } from "./helper";
 
-// Helper to parse the state parameter
+// Helper to parse the legacy state parameter if signed verification is skipped
 const parseState = (state: string): string | null => {
 	try {
 		const stateObj =
@@ -51,11 +57,50 @@ export default async function handler(
 		);
 	}
 
-	const giteaId = parseState(state as string);
-	if (!giteaId) return redirectWithError(res, "Invalid state format");
+	const { user, session } = await validateRequest(req);
+	if (!user || !session?.activeOrganizationId) {
+		return redirectWithError(res, "Please sign in first");
+	}
+
+	try {
+		await assertIntegrationAvailable("gitea");
+	} catch (err: any) {
+		return redirectWithError(
+			res,
+			err?.message || "Gitea integration is currently disabled",
+		);
+	}
+
+	let giteaId: string | null = null;
+	const nonce = readNonceCookie(req.headers.cookie);
+	try {
+		const payload = verifyOAuthState(state as string, {
+			provider: "gitea",
+			userId: user.id,
+			organizationId: session.activeOrganizationId,
+			nonce,
+		});
+		giteaId = payload.i;
+	} catch (err) {
+		// Fallback for legacy state format
+		giteaId = parseState(state as string);
+		if (!giteaId) return redirectWithError(res, "Invalid or expired state");
+	}
+
+	res.setHeader(
+		"Set-Cookie",
+		buildClearNonceCookie({ secure: process.env.NODE_ENV === "production" }),
+	);
 
 	const gitea = await findGitea(giteaId);
 	if (!gitea) return redirectWithError(res, "Failed to find Gitea provider");
+
+	if (
+		gitea.gitProvider?.organizationId &&
+		gitea.gitProvider.organizationId !== session.activeOrganizationId
+	) {
+		return redirectWithError(res, "Unauthorized");
+	}
 
 	// Fetch the access token from Gitea
 	const result = await fetchAccessToken(gitea, code as string);

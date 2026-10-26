@@ -1422,6 +1422,13 @@
       "when": 1792280000000,
       "tag": "0202_mongo_auth_source",
       "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "7",
+      "when": 1792290000000,
+      "tag": "0203_integration_settings_and_primary_domain",
+      "breakpoints": true
     }
   ]
 }

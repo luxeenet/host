@@ -18,6 +18,7 @@ import { AddGiteaProvider } from "@/components/dashboard/settings/git/gitea/add-
 import { AddGithubProvider } from "@/components/dashboard/settings/git/github/add-github-provider";
 import { AddGitlabProvider } from "@/components/dashboard/settings/git/gitlab/add-gitlab-provider";
 import { Button } from "@/components/ui/button";
+import { AlertBlock } from "@/components/shared/alert-block";
 import { ComposeFileEditor } from "../compose-file-editor";
 import { ShowConvertedCompose } from "../show-converted-compose";
 import { SaveBitbucketProviderCompose } from "./save-bitbucket-provider-compose";
@@ -40,6 +41,22 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 		api.bitbucket.bitbucketProviders.useQuery();
 	const { data: giteaProviders, isPending: isLoadingGitea } =
 		api.gitea.giteaProviders.useQuery();
+	const { data: availability } = api.integration.availability.useQuery();
+
+	const isProviderEnabled = (provider: TabState) => {
+		if (provider === "raw") return true;
+		if (!availability) return true;
+		const item = availability.find((a) => a.id === provider);
+		return item ? item.available : true;
+	};
+
+	const getProviderGuidance = (provider: TabState) => {
+		const item = availability?.find((a) => a.id === provider);
+		return (
+			item?.message ||
+			"This integration is currently disabled by the platform administrator. New connections cannot be configured."
+		);
+	};
 
 	const { mutateAsync: disconnectGitProvider } =
 		api.compose.disconnectGitProvider.useMutation();
@@ -154,37 +171,58 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 						>
 							<TabsTrigger
 								value="github"
+								disabled={!isProviderEnabled("github") && compose?.sourceType !== "github"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<GithubIcon className="size-4 text-current fill-current" />
 								GitHub
+								{!isProviderEnabled("github") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="gitlab"
+								disabled={!isProviderEnabled("gitlab") && compose?.sourceType !== "gitlab"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<GitlabIcon className="size-4 text-current fill-current" />
 								GitLab
+								{!isProviderEnabled("gitlab") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="bitbucket"
+								disabled={!isProviderEnabled("bitbucket") && compose?.sourceType !== "bitbucket"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<BitbucketIcon className="size-4 text-current fill-current" />
 								Bitbucket
+								{!isProviderEnabled("bitbucket") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="gitea"
+								disabled={!isProviderEnabled("gitea") && compose?.sourceType !== "gitea"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
-								<GiteaIcon className="size-4 text-current fill-current" /> Gitea
+								<GiteaIcon className="size-4 text-current fill-current" />
+								Gitea
+								{!isProviderEnabled("gitea") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="git"
+								disabled={!isProviderEnabled("git") && compose?.sourceType !== "git"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<GitIcon />
 								Git
+								{!isProviderEnabled("git") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="raw"
@@ -197,7 +235,13 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 					</div>
 
 					<TabsContent value="github" className="w-full p-2">
-						{githubProviders && githubProviders?.length > 0 ? (
+						{!isProviderEnabled("github") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("github")}
+								</AlertBlock>
+							</div>
+						) : githubProviders && githubProviders?.length > 0 ? (
 							<SaveGithubProviderCompose composeId={composeId} />
 						) : (
 							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
@@ -220,7 +264,13 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 						)}
 					</TabsContent>
 					<TabsContent value="gitlab" className="w-full p-2">
-						{gitlabProviders && gitlabProviders?.length > 0 ? (
+						{!isProviderEnabled("gitlab") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("gitlab")}
+								</AlertBlock>
+							</div>
+						) : gitlabProviders && gitlabProviders?.length > 0 ? (
 							<SaveGitlabProviderCompose composeId={composeId} />
 						) : (
 							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
@@ -243,7 +293,13 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 						)}
 					</TabsContent>
 					<TabsContent value="bitbucket" className="w-full p-2">
-						{bitbucketProviders && bitbucketProviders?.length > 0 ? (
+						{!isProviderEnabled("bitbucket") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("bitbucket")}
+								</AlertBlock>
+							</div>
+						) : bitbucketProviders && bitbucketProviders?.length > 0 ? (
 							<SaveBitbucketProviderCompose composeId={composeId} />
 						) : (
 							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
@@ -266,7 +322,13 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 						)}
 					</TabsContent>
 					<TabsContent value="gitea" className="w-full p-2">
-						{giteaProviders && giteaProviders?.length > 0 ? (
+						{!isProviderEnabled("gitea") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("gitea")}
+								</AlertBlock>
+							</div>
+						) : giteaProviders && giteaProviders?.length > 0 ? (
 							<SaveGiteaProviderCompose composeId={composeId} />
 						) : (
 							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
@@ -289,7 +351,15 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 						)}
 					</TabsContent>
 					<TabsContent value="git" className="w-full p-2">
-						<SaveGitProviderCompose composeId={composeId} />
+						{!isProviderEnabled("git") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("git")}
+								</AlertBlock>
+							</div>
+						) : (
+							<SaveGitProviderCompose composeId={composeId} />
+						)}
 					</TabsContent>
 
 					<TabsContent value="raw" className="w-full p-2 flex flex-col gap-4">

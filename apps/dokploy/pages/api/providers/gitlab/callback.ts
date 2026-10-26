@@ -1,4 +1,5 @@
-import { findGitlabById, updateGitlab } from "@dokploy/server";
+import { findGitlabById, updateGitlab, validateRequest } from "@dokploy/server";
+import { assertIntegrationAvailable } from "@dokploy/server/services/integration-settings";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 export default async function handler(
@@ -11,7 +12,28 @@ export default async function handler(
 		return res.status(400).json({ error: "Missing or invalid code" });
 	}
 
+	const { user, session } = await validateRequest(req);
+	if (!user || !session?.activeOrganizationId) {
+		return res.redirect(307, "/dashboard/settings/git-providers?error=Unauthorized");
+	}
+
+	try {
+		await assertIntegrationAvailable("gitlab");
+	} catch (err: any) {
+		return res.redirect(
+			307,
+			`/dashboard/settings/git-providers?error=${encodeURIComponent(err?.message || "GitLab integration is disabled")}`,
+		);
+	}
+
 	const gitlab = await findGitlabById(gitlabId as string);
+	if (
+		gitlab.gitProvider?.organizationId &&
+		gitlab.gitProvider.organizationId !== session.activeOrganizationId
+	) {
+		return res.redirect(307, "/dashboard/settings/git-providers?error=Unauthorized");
+	}
+
 	// Use internal URL for token exchange when GitLab is on same instance as Dokploy
 	const baseUrl = gitlab.gitlabInternalUrl || gitlab.gitlabUrl;
 	const gitlabUrl = new URL(baseUrl);

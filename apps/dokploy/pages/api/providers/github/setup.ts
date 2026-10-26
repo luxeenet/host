@@ -43,6 +43,15 @@ export default async function handler(
 		return res.status(403).json({ error: "Forbidden" });
 	}
 
+	try {
+		const { assertIntegrationAvailable } = await import(
+			"@dokploy/server/services/integration-settings"
+		);
+		await assertIntegrationAvailable("github");
+	} catch (err: any) {
+		return res.status(403).json({ error: err?.message || "GitHub integration is unavailable." });
+	}
+
 	if (action === "gh_init") {
 		// Reject before any outbound request: this runs on a GET the user can be
 		// linked into, so the host is not trusted.

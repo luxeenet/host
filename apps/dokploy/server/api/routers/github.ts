@@ -1,4 +1,5 @@
 import {
+	assertIntegrationAvailable,
 	assertGitProviderAccess,
 	canViewGitProviderSecrets,
 	findGithubById,
@@ -44,6 +45,7 @@ export const githubRouter = createTRPCRouter({
 	getGithubRepositories: protectedProcedure
 		.input(apiFindOneGithub)
 		.query(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("github");
 			const github = await findGithubById(input.githubId);
 			await assertGitProviderAccess(ctx.session, github.gitProvider);
 			return await getGithubRepositories(input.githubId);
@@ -51,6 +53,7 @@ export const githubRouter = createTRPCRouter({
 	getGithubBranches: protectedProcedure
 		.input(apiFindGithubBranches)
 		.query(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("github");
 			if (input.githubId) {
 				const github = await findGithubById(input.githubId);
 				await assertGitProviderAccess(ctx.session, github.gitProvider);
@@ -91,6 +94,7 @@ export const githubRouter = createTRPCRouter({
 	testConnection: protectedProcedure
 		.input(apiFindOneGithub)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("github");
 			try {
 				const github = await findGithubById(input.githubId);
 				await assertGitProviderAccess(ctx.session, github.gitProvider);

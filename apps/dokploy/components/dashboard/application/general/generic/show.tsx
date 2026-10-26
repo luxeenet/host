@@ -22,6 +22,7 @@ import { AddGiteaProvider } from "@/components/dashboard/settings/git/gitea/add-
 import { AddGithubProvider } from "@/components/dashboard/settings/git/github/add-github-provider";
 import { AddGitlabProvider } from "@/components/dashboard/settings/git/gitlab/add-gitlab-provider";
 import { Button } from "@/components/ui/button";
+import { AlertBlock } from "@/components/shared/alert-block";
 import { SaveBitbucketProvider } from "./save-bitbucket-provider";
 import { SaveDragNDrop } from "./save-drag-n-drop";
 import { SaveGitlabProvider } from "./save-gitlab-provider";
@@ -49,6 +50,21 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 		api.bitbucket.bitbucketProviders.useQuery();
 	const { data: giteaProviders, isPending: isLoadingGitea } =
 		api.gitea.giteaProviders.useQuery();
+	const { data: availability } = api.integration.availability.useQuery();
+
+	const isProviderEnabled = (provider: TabState) => {
+		if (!availability) return true;
+		const item = availability.find((a) => a.id === provider);
+		return item ? item.available : true;
+	};
+
+	const getProviderGuidance = (provider: TabState) => {
+		const item = availability?.find((a) => a.id === provider);
+		return (
+			item?.message ||
+			"This integration is currently disabled by the platform administrator. New connections cannot be configured."
+		);
+	};
 
 	const { data: application, refetch } = api.application.one.useQuery({
 		applicationId,
@@ -164,58 +180,92 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 						>
 							<TabsTrigger
 								value="github"
+								disabled={!isProviderEnabled("github") && application?.sourceType !== "github"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<GithubIcon className="size-4 text-current fill-current" />
 								Github
+								{!isProviderEnabled("github") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="gitlab"
+								disabled={!isProviderEnabled("gitlab") && application?.sourceType !== "gitlab"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<GitlabIcon className="size-4 text-current fill-current" />
 								Gitlab
+								{!isProviderEnabled("gitlab") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="bitbucket"
+								disabled={!isProviderEnabled("bitbucket") && application?.sourceType !== "bitbucket"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<BitbucketIcon className="size-4 text-current fill-current" />
 								Bitbucket
+								{!isProviderEnabled("bitbucket") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="gitea"
+								disabled={!isProviderEnabled("gitea") && application?.sourceType !== "gitea"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<GiteaIcon className="size-4 text-current fill-current" />
 								Gitea
+								{!isProviderEnabled("gitea") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="docker"
+								disabled={!isProviderEnabled("docker") && application?.sourceType !== "docker"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<DockerIcon className="size-5 text-current" />
 								Docker
+								{!isProviderEnabled("docker") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="git"
+								disabled={!isProviderEnabled("git") && application?.sourceType !== "git"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<GitIcon />
 								Git
+								{!isProviderEnabled("git") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 							<TabsTrigger
 								value="drop"
+								disabled={!isProviderEnabled("drop") && application?.sourceType !== "drop"}
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 							>
 								<UploadCloud className="size-5 text-current" />
 								Drop
+								{!isProviderEnabled("drop") && (
+									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
+								)}
 							</TabsTrigger>
 						</TabsList>
 					</div>
 
 					<TabsContent value="github" className="w-full p-2">
-						{githubProviders && githubProviders?.length > 0 ? (
+						{!isProviderEnabled("github") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("github")}
+								</AlertBlock>
+							</div>
+						) : githubProviders && githubProviders?.length > 0 ? (
 							<SaveGithubProvider applicationId={applicationId} />
 						) : (
 							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
@@ -238,7 +288,13 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 						)}
 					</TabsContent>
 					<TabsContent value="gitlab" className="w-full p-2">
-						{gitlabProviders && gitlabProviders?.length > 0 ? (
+						{!isProviderEnabled("gitlab") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("gitlab")}
+								</AlertBlock>
+							</div>
+						) : gitlabProviders && gitlabProviders?.length > 0 ? (
 							<SaveGitlabProvider applicationId={applicationId} />
 						) : (
 							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
@@ -261,7 +317,13 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 						)}
 					</TabsContent>
 					<TabsContent value="bitbucket" className="w-full p-2">
-						{bitbucketProviders && bitbucketProviders?.length > 0 ? (
+						{!isProviderEnabled("bitbucket") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("bitbucket")}
+								</AlertBlock>
+							</div>
+						) : bitbucketProviders && bitbucketProviders?.length > 0 ? (
 							<SaveBitbucketProvider applicationId={applicationId} />
 						) : (
 							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
@@ -284,7 +346,13 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 						)}
 					</TabsContent>
 					<TabsContent value="gitea" className="w-full p-2">
-						{giteaProviders && giteaProviders?.length > 0 ? (
+						{!isProviderEnabled("gitea") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("gitea")}
+								</AlertBlock>
+							</div>
+						) : giteaProviders && giteaProviders?.length > 0 ? (
 							<SaveGiteaProvider applicationId={applicationId} />
 						) : (
 							<div className="flex flex-col items-center gap-4 py-8 px-4 text-center justify-center border border-dashed rounded-lg bg-card/50">
@@ -307,14 +375,38 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 						)}
 					</TabsContent>
 					<TabsContent value="docker" className="w-full p-2">
-						<SaveDockerProvider applicationId={applicationId} />
+						{!isProviderEnabled("docker") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("docker")}
+								</AlertBlock>
+							</div>
+						) : (
+							<SaveDockerProvider applicationId={applicationId} />
+						)}
 					</TabsContent>
 
 					<TabsContent value="git" className="w-full p-2">
-						<SaveGitProvider applicationId={applicationId} />
+						{!isProviderEnabled("git") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("git")}
+								</AlertBlock>
+							</div>
+						) : (
+							<SaveGitProvider applicationId={applicationId} />
+						)}
 					</TabsContent>
 					<TabsContent value="drop" className="w-full p-2">
-						<SaveDragNDrop applicationId={applicationId} />
+						{!isProviderEnabled("drop") ? (
+							<div className="py-4">
+								<AlertBlock type="warning">
+									{getProviderGuidance("drop")}
+								</AlertBlock>
+							</div>
+						) : (
+							<SaveDragNDrop applicationId={applicationId} />
+						)}
 					</TabsContent>
 				</Tabs>
 			</CardContent>

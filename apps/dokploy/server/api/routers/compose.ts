@@ -225,6 +225,12 @@ export const composeRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.composeId, {
 				service: ["create"],
 			});
+			if (input.sourceType) {
+				const { assertSourceTypeAvailable } = await import(
+					"@dokploy/server/services/integration-settings"
+				);
+				await assertSourceTypeAvailable(input.sourceType);
+			}
 			const updated = await updateCompose(input.composeId, input);
 			await audit(ctx, {
 				action: "update",

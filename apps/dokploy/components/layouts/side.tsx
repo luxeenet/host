@@ -203,6 +203,12 @@ export const MENU: Menu = {
 		},
 		{
 			isSingle: true,
+			title: "Domains",
+			url: "/dashboard/domains",
+			icon: Globe,
+		},
+		{
+			isSingle: true,
 			title: "Overview",
 			url: "/dashboard/overview",
 			icon: LayoutGrid,
@@ -333,6 +339,13 @@ export const MENU: Menu = {
 			title: "Tags",
 			url: "/dashboard/settings/tags",
 			icon: Tags,
+		},
+		{
+			isSingle: true,
+			title: "Integrations",
+			url: "/dashboard/settings/integrations",
+			icon: Boxes,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,

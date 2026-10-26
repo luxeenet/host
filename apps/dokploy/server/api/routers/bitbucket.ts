@@ -1,4 +1,5 @@
 import {
+	assertIntegrationAvailable,
 	assertGitProviderAccess,
 	canViewGitProviderSecrets,
 	createBitbucket,
@@ -29,6 +30,7 @@ export const bitbucketRouter = createTRPCRouter({
 	create: withPermission("gitProviders", "create")
 		.input(apiCreateBitbucket)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("bitbucket");
 			try {
 				const result = await createBitbucket(
 					input,
@@ -94,6 +96,7 @@ export const bitbucketRouter = createTRPCRouter({
 	getBitbucketRepositories: protectedProcedure
 		.input(apiFindOneBitbucket)
 		.query(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("bitbucket");
 			const bitbucket = await findBitbucketById(input.bitbucketId);
 			await assertGitProviderAccess(ctx.session, bitbucket.gitProvider);
 			return await getBitbucketRepositories(input.bitbucketId);
@@ -101,6 +104,7 @@ export const bitbucketRouter = createTRPCRouter({
 	getBitbucketBranches: protectedProcedure
 		.input(apiFindBitbucketBranches)
 		.query(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("bitbucket");
 			if (input.bitbucketId) {
 				const bitbucket = await findBitbucketById(input.bitbucketId);
 				await assertGitProviderAccess(ctx.session, bitbucket.gitProvider);
@@ -110,6 +114,7 @@ export const bitbucketRouter = createTRPCRouter({
 	testConnection: protectedProcedure
 		.input(apiBitbucketTestConnection)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("bitbucket");
 			try {
 				const bitbucket = await findBitbucketById(input.bitbucketId);
 				await assertGitProviderAccess(ctx.session, bitbucket.gitProvider);

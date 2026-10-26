@@ -7,6 +7,7 @@ import {
 	pgTable,
 	serial,
 	text,
+	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { nanoid } from "nanoid";
@@ -23,7 +24,9 @@ export const domainType = pgEnum("domainType", [
 	"preview",
 ]);
 
-export const domains = pgTable("domain", {
+export const domains = pgTable(
+	"domain",
+	{
 	domainId: text("domainId")
 		.notNull()
 		.primaryKey()
@@ -57,7 +60,18 @@ export const domains = pgTable("domain", {
 	middlewares: text("middlewares").array().default(sql`ARRAY[]::text[]`),
 	forwardAuthEnabled: boolean("forwardAuthEnabled").notNull().default(false),
 	enabled: boolean("enabled").notNull().default(true),
-});
+	/** Canonical domain for the service; at most one per application/compose. */
+	isPrimary: boolean("isPrimary").notNull().default(false),
+	},
+	(t) => ({
+		primaryPerApplication: uniqueIndex("domain_primary_per_application")
+			.on(t.applicationId)
+			.where(sql`${t.isPrimary} = true AND ${t.applicationId} IS NOT NULL`),
+		primaryPerCompose: uniqueIndex("domain_primary_per_compose")
+			.on(t.composeId)
+			.where(sql`${t.isPrimary} = true AND ${t.composeId} IS NOT NULL`),
+	}),
+);
 
 export const domainsRelations = relations(domains, ({ one }) => ({
 	application: one(applications, {

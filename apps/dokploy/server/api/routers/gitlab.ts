@@ -1,4 +1,6 @@
 import {
+	assertInstanceAllowed,
+	assertIntegrationAvailable,
 	assertGitProviderAccess,
 	canViewGitProviderSecrets,
 	createGitlab,
@@ -31,6 +33,8 @@ export const gitlabRouter = createTRPCRouter({
 	create: withPermission("gitProviders", "create")
 		.input(apiCreateGitlab)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("gitlab");
+			await assertInstanceAllowed("gitlab", input.gitlabUrl);
 			try {
 				const result = await createGitlab(
 					input,
@@ -103,6 +107,7 @@ export const gitlabRouter = createTRPCRouter({
 	getGitlabRepositories: protectedProcedure
 		.input(apiFindOneGitlab)
 		.query(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("gitlab");
 			const gitlab = await findGitlabById(input.gitlabId);
 			await assertGitProviderAccess(ctx.session, gitlab.gitProvider);
 			return await getGitlabRepositories(input.gitlabId);
@@ -111,6 +116,7 @@ export const gitlabRouter = createTRPCRouter({
 	getGitlabBranches: protectedProcedure
 		.input(apiFindGitlabBranches)
 		.query(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("gitlab");
 			if (input.gitlabId) {
 				const gitlab = await findGitlabById(input.gitlabId);
 				await assertGitProviderAccess(ctx.session, gitlab.gitProvider);
@@ -120,6 +126,7 @@ export const gitlabRouter = createTRPCRouter({
 	testConnection: protectedProcedure
 		.input(apiGitlabTestConnection)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("gitlab");
 			try {
 				const gitlab = await findGitlabById(input.gitlabId);
 				await assertGitProviderAccess(ctx.session, gitlab.gitProvider);

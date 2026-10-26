@@ -15,10 +15,12 @@ import {
 	Copy,
 	Check,
 	Loader2,
+	Star,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
+import { DialogAction } from "@/components/shared/dialog-action";
 import { api } from "@/utils/api";
 
 export default function CustomDomainsPage() {
@@ -29,6 +31,8 @@ export default function CustomDomainsPage() {
 	const { mutateAsync: createDomain, isPending: isAdding } =
 		api.domain.create.useMutation();
 	const { mutateAsync: deleteDomain } = api.domain.delete.useMutation();
+	const { mutateAsync: setPrimaryDomain, isPending: isSettingPrimary } =
+		api.domain.setPrimary.useMutation();
 	const { mutateAsync: activateHttps, isPending: isActivating } =
 		api.domain.activateHttps.useMutation();
 	const { mutateAsync: validateDomain } =
@@ -113,6 +117,16 @@ export default function CustomDomainsPage() {
 			await refetchDomains();
 		} catch (err: any) {
 			toast.error(err?.message || "Failed to activate HTTPS");
+		}
+	};
+
+	const handleSetPrimary = async (domainId: string, host: string) => {
+		try {
+			await setPrimaryDomain({ domainId });
+			toast.success(`Domain ${host} is now the primary domain.`);
+			await refetchDomains();
+		} catch (err: any) {
+			toast.error(err?.message || "Failed to set primary domain");
 		}
 	};
 
@@ -287,6 +301,12 @@ export default function CustomDomainsPage() {
 											>
 												{dom.host} <ExternalLink className="w-3 h-3 text-slate-500" />
 											</a>
+											{dom.isPrimary && (
+												<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+													<Star className="w-3 h-3 fill-indigo-400 text-indigo-400" />
+													Primary
+												</span>
+											)}
 											<span
 												className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
 													dom.https
@@ -315,6 +335,17 @@ export default function CustomDomainsPage() {
 									</div>
 
 									<div className="flex items-center gap-2 flex-wrap">
+										{!dom.isPrimary && (
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={isSettingPrimary}
+												onClick={() => handleSetPrimary(dom.domainId, dom.host)}
+												className="border-slate-800 text-slate-300 hover:bg-slate-800 text-xs gap-1.5 h-8"
+											>
+												<Star className="w-3.5 h-3.5 text-amber-400" /> Set as Primary
+											</Button>
+										)}
 										{!dom.https && (
 											<Button
 												variant="outline"
@@ -340,14 +371,20 @@ export default function CustomDomainsPage() {
 											)}
 											Re-check DNS
 										</Button>
-										<Button
-											variant="ghost"
-											size="sm"
+										<DialogAction
+											title={`Remove domain ${dom.host}?`}
+											description="Are you sure you want to remove this domain? Web traffic will stop routing to your application and the SSL certificate will be removed."
+											type="destructive"
 											onClick={() => handleDeleteDomain(dom.domainId, dom.host)}
-											className="text-slate-500 hover:text-red-400 hover:bg-red-950/20 h-8 w-8 p-0"
 										>
-											<Trash2 className="w-4 h-4" />
-										</Button>
+											<Button
+												variant="ghost"
+												size="sm"
+												className="text-slate-500 hover:text-red-400 hover:bg-red-950/20 h-8 w-8 p-0"
+											>
+												<Trash2 className="w-4 h-4" />
+											</Button>
+										</DialogAction>
 									</div>
 								</div>
 							))}

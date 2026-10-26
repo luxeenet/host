@@ -1,3 +1,4 @@
+import { assertIntegrationAvailable } from "@dokploy/server/services/integration-settings";
 import {
 	clearOldDeployments,
 	createApplication,
@@ -620,6 +621,7 @@ export const applicationRouter = createTRPCRouter({
 	saveGithubProvider: protectedProcedure
 		.input(apiSaveGithubProvider)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("github");
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
 				service: ["create"],
 			});
@@ -647,6 +649,7 @@ export const applicationRouter = createTRPCRouter({
 	saveGitlabProvider: protectedProcedure
 		.input(apiSaveGitlabProvider)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("gitlab");
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
 				service: ["create"],
 			});
@@ -675,6 +678,7 @@ export const applicationRouter = createTRPCRouter({
 	saveBitbucketProvider: protectedProcedure
 		.input(apiSaveBitbucketProvider)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("bitbucket");
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
 				service: ["create"],
 			});
@@ -702,6 +706,7 @@ export const applicationRouter = createTRPCRouter({
 	saveGiteaProvider: protectedProcedure
 		.input(apiSaveGiteaProvider)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("gitea");
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
 				service: ["create"],
 			});
@@ -728,6 +733,7 @@ export const applicationRouter = createTRPCRouter({
 	saveDockerProvider: protectedProcedure
 		.input(apiSaveDockerProvider)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("docker");
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
 				service: ["create"],
 			});
@@ -751,6 +757,7 @@ export const applicationRouter = createTRPCRouter({
 	saveGitProvider: protectedProcedure
 		.input(apiSaveGitProvider)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("git");
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
 				service: ["create"],
 			});
@@ -1059,6 +1066,7 @@ export const applicationRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
+			await assertIntegrationAvailable("drop");
 			const zipFile = input.zip;
 			const applicationId = input.applicationId;
 			const dropBuildPath = input.dropBuildPath ?? null;

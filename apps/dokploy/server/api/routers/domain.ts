@@ -16,6 +16,7 @@ import {
 	removeDomain,
 	removeDomainById,
 	resolveGeneratedApplicationDomain,
+	setPrimaryDomain,
 	updateDomainById,
 	validateDomain,
 } from "@dokploy/server";
@@ -426,6 +427,35 @@ export const domainRouter = createTRPCRouter({
 				const application = await findApplicationById(domain.applicationId);
 				await removeDomain(application, domain.uniqueConfigKey);
 			}
+
+			return result;
+		}),
+
+	setPrimary: protectedProcedure
+		.input(apiFindDomain)
+		.mutation(async ({ input, ctx }) => {
+			const domain = await findDomainById(input.domainId);
+			const serviceId = domain.applicationId || domain.composeId;
+			if (serviceId) {
+				await checkServicePermissionAndAccess(ctx, serviceId, {
+					domain: ["create"],
+				});
+			} else if (domain.previewDeploymentId) {
+				const preview = await findPreviewDeploymentById(
+					domain.previewDeploymentId,
+				);
+				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
+					domain: ["create"],
+				});
+			}
+
+			const result = await setPrimaryDomain(input.domainId);
+			await audit(ctx, {
+				action: "update",
+				resourceType: "domain",
+				resourceId: domain.domainId,
+				resourceName: domain.host,
+			});
 
 			return result;
 		}),

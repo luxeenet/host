@@ -28,7 +28,9 @@ import { detectCDNProvider } from "./cdn";
 import { findComposeById } from "./compose";
 import { findServerById } from "./server";
 
-export type Domain = typeof domains.$inferSelect;
+export type Domain = Omit<typeof domains.$inferSelect, "isPrimary"> & {
+	isPrimary?: boolean;
+};
 
 export const getServiceOrganizationId = async (
 	options: {
@@ -636,8 +638,8 @@ export const generateWildcardDomain = (
 	return `${appName}-${serverDomain}`;
 };
 
-export const findDomainById = async (domainId: string) => {
-	const domainRows = await db
+export const findDomainById = async (domainId: string, tx: any = db) => {
+	const domainRows = await tx
 		.select()
 		.from(domains)
 		.where(eq(domains.domainId, domainId))
@@ -737,6 +739,7 @@ export const findDomainsByOrganizationId = async (organizationId: string) => {
 			port: domains.port,
 			path: domains.path,
 			enabled: domains.enabled,
+			isPrimary: domains.isPrimary,
 			certificateType: domains.certificateType,
 			createdAt: domains.createdAt,
 			applicationId: domains.applicationId,
@@ -767,6 +770,7 @@ export const findDomainsByOrganizationId = async (organizationId: string) => {
 			port: domains.port,
 			path: domains.path,
 			enabled: domains.enabled,
+			isPrimary: domains.isPrimary,
 			certificateType: domains.certificateType,
 			createdAt: domains.createdAt,
 			applicationId: domains.applicationId,
@@ -789,6 +793,40 @@ export const findDomainsByOrganizationId = async (organizationId: string) => {
 	const all = [...appDomains, ...composeDomains];
 	all.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 	return all;
+};
+
+export const setPrimaryDomain = async (domainId: string, tx: any = db) => {
+	const currentDomain = await findDomainById(domainId, tx);
+	if (currentDomain.applicationId) {
+		await tx
+			.update(domains)
+			.set({ isPrimary: false })
+			.where(
+				and(
+					eq(domains.applicationId, currentDomain.applicationId),
+					ne(domains.domainId, domainId),
+				),
+			);
+		await tx
+			.update(domains)
+			.set({ isPrimary: true })
+			.where(eq(domains.domainId, domainId));
+	} else if (currentDomain.composeId) {
+		await tx
+			.update(domains)
+			.set({ isPrimary: false })
+			.where(
+				and(
+					eq(domains.composeId, currentDomain.composeId),
+					ne(domains.domainId, domainId),
+				),
+			);
+		await tx
+			.update(domains)
+			.set({ isPrimary: true })
+			.where(eq(domains.domainId, domainId));
+	}
+	return await findDomainById(domainId, tx);
 };
 
 export const updateDomainById = async (

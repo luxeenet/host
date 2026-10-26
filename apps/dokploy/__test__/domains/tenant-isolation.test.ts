@@ -57,14 +57,17 @@ describe("Domain Tenant Isolation & Conflict Prevention", () => {
 
 	it("should parse DNS instructions correctly for apex and subdomains", async () => {
 		const subInstructions = await getDnsInstructionsForDomain("api.mycompany.com");
-		expect(subInstructions.recordType).toBe("A");
+		expect(subInstructions.recordType).toBe("CNAME");
 		expect(subInstructions.recordName).toBe("api");
 		expect(subInstructions.isSubdomain).toBe(true);
+		expect(subInstructions.originIpProtected).toBe(true);
+		expect(subInstructions.target).toBeDefined();
 
 		const apexInstructions = await getDnsInstructionsForDomain("mycompany.com");
-		expect(apexInstructions.recordType).toBe("A");
+		expect(apexInstructions.recordType).toBe("CNAME");
 		expect(apexInstructions.recordName).toBe("@");
 		expect(apexInstructions.isSubdomain).toBe(false);
+		expect(apexInstructions.apexGuidance?.supportsCnameFlattening).toBe(true);
 	});
 
 	it("should never use localhost or internal container IP when public IP is available", async () => {

@@ -23,6 +23,8 @@ vi.mock("@dokploy/server/db", () => {
 			offset: () => chain,
 			groupBy: () => chain,
 			having: () => chain,
+			onConflictDoUpdate: () => chain,
+			onConflictDoNothing: () => chain,
 			then: (resolve: (value: unknown) => void) => {
 				resolve([]);
 			},
@@ -41,9 +43,7 @@ vi.mock("@dokploy/server/db", () => {
 	return {
 		db: {
 			select: vi.fn(() => createChain()),
-			insert: vi.fn(() => ({
-				values: () => ({ returning: () => Promise.resolve([{}]) }),
-			})),
+			insert: vi.fn(() => createChain()),
 			update: vi.fn(() => createChain()),
 			delete: vi.fn(() => createChain()),
 			query: new Proxy({} as Record<string, typeof tableMock>, {

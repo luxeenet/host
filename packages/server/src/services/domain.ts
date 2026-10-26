@@ -27,6 +27,13 @@ import { findApplicationById } from "./application";
 import { detectCDNProvider } from "./cdn";
 import { findComposeById } from "./compose";
 import { findServerById } from "./server";
+import {
+	checkTargetDnsStatus,
+	isCnameTargetEnabled,
+	isDirectIpAllowed,
+	resolveCnameTargetForService,
+	verifyDomainCname,
+} from "./cname-routing";
 
 export type Domain = Omit<typeof domains.$inferSelect, "isPrimary"> & {
 	isPrimary?: boolean;
@@ -893,6 +900,10 @@ export const getDomainHost = (domain: Domain) => {
 
 const resolveDns4 = promisify(dns.resolve4);
 const resolveDns6 = promisify(dns.resolve6);
+const resolveCname =
+	typeof dns.resolveCname === "function"
+		? promisify(dns.resolveCname)
+		: ((async () => []) as any);
 
 const resolveDns = async (domain: string): Promise<string[]> => {
 	const results = await Promise.allSettled([
@@ -916,16 +927,22 @@ const resolveDns = async (domain: string): Promise<string[]> => {
 export const validateDomain = async (
 	domain: string,
 	expectedIps?: string[],
+	options?: {
+		expectedTarget?: string;
+		allowDirectIp?: boolean;
+	},
 ): Promise<{
 	isValid: boolean;
 	resolvedIp?: string;
+	resolvedCname?: string;
 	error?: string;
 	isCloudflare?: boolean;
 	cdnProvider?: string;
+	originIpProtected?: boolean;
 }> => {
 	try {
 		// Remove protocol and path if present
-		const cleanDomain = domain.replace(/^https?:\/\//, "").split("/")[0];
+		const cleanDomain = domain.replace(/^https?:\/\//, "").split("/")[0]?.trim().toLowerCase() || "";
 
 		// Check platform subdomain depth
 		const platformDomain = await getConfiguredPlatformDomain();
@@ -942,41 +959,103 @@ export const validateDomain = async (
 			}
 		}
 
-		// Resolve the domain to get its IP
-		const ips = await resolveDns(cleanDomain || "");
+		// 1. Check for direct CNAME record
+		let resolvedCnames: string[] = [];
+		try {
+			const cnames = await resolveCname(cleanDomain);
+			resolvedCnames = (Array.isArray(cnames) ? cnames : [cnames])
+				.map((c) => c.trim().toLowerCase().replace(/\.$/, ""))
+				.filter(Boolean);
+		} catch {
+			// No CNAME record or not resolvable via CNAME query
+		}
 
-		const resolvedIps = ips.map((ip) => ip.toString());
+		const cleanExpectedTarget = options?.expectedTarget?.trim().toLowerCase().replace(/\.$/, "");
+		const cnameMatched = cleanExpectedTarget
+			? resolvedCnames.some(
+					(c) =>
+						c === cleanExpectedTarget ||
+						(platformDomain && (c === platformDomain || c.endsWith(`.${platformDomain}`))),
+			  )
+			: false;
 
-		// Check if any IP belongs to a CDN provider
-		const cdnProvider = ips
+		// 2. Resolve domain IPs
+		let resolvedIps: string[] = [];
+		try {
+			const ips = await resolveDns(cleanDomain || "");
+			resolvedIps = ips.map((ip) => ip.toString());
+		} catch {
+			// May fail if CNAME points to unresolvable target or NXDOMAIN
+		}
+
+		// 3. Resolve expected target IPs if expectedTarget is provided
+		let targetIps: string[] = [];
+		if (cleanExpectedTarget && !isIP(cleanExpectedTarget)) {
+			try {
+				targetIps = await resolveDns(cleanExpectedTarget);
+			} catch {}
+		}
+
+		// 4. Check if any IP belongs to a CDN provider
+		const cdnProvider = resolvedIps
 			.map((ip) => detectCDNProvider(ip))
 			.find((provider) => provider !== null);
 
-		// If behind a CDN, we consider it valid but inform the user
 		if (cdnProvider) {
 			return {
 				isValid: true,
 				resolvedIp: resolvedIps.join(", "),
+				resolvedCname: resolvedCnames[0],
 				cdnProvider: cdnProvider.displayName,
 				error: cdnProvider.warningMessage,
 			};
 		}
 
-		if (expectedIps && expectedIps.length > 0) {
-			const isValid = resolvedIps.some((ip) => expectedIps.includes(ip));
+		const allExpectedIps = Array.from(new Set([...(expectedIps || []), ...targetIps]));
+		const ipMatched =
+			resolvedIps.length > 0 &&
+			allExpectedIps.length > 0 &&
+			resolvedIps.some((ip) => allExpectedIps.includes(ip));
+
+		const isValid = cnameMatched || ipMatched;
+		const allowDirect = options?.allowDirectIp ?? (await isDirectIpAllowed());
+
+		if (isValid) {
 			return {
-				isValid,
+				isValid: true,
 				resolvedIp: resolvedIps.join(", "),
-				error: !isValid
-					? `Domain resolves to ${resolvedIps.join(", ")} but should point to ${expectedIps.join(" or ")}`
-					: undefined,
+				resolvedCname: resolvedCnames[0],
+				originIpProtected: !allowDirect,
 			};
 		}
 
-		// If no expected IP, just return the resolved IP
+		// Validation failed - redact raw origin IPs when direct-IP is disabled
+		let errorMessage: string;
+		if (!allowDirect) {
+			if (cleanExpectedTarget) {
+				errorMessage =
+					resolvedCnames.length > 0 || resolvedIps.length > 0
+						? `Domain currently resolves to ${resolvedCnames[0] || resolvedIps.join(", ")}, but should point to ${cleanExpectedTarget} via CNAME.`
+						: `DNS record not found yet. Add a CNAME record pointing to ${cleanExpectedTarget}.`;
+			} else {
+				errorMessage = `Domain does not resolve to the configured HatDot routing target.`;
+			}
+		} else {
+			if (expectedIps && expectedIps.length > 0) {
+				errorMessage = `Domain resolves to ${resolvedIps.join(", ") || "no IP"} but should point to ${expectedIps.join(" or ")}`;
+			} else if (cleanExpectedTarget) {
+				errorMessage = `Domain resolves to ${resolvedIps.join(", ") || "no IP"} but should point to ${cleanExpectedTarget}`;
+			} else {
+				errorMessage = "Failed to resolve domain to expected target";
+			}
+		}
+
 		return {
-			isValid: true,
-			resolvedIp: resolvedIps.join(", "),
+			isValid: false,
+			resolvedIp: resolvedIps.length > 0 ? resolvedIps.join(", ") : undefined,
+			resolvedCname: resolvedCnames[0],
+			error: errorMessage,
+			originIpProtected: !allowDirect,
 		};
 	} catch (error) {
 		return {
@@ -1059,17 +1138,41 @@ export interface DnsInstructions {
 	recordType: "A" | "CNAME";
 	recordName: string;
 	recordValue: string;
-	serverIp: string;
+	target: string;
+	cnameTarget?: string;
+	serverIp?: string;
 	isSubdomain: boolean;
 	verified: boolean;
 	currentIps: string[];
+	currentCnames?: string[];
 	message: string;
 	cdnProvider?: string;
+	originIpProtected: boolean;
+	targetStatus?: {
+		resolves: boolean;
+		isProxied: boolean;
+		cdnProvider: string | null;
+	};
+	cloudflareGuidance?: {
+		proxyRecommended: boolean;
+		sslMode: "Full" | "Full (strict)" | "Off";
+		initialSetupNote: string;
+	};
+	apexGuidance?: {
+		supportsCnameFlattening: boolean;
+		note: string;
+		recommendedAlternative?: string;
+	};
 }
 
 export const getDnsInstructionsForDomain = async (
 	host: string,
 	serverId?: string | null,
+	options?: {
+		applicationId?: string | null;
+		composeId?: string | null;
+		allowDirectIp?: boolean;
+	},
 ): Promise<DnsInstructions> => {
 	const cleanHost =
 		host
@@ -1077,17 +1180,87 @@ export const getDnsInstructionsForDomain = async (
 			.split("/")[0]
 			?.trim()
 			.toLowerCase() || "";
-	const serverCandidates = await getServerIpCandidates(serverId);
-	const settings = await getWebServerSettings();
-	const expectedIp = serverCandidates?.[0] || settings?.serverIp || "127.0.0.1";
-
 	const parts = cleanHost.split(".");
 	const isSubdomain = parts.length > 2;
 	const recordName = isSubdomain
 		? parts.slice(0, parts.length - 2).join(".")
 		: "@";
 
-	const validation = await validateDomain(cleanHost, [expectedIp]);
+	const cnameEnabled = await isCnameTargetEnabled();
+	const allowDirect = options?.allowDirectIp ?? (await isDirectIpAllowed());
+
+	const serverCandidates = await getServerIpCandidates(serverId);
+	const settings = await getWebServerSettings();
+	const expectedIp = serverCandidates?.[0] || settings?.serverIp || "127.0.0.1";
+
+	const cnameTarget = await resolveCnameTargetForService({
+		applicationId: options?.applicationId,
+		composeId: options?.composeId,
+		serverId,
+	});
+
+	const targetStatus = await checkTargetDnsStatus(cnameTarget);
+
+	if (cnameEnabled) {
+		const verification = await verifyDomainCname(
+			cleanHost,
+			cnameTarget,
+			serverCandidates,
+		);
+
+		let message = "Domain is verified and pointing to the platform.";
+		if (!verification.isValid) {
+			if (verification.resolvedCnames.length > 0 || verification.resolvedIps.length > 0) {
+				const current = verification.resolvedCnames[0] || verification.resolvedIps.join(", ");
+				message = `Domain currently resolves to ${current}, but should point to ${cnameTarget} via CNAME.`;
+			} else {
+				message = `DNS record not found yet. Add a CNAME record with Name "${recordName}" and Target "${cnameTarget}" at your DNS provider.`;
+			}
+		} else if (verification.cdnProvider) {
+			message = `Domain is verified and routed through ${verification.cdnProvider}. SSL and traffic will proxy through the CDN.`;
+		} else if (verification.cnameMatched) {
+			message = `Domain is verified and CNAME is pointing to ${cnameTarget}.`;
+		}
+
+		return {
+			host: cleanHost,
+			recordType: "CNAME",
+			recordName,
+			recordValue: cnameTarget,
+			target: cnameTarget,
+			cnameTarget,
+			serverIp: allowDirect ? expectedIp : undefined,
+			isSubdomain,
+			verified: verification.isValid,
+			currentIps: verification.resolvedIps,
+			currentCnames: verification.resolvedCnames,
+			message,
+			cdnProvider: verification.cdnProvider,
+			originIpProtected: !allowDirect,
+			targetStatus: {
+				resolves: targetStatus.resolves,
+				isProxied: targetStatus.isProxied,
+				cdnProvider: targetStatus.cdnProvider,
+			},
+			cloudflareGuidance: {
+				proxyRecommended: true,
+				sslMode: "Full (strict)",
+				initialSetupNote:
+					"Set DNS-only (Grey Cloud) during initial verification and Let's Encrypt certificate issuance. Once active, Proxied (Orange Cloud) can be enabled with Full (strict) SSL.",
+			},
+			apexGuidance: isSubdomain
+				? undefined
+				: {
+						supportsCnameFlattening: true,
+						note: `Apex domains (@) require a DNS provider supporting CNAME Flattening or ALIAS/ANAME records (e.g. Cloudflare, Route53, Namecheap). Alternatively, add a www.${cleanHost} CNAME record pointing to ${cnameTarget}.`,
+						recommendedAlternative: `www.${cleanHost}`,
+				  },
+		};
+	}
+
+	const validation = await validateDomain(cleanHost, [expectedIp], {
+		allowDirectIp: true,
+	});
 
 	let message = "Domain is verified and pointing to this server.";
 	if (!validation.isValid) {
@@ -1105,12 +1278,14 @@ export const getDnsInstructionsForDomain = async (
 		recordType: "A",
 		recordName,
 		recordValue: expectedIp,
+		target: expectedIp,
 		serverIp: expectedIp,
 		isSubdomain,
 		verified: validation.isValid,
 		currentIps: validation.resolvedIp ? validation.resolvedIp.split(", ") : [],
 		message,
 		cdnProvider: validation.cdnProvider,
+		originIpProtected: false,
 	};
 };
 

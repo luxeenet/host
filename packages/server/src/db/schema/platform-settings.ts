@@ -44,6 +44,11 @@ export const PLATFORM_SETTING_KEYS = {
 	GRACE_PERIOD_DAYS: "grace_period_days",
 	SUSPENSION_AFTER_GRACE_DAYS: "suspension_after_grace_days",
 	DATA_RETENTION_DAYS_AFTER_EXPIRY: "data_retention_days_after_expiry",
+	CUSTOM_DOMAIN_CNAME_TARGET: "custom_domain_cname_target",
+	CUSTOM_DOMAIN_CNAME_ENABLED: "custom_domain_cname_enabled",
+	CUSTOM_DOMAIN_ALLOW_DIRECT_IP: "custom_domain_allow_direct_ip",
+	CLOUDFLARE_PROXY_ENABLED: "cloudflare_proxy_enabled",
+	CLOUDFLARE_STRICT_SSL: "cloudflare_strict_ssl",
 } as const;
 
 export type PlatformSettingKey =

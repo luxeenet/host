@@ -33,6 +33,7 @@ export * from "./services/dns-provider";
 export * from "./services/docker";
 export * from "./services/docker-image";
 export * from "./services/docker-volume";
+export * from "./services/cname-routing";
 export * from "./services/domain";
 export * from "./services/integration-connectivity";
 export * from "./services/integration-policy";

@@ -16,11 +16,13 @@ import {
 	Check,
 	Loader2,
 	Star,
+	Cloud,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
 import { DialogAction } from "@/components/shared/dialog-action";
+import { DnsHelperModal } from "@/components/dashboard/application/domains/dns-helper-modal";
 import { api } from "@/utils/api";
 
 export default function CustomDomainsPage() {
@@ -57,7 +59,12 @@ export default function CustomDomainsPage() {
 	);
 
 	const activeAppId = selectedAppId || applicationsList[0]?.applicationId || "";
-	const serverIp = ip?.toString() || "";
+
+	const { data: routingTargetData } = api.domain.getRoutingTarget.useQuery(
+		{ applicationId: activeAppId || undefined },
+		{ enabled: !!activeAppId },
+	);
+	const assignedTarget = routingTargetData?.target || "hatdot.cloud";
 
 	const handleAddDomain = async () => {
 		const cleanDomain = newDomain.toLowerCase().trim();
@@ -84,7 +91,7 @@ export default function CustomDomainsPage() {
 			setShowAddModal(false);
 			setNewDomain("");
 			toast.success(
-				`Domain ${cleanDomain} attached! Please configure your DNS A record to point to ${serverIp || "this server"}.`,
+				`Domain ${cleanDomain} attached! Create a CNAME record pointing to ${assignedTarget}.`,
 			);
 		} catch (error: any) {
 			toast.error(error?.message || "Error attaching domain");
@@ -170,44 +177,68 @@ export default function CustomDomainsPage() {
 					</Button>
 				</div>
 
-				{/* DNS Instructions Banner */}
+				{/* DNS Instructions Banner - Provider-Managed CNAME Target */}
 				<div className="rounded-xl bg-slate-900/80 border border-slate-800 p-6 space-y-4">
 					<div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-						<div className="w-9 h-9 rounded-lg bg-cyan-950/80 border border-cyan-500/20 flex items-center justify-center shrink-0">
-							<Globe className="w-5 h-5 text-cyan-400" />
+						<div className="w-9 h-9 rounded-lg bg-indigo-950/80 border border-indigo-500/20 flex items-center justify-center shrink-0">
+							<Globe className="w-5 h-5 text-indigo-400" />
 						</div>
 						<div>
-							<h3 className="text-sm font-bold text-white">DNS Routing Instructions</h3>
-							<p className="text-xs text-slate-400">Point your domain's DNS record at your domain provider (Cloudflare, GoDaddy, Namecheap)</p>
+							<h3 className="text-sm font-bold text-white">Connect Your Domain</h3>
+							<p className="text-xs text-slate-400">
+								Create this DNS record with your domain provider (Cloudflare, GoDaddy, Namecheap) to route requests to HatDot.
+							</p>
 						</div>
 					</div>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
 						<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
 							<span className="text-slate-500 text-[10px] uppercase font-semibold">Record Type</span>
-							<p className="text-white font-mono font-bold">A Record</p>
+							<p className="text-white font-mono font-bold">CNAME</p>
 						</div>
 						<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
 							<span className="text-slate-500 text-[10px] uppercase font-semibold">Host / Name</span>
-							<p className="text-white font-mono font-bold">@ (or subdomain name)</p>
+							<p className="text-white font-mono font-bold">www (or chosen subdomain)</p>
 						</div>
 						<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1 flex items-center justify-between">
-							<div>
-								<span className="text-slate-500 text-[10px] uppercase font-semibold">Target / Value</span>
-								<p className="text-indigo-300 font-mono font-bold truncate">{serverIp || "Your Server IP"}</p>
+							<div className="overflow-hidden pr-2">
+								<span className="text-slate-500 text-[10px] uppercase font-semibold">Target / Hostname</span>
+								<p className="text-indigo-300 font-mono font-bold truncate">{assignedTarget}</p>
 							</div>
 							<button
 								type="button"
-								onClick={() => copyRecord(serverIp)}
-								disabled={!serverIp}
-								className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white shrink-0 disabled:opacity-40"
+								onClick={() => copyRecord(assignedTarget)}
+								className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white shrink-0"
 							>
 								{copiedDns ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
 							</button>
 						</div>
 					</div>
-					<p className="text-xs text-slate-400 pt-1">
-						Tip: Subdomains can also use a CNAME pointing to your server's platform host. Once DNS propagation finishes, automatic Let's Encrypt TLS will be activated.
+
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-[11px] text-slate-400">
+						<div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-0.5">
+							<span className="text-slate-300 font-semibold block flex items-center gap-1.5">
+								<Globe className="w-3.5 h-3.5 text-indigo-400" />
+								Apex / Root Domains (@)
+							</span>
+							<p>
+								Root domains require a DNS provider with CNAME Flattening or ALIAS/ANAME support (e.g. Cloudflare, Route53, Namecheap). Alternatively, use a <code className="text-indigo-300">www</code> CNAME.
+							</p>
+						</div>
+						<div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-0.5">
+							<span className="text-slate-300 font-semibold block flex items-center gap-1.5">
+								<Cloud className="w-3.5 h-3.5 text-cyan-400" />
+								Cloudflare Proxy Setting
+							</span>
+							<p>
+								Set DNS-only (Grey Cloud) during initial verification and SSL certificate issuance. Once active, Proxied (Orange Cloud) can be enabled with Full (strict) SSL.
+							</p>
+						</div>
+					</div>
+
+					<p className="text-xs text-slate-400 pt-1 flex items-center gap-1.5">
+						<Lock className="w-3.5 h-3.5 text-emerald-400" />
+						HatDot will verify the domain and automatically configure HTTPS once DNS propagation completes.
 					</p>
 				</div>
 
@@ -246,6 +277,20 @@ export default function CustomDomainsPage() {
 									)}
 								</select>
 							</div>
+						</div>
+
+						<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs flex items-center justify-between">
+							<div>
+								<span className="text-slate-400 font-semibold block">DNS CNAME Target for this App:</span>
+								<span className="text-indigo-400 font-mono font-bold">{assignedTarget}</span>
+							</div>
+							<button
+								type="button"
+								onClick={() => copyRecord(assignedTarget)}
+								className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
+							>
+								{copiedDns ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+							</button>
 						</div>
 						<div className="flex justify-end gap-3 pt-2">
 							<Button
@@ -371,6 +416,13 @@ export default function CustomDomainsPage() {
 											)}
 											Re-check DNS
 										</Button>
+										<DnsHelperModal
+											domain={{
+												host: dom.host,
+												https: dom.https,
+												path: dom.path || undefined,
+											}}
+										/>
 										<DialogAction
 											title={`Remove domain ${dom.host}?`}
 											description="Are you sure you want to remove this domain? Web traffic will stop routing to your application and the SSL certificate will be removed."

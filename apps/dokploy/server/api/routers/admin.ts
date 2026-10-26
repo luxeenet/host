@@ -1,13 +1,16 @@
 import {
+	getRoutingSettings,
 	getWebServerSettings,
 	IS_CLOUD,
 	setupWebMonitoring,
+	updateRoutingSettings,
 	updateWebServerSettings,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import * as schema from "@dokploy/server/db/schema";
 import { TRPCError } from "@trpc/server";
 import { count, eq } from "drizzle-orm";
+import { z } from "zod";
 import { apiUpdateWebServerMonitoring } from "@/server/db/schema";
 import { createTRPCRouter, platformAdminProcedure } from "../trpc";
 
@@ -146,4 +149,24 @@ export const adminRouter = createTRPCRouter({
 
 		return servers;
 	}),
+
+	/** Platform Admin: Custom domain provider-managed CNAME and routing settings */
+	getRoutingSettings: platformAdminProcedure.query(async () => {
+		return await getRoutingSettings();
+	}),
+
+	/** Platform Admin: Update custom domain routing and CNAME settings */
+	updateRoutingSettings: platformAdminProcedure
+		.input(
+			z.object({
+				cnameTarget: z.string().nullable().optional(),
+				cnameEnabled: z.boolean().optional(),
+				allowDirectIp: z.boolean().optional(),
+				cloudflareProxyEnabled: z.boolean().optional(),
+				cloudflareStrictSsl: z.boolean().optional(),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			return await updateRoutingSettings(input);
+		}),
 });

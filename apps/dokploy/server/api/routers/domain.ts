@@ -1,6 +1,7 @@
 import {
 	createDomain,
 	findApplicationById,
+	findComposeById,
 	findDomainById,
 	findDomainsByApplicationId,
 	findDomainsByComposeId,
@@ -15,6 +16,7 @@ import {
 	manageDomain,
 	removeDomain,
 	removeDomainById,
+	resolveCnameTargetForService,
 	resolveGeneratedApplicationDomain,
 	setPrimaryDomain,
 	updateDomainById,
@@ -464,7 +466,9 @@ export const domainRouter = createTRPCRouter({
 		.input(
 			z.object({
 				domain: z.string(),
-				serverId: z.string().optional(),
+				serverId: z.string().optional().nullable(),
+				applicationId: z.string().optional().nullable(),
+				composeId: z.string().optional().nullable(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -478,8 +482,15 @@ export const domainRouter = createTRPCRouter({
 				}
 			}
 
+			const expectedTarget = await resolveCnameTargetForService({
+				applicationId: input.applicationId,
+				composeId: input.composeId,
+				serverId: input.serverId,
+			});
 			const expectedIps = await getServerIpCandidates(input.serverId);
-			return validateDomain(input.domain, expectedIps);
+			return validateDomain(input.domain, expectedIps, {
+				expectedTarget,
+			});
 		}),
 
 	dnsInstructions: withPermission("domain", "read")
@@ -487,6 +498,8 @@ export const domainRouter = createTRPCRouter({
 			z.object({
 				host: z.string(),
 				serverId: z.string().optional().nullable(),
+				applicationId: z.string().optional().nullable(),
+				composeId: z.string().optional().nullable(),
 			}),
 		)
 		.query(async ({ input, ctx }) => {
@@ -499,7 +512,10 @@ export const domainRouter = createTRPCRouter({
 					});
 				}
 			}
-			return await getDnsInstructionsForDomain(input.host, input.serverId);
+			return await getDnsInstructionsForDomain(input.host, input.serverId, {
+				applicationId: input.applicationId,
+				composeId: input.composeId,
+			});
 		}),
 
 	verifyDomainHealth: withPermission("domain", "read")
@@ -514,7 +530,28 @@ export const domainRouter = createTRPCRouter({
 			if (domain.applicationId) {
 				const app = await findApplicationById(domain.applicationId);
 				serverId = app.serverId;
+			} else if (domain.composeId) {
+				const comp = await findComposeById(domain.composeId);
+				serverId = comp.serverId;
 			}
-			return await getDnsInstructionsForDomain(domain.host, serverId);
+			return await getDnsInstructionsForDomain(domain.host, serverId, {
+				applicationId: domain.applicationId,
+				composeId: domain.composeId,
+			});
+		}),
+
+	getRoutingTarget: protectedProcedure
+		.input(
+			z.object({
+				applicationId: z.string().optional().nullable(),
+				composeId: z.string().optional().nullable(),
+			}),
+		)
+		.query(async ({ input }) => {
+			const target = await resolveCnameTargetForService({
+				applicationId: input.applicationId,
+				composeId: input.composeId,
+			});
+			return { target };
 		}),
 });

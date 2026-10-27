@@ -3,10 +3,12 @@ import {
 	type AnyPgColumn,
 	boolean,
 	integer,
+	jsonb,
 	pgEnum,
 	pgTable,
 	serial,
 	text,
+	timestamp,
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -62,6 +64,34 @@ export const domains = pgTable(
 	enabled: boolean("enabled").notNull().default(true),
 	/** Canonical domain for the service; at most one per application/compose. */
 	isPrimary: boolean("isPrimary").notNull().default(false),
+	/** Cloudflare for SaaS custom hostname ID. */
+	cfHostnameId: text("cfHostnameId"),
+	/** Provider hostname status: pending | active | blocked | pending_migration | pending_deletion */
+	cfStatus: text("cfStatus"),
+	/** Provider SSL status: initializing | pending_validation | pending_issuance | pending_deployment | active | error */
+	cfSslStatus: text("cfSslStatus"),
+	/** Verification errors returned by Cloudflare */
+	cfVerificationErrors: jsonb("cfVerificationErrors")
+		.$type<string[]>()
+		.default(sql`'[]'::jsonb`),
+	/** Cloudflare ownership verification record (TXT / HTTP challenge) */
+	cfOwnershipVerification: jsonb("cfOwnershipVerification").$type<
+		Record<string, unknown>
+	>(),
+	/** Cloudflare SSL validation records (TXT / CNAME / HTTP DCV challenges) */
+	cfSslValidationRecords: jsonb("cfSslValidationRecords").$type<
+		Array<Record<string, unknown>>
+	>(),
+	/** Issued certificate metadata */
+	cfSslCertificates: jsonb("cfSslCertificates").$type<
+		Array<Record<string, unknown>>
+	>(),
+	/** Timestamp of last Cloudflare status synchronization */
+	cfLastSyncAt: timestamp("cfLastSyncAt"),
+	/** Error message from last Cloudflare API interaction */
+	cfLastError: text("cfLastError"),
+	/** Optional custom origin server for Cloudflare to route to */
+	cfCustomOrigin: text("cfCustomOrigin"),
 	},
 	(t) => ({
 		primaryPerApplication: uniqueIndex("domain_primary_per_application")

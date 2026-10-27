@@ -49,6 +49,14 @@ export const PLATFORM_SETTING_KEYS = {
 	CUSTOM_DOMAIN_ALLOW_DIRECT_IP: "custom_domain_allow_direct_ip",
 	CLOUDFLARE_PROXY_ENABLED: "cloudflare_proxy_enabled",
 	CLOUDFLARE_STRICT_SSL: "cloudflare_strict_ssl",
+	CLOUDFLARE_SAAS_ENABLED: "cloudflare_saas_enabled",
+	CLOUDFLARE_SAAS_API_TOKEN: "cloudflare_saas_api_token",
+	CLOUDFLARE_SAAS_ZONE_ID: "cloudflare_saas_zone_id",
+	CLOUDFLARE_SAAS_CNAME_TARGET: "cloudflare_saas_cname_target",
+	CLOUDFLARE_SAAS_FALLBACK_ORIGIN: "cloudflare_saas_fallback_origin",
+	CLOUDFLARE_SAAS_DEFAULT_SSL_METHOD: "cloudflare_saas_default_ssl_method",
+	CLOUDFLARE_SAAS_AUTO_PROVISION: "cloudflare_saas_auto_provision",
+	CLOUDFLARE_SAAS_FALLBACK_ORIGIN_STATUS: "cloudflare_saas_fallback_origin_status",
 } as const;
 
 export type PlatformSettingKey =

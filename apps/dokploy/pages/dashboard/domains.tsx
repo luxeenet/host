@@ -35,10 +35,71 @@ export default function CustomDomainsPage() {
 	const { mutateAsync: deleteDomain } = api.domain.delete.useMutation();
 	const { mutateAsync: setPrimaryDomain, isPending: isSettingPrimary } =
 		api.domain.setPrimary.useMutation();
-	const { mutateAsync: activateHttps, isPending: isActivating } =
-		api.domain.activateHttps.useMutation();
 	const { mutateAsync: validateDomain } =
 		api.domain.validateDomain.useMutation();
+	const { mutateAsync: activateHttps, isPending: isActivating } =
+		api.domain.activateHttps.useMutation();
+	const { mutateAsync: recheckCloudflare, isPending: isRecheckingCf } =
+		api.domain.recheckCloudflareStatus.useMutation();
+	const { mutateAsync: retryCloudflare, isPending: isRetryingCf } =
+		api.domain.retryCloudflareProvisioning.useMutation();
+
+	const handleRecheckCf = async (domainId: string, host: string) => {
+		try {
+			const res = await recheckCloudflare({ domainId });
+			toast.success(`Cloudflare status updated: ${res.lifecycle.stageName}`);
+			await refetchDomains();
+		} catch (err: any) {
+			toast.error(err?.message || "Failed to refresh Cloudflare status");
+		}
+	};
+
+	const handleRetryCf = async (domainId: string, host: string) => {
+		try {
+			const res = await retryCloudflare({ domainId });
+			toast.success(`Cloudflare provisioning retried: ${res.lifecycle.stageName}`);
+			await refetchDomains();
+		} catch (err: any) {
+			toast.error(err?.message || "Failed to retry Cloudflare provisioning");
+		}
+	};
+
+	const getCloudflareStageBadge = (dom: any) => {
+		if (!dom.cfHostnameId && !dom.cfStatus) return null;
+		if (dom.cfStatus === "active" && dom.cfSslStatus === "active") {
+			return (
+				<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+					<Cloud className="w-3 h-3 text-cyan-400" />
+					Edge Active (HTTPS)
+				</span>
+			);
+		}
+		if (dom.cfStatus === "error") {
+			return (
+				<span
+					className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-red-500/20 text-red-400 border border-red-500/30"
+					title={dom.cfLastError || "Cloudflare error"}
+				>
+					<AlertCircle className="w-3 h-3 text-red-400" />
+					Config Error
+				</span>
+			);
+		}
+		if (dom.cfStatus === "active" && dom.cfSslStatus !== "active") {
+			return (
+				<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/30">
+					<Cloud className="w-3 h-3 text-amber-400" />
+					Issuing SSL
+				</span>
+			);
+		}
+		return (
+			<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+				<Cloud className="w-3 h-3 text-cyan-400" />
+				Verifying Ownership
+			</span>
+		);
+	};
 
 	const [showAddModal, setShowAddModal] = useState(false);
 	const [newDomain, setNewDomain] = useState("");
@@ -352,6 +413,7 @@ export default function CustomDomainsPage() {
 													Primary
 												</span>
 											)}
+											{getCloudflareStageBadge(dom)}
 											<span
 												className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
 													dom.https
@@ -391,7 +453,29 @@ export default function CustomDomainsPage() {
 												<Star className="w-3.5 h-3.5 text-amber-400" /> Set as Primary
 											</Button>
 										)}
-										{!dom.https && (
+										{dom.cfStatus === "error" && (
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={isRetryingCf}
+												onClick={() => handleRetryCf(dom.domainId, dom.host)}
+												className="border-amber-800/60 text-amber-400 hover:bg-amber-950/20 text-xs gap-1.5 h-8"
+											>
+												<RefreshCw className={`w-3.5 h-3.5 ${isRetryingCf ? "animate-spin" : ""}`} /> Retry
+											</Button>
+										)}
+										{(dom.cfHostnameId || dom.cfStatus) && (
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={isRecheckingCf}
+												onClick={() => handleRecheckCf(dom.domainId, dom.host)}
+												className="border-cyan-800/60 text-cyan-400 hover:bg-cyan-950/20 text-xs gap-1.5 h-8"
+											>
+												<Cloud className={`w-3.5 h-3.5 ${isRecheckingCf ? "animate-spin" : ""}`} /> Sync Status
+											</Button>
+										)}
+										{!dom.https && !dom.cfHostnameId && (
 											<Button
 												variant="outline"
 												size="sm"
@@ -414,14 +498,17 @@ export default function CustomDomainsPage() {
 											) : (
 												<RefreshCw className="w-3.5 h-3.5 text-indigo-400" />
 											)}
-											Re-check DNS
+											Check DNS
 										</Button>
 										<DnsHelperModal
 											domain={{
+												domainId: dom.domainId,
 												host: dom.host,
 												https: dom.https,
 												path: dom.path || undefined,
 											}}
+											applicationId={dom.applicationId || undefined}
+											composeId={dom.composeId || undefined}
 										/>
 										<DialogAction
 											title={`Remove domain ${dom.host}?`}

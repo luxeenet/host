@@ -554,4 +554,88 @@ export const domainRouter = createTRPCRouter({
 			});
 			return { target };
 		}),
+
+	/** On-demand live Cloudflare for SaaS custom hostname status recheck */
+	recheckCloudflareStatus: protectedProcedure
+		.input(z.object({ domainId: z.string() }))
+		.mutation(async ({ input, ctx }) => {
+			const domain = await findDomainById(input.domainId);
+			const serviceId = domain.applicationId || domain.composeId;
+			if (serviceId) {
+				await checkServicePermissionAndAccess(ctx, serviceId, {
+					domain: ["read"],
+				});
+			} else if (domain.previewDeploymentId) {
+				const preview = await findPreviewDeploymentById(
+					domain.previewDeploymentId,
+				);
+				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
+					domain: ["read"],
+				});
+			}
+
+			const { recheckDomainCloudflareStatus, mapDomainCloudflareStatus, resolveCloudflareCnameTarget } =
+				await import("@dokploy/server");
+
+			const updated = await recheckDomainCloudflareStatus(input.domainId);
+			const cnameTarget = await resolveCloudflareCnameTarget({
+				applicationId: updated.applicationId,
+				composeId: updated.composeId,
+			});
+			const lifecycle = mapDomainCloudflareStatus(updated, cnameTarget);
+
+			await audit(ctx, {
+				action: "update",
+				resourceType: "domain",
+				resourceId: updated.domainId,
+				resourceName: `${updated.host} (Cloudflare status refreshed: ${lifecycle.stageName})`,
+			});
+
+			return {
+				domain: updated,
+				lifecycle,
+			};
+		}),
+
+	/** Retry Cloudflare for SaaS custom hostname provisioning if previously failed */
+	retryCloudflareProvisioning: protectedProcedure
+		.input(z.object({ domainId: z.string() }))
+		.mutation(async ({ input, ctx }) => {
+			const domain = await findDomainById(input.domainId);
+			const serviceId = domain.applicationId || domain.composeId;
+			if (serviceId) {
+				await checkServicePermissionAndAccess(ctx, serviceId, {
+					domain: ["create"],
+				});
+			} else if (domain.previewDeploymentId) {
+				const preview = await findPreviewDeploymentById(
+					domain.previewDeploymentId,
+				);
+				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
+					domain: ["create"],
+				});
+			}
+
+			const { retryDomainCloudflareProvisioning, mapDomainCloudflareStatus, resolveCloudflareCnameTarget } =
+				await import("@dokploy/server");
+
+			const updated = await retryDomainCloudflareProvisioning(input.domainId);
+			const cnameTarget = await resolveCloudflareCnameTarget({
+				applicationId: updated.applicationId,
+				composeId: updated.composeId,
+			});
+			const lifecycle = mapDomainCloudflareStatus(updated, cnameTarget);
+
+			await audit(ctx, {
+				action: "update",
+				resourceType: "domain",
+				resourceId: updated.domainId,
+				resourceName: `${updated.host} (Cloudflare provisioning retried)`,
+			});
+
+			return {
+				domain: updated,
+				lifecycle,
+			};
+		}),
 });

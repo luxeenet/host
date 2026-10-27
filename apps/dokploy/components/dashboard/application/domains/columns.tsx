@@ -173,10 +173,16 @@ export const createColumns = ({
 
 			return (
 				<div className="flex items-center gap-2">
-					{domain.certificateType && (
-						<Badge variant="outline" className="capitalize">
-							{domain.certificateType}
+					{(domain as any).cfHostnameId ? (
+						<Badge variant="outline" className="text-cyan-400 border-cyan-500/30 capitalize">
+							Cloudflare SaaS
 						</Badge>
+					) : (
+						domain.certificateType && (
+							<Badge variant="outline" className="capitalize">
+								{domain.certificateType}
+							</Badge>
+						)
 					)}
 					{!domain.https && canCreateDomain && handleActivateHttps && (
 						<Button
@@ -319,11 +325,14 @@ export const createColumns = ({
 					{!domain.host.includes("sslip.io") && (
 						<DnsHelperModal
 							domain={{
+								domainId: domain.domainId,
 								host: domain.host,
 								https: domain.https,
 								path: domain.path || undefined,
 							}}
 							serverIp={serverIp}
+							applicationId={type === "application" ? id : undefined}
+							composeId={type === "compose" ? id : undefined}
 						/>
 					)}
 					{canCreateDomain && (

@@ -34,6 +34,14 @@ import {
 	resolveCnameTargetForService,
 	verifyDomainCname,
 } from "./cname-routing";
+import {
+	deleteCustomHostname,
+	isCloudflareSaasActive,
+	mapDomainCloudflareStatus,
+	provisionCustomHostname,
+	resolveCloudflareCnameTarget,
+	syncCustomHostnameStatus,
+} from "./cloudflare-saas-service";
 
 export type Domain = Omit<typeof domains.$inferSelect, "isPrimary"> & {
 	isPrimary?: boolean;
@@ -431,7 +439,17 @@ export const createDomain = async (
 		await manageDomain(application, domain);
 	}
 
-	return domain;
+	let finalDomain = domain;
+	try {
+		const saasActive = await isCloudflareSaasActive();
+		if (saasActive && !(await isPlatformOrTestDomain(host))) {
+			finalDomain = await provisionCustomHostname(domain.domainId, { tx });
+		}
+	} catch (cfErr) {
+		console.error(`[Cloudflare SaaS] Error auto-provisioning domain ${host}:`, cfErr);
+	}
+
+	return finalDomain;
 };
 
 export const getPublicServerIp = async (serverId?: string): Promise<string> => {
@@ -756,6 +774,11 @@ export const findDomainsByOrganizationId = async (organizationId: string) => {
 			projectId: projects.projectId,
 			environmentId: environments.environmentId,
 			domainType: domains.domainType,
+			cfHostnameId: domains.cfHostnameId,
+			cfStatus: domains.cfStatus,
+			cfSslStatus: domains.cfSslStatus,
+			cfLastError: domains.cfLastError,
+			cfLastSyncAt: domains.cfLastSyncAt,
 		})
 		.from(domains)
 		.innerJoin(
@@ -787,6 +810,11 @@ export const findDomainsByOrganizationId = async (organizationId: string) => {
 			projectId: projects.projectId,
 			environmentId: environments.environmentId,
 			domainType: domains.domainType,
+			cfHostnameId: domains.cfHostnameId,
+			cfStatus: domains.cfStatus,
+			cfSslStatus: domains.cfSslStatus,
+			cfLastError: domains.cfLastError,
+			cfLastSyncAt: domains.cfLastSyncAt,
 		})
 		.from(domains)
 		.innerJoin(compose, eq(domains.composeId, compose.composeId))
@@ -885,13 +913,31 @@ export const updateDomainById = async (
 };
 
 export const removeDomainById = async (domainId: string) => {
-	await findDomainById(domainId);
+	const domain = await findDomainById(domainId);
+	if (domain?.cfHostnameId) {
+		try {
+			await deleteCustomHostname(domainId);
+		} catch (cfErr) {
+			console.error(
+				`[Cloudflare SaaS] Error deleting hostname ${domain.cfHostnameId}:`,
+				cfErr,
+			);
+		}
+	}
 	const result = await db
 		.delete(domains)
 		.where(eq(domains.domainId, domainId))
 		.returning();
 
 	return result[0];
+};
+
+export const recheckDomainCloudflareStatus = async (domainId: string) => {
+	return await syncCustomHostnameStatus(domainId);
+};
+
+export const retryDomainCloudflareProvisioning = async (domainId: string) => {
+	return await provisionCustomHostname(domainId);
 };
 
 export const getDomainHost = (domain: Domain) => {
@@ -1163,6 +1209,27 @@ export interface DnsInstructions {
 		note: string;
 		recommendedAlternative?: string;
 	};
+	cloudflareSaas?: {
+		isActive: boolean;
+		hostnameId: string | null;
+		status: "pending" | "pending_verification" | "pending_certificate" | "active" | "error";
+		stageName: string;
+		stageStep: 1 | 2 | 3 | 4;
+		hostnameStatus: string | null;
+		sslStatus: string | null;
+		lastSyncAt: string | null;
+		lastError: string | null;
+		isHttpsReady: boolean;
+		records: Array<{
+			type: "CNAME" | "TXT" | "HTTP";
+			name: string;
+			value: string;
+			purpose: string;
+			status: string;
+			description: string;
+		}>;
+		customerActionRequired: string;
+	};
 }
 
 export const getDnsInstructionsForDomain = async (
@@ -1193,13 +1260,78 @@ export const getDnsInstructionsForDomain = async (
 	const settings = await getWebServerSettings();
 	const expectedIp = serverCandidates?.[0] || settings?.serverIp || "127.0.0.1";
 
-	const cnameTarget = await resolveCnameTargetForService({
-		applicationId: options?.applicationId,
-		composeId: options?.composeId,
-		serverId,
-	});
+	// Check if this domain is tracked by Cloudflare for SaaS in the database
+	let dbDomain: (typeof domains.$inferSelect) | undefined;
+	try {
+		const found = await db
+			.select()
+			.from(domains)
+			.where(sql`lower(trim(${domains.host})) = ${cleanHost}`)
+			.limit(1);
+		dbDomain = found[0];
+	} catch {}
+
+	const saasActive = await isCloudflareSaasActive();
+	const useCloudflareSaas =
+		Boolean(dbDomain?.cfHostnameId || dbDomain?.cfStatus) ||
+		(saasActive && !(await isPlatformOrTestDomain(cleanHost)));
+
+	const cnameTarget = useCloudflareSaas
+		? await resolveCloudflareCnameTarget({
+				applicationId: options?.applicationId || dbDomain?.applicationId,
+				composeId: options?.composeId || dbDomain?.composeId,
+		  })
+		: await resolveCnameTargetForService({
+				applicationId: options?.applicationId,
+				composeId: options?.composeId,
+				serverId,
+		  });
 
 	const targetStatus = await checkTargetDnsStatus(cnameTarget);
+
+	// If domain has Cloudflare for SaaS metadata, construct rich provider instructions
+	let cloudflareSaasInfo: DnsInstructions["cloudflareSaas"] | undefined;
+	if (dbDomain && useCloudflareSaas) {
+		const cfStatus = mapDomainCloudflareStatus(dbDomain, cnameTarget);
+		cloudflareSaasInfo = {
+			isActive: true,
+			hostnameId: cfStatus.hostnameId,
+			status: cfStatus.status,
+			stageName: cfStatus.stageName,
+			stageStep: cfStatus.stageStep,
+			hostnameStatus: cfStatus.hostnameStatus,
+			sslStatus: cfStatus.sslStatus,
+			lastSyncAt: cfStatus.lastSyncAt ? cfStatus.lastSyncAt.toISOString() : null,
+			lastError: cfStatus.lastError,
+			isHttpsReady: cfStatus.isHttpsReady,
+			records: cfStatus.records,
+			customerActionRequired: cfStatus.customerActionRequired,
+		};
+	} else if (useCloudflareSaas) {
+		cloudflareSaasInfo = {
+			isActive: true,
+			hostnameId: null,
+			status: "pending",
+			stageName: "Awaiting DNS configuration",
+			stageStep: 1,
+			hostnameStatus: null,
+			sslStatus: null,
+			lastSyncAt: null,
+			lastError: null,
+			isHttpsReady: false,
+			records: [
+				{
+					type: "CNAME",
+					name: recordName,
+					value: cnameTarget,
+					purpose: "Traffic Routing",
+					status: "required",
+					description: `Points ${cleanHost} to the platform Cloudflare for SaaS edge.`,
+				},
+			],
+			customerActionRequired: `Add a CNAME record pointing to ${cnameTarget}.`,
+		};
+	}
 
 	if (cnameEnabled) {
 		const verification = await verifyDomainCname(
@@ -1231,10 +1363,12 @@ export const getDnsInstructionsForDomain = async (
 			cnameTarget,
 			serverIp: allowDirect ? expectedIp : undefined,
 			isSubdomain,
-			verified: verification.isValid,
+			verified: cloudflareSaasInfo
+				? cloudflareSaasInfo.status === "active" || verification.isValid
+				: verification.isValid,
 			currentIps: verification.resolvedIps,
 			currentCnames: verification.resolvedCnames,
-			message,
+			message: cloudflareSaasInfo?.customerActionRequired || message,
 			cdnProvider: verification.cdnProvider,
 			originIpProtected: !allowDirect,
 			targetStatus: {
@@ -1242,6 +1376,7 @@ export const getDnsInstructionsForDomain = async (
 				isProxied: targetStatus.isProxied,
 				cdnProvider: targetStatus.cdnProvider,
 			},
+			cloudflareSaas: cloudflareSaasInfo,
 			cloudflareGuidance: {
 				proxyRecommended: true,
 				sslMode: "Full (strict)",

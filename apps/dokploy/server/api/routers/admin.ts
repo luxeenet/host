@@ -169,4 +169,47 @@ export const adminRouter = createTRPCRouter({
 		.mutation(async ({ input }) => {
 			return await updateRoutingSettings(input);
 		}),
+
+	/** Platform Admin: Get sanitized Cloudflare for SaaS settings */
+	getCloudflareSaasSettings: platformAdminProcedure.query(async () => {
+		const { getCloudflareSaasSettings } = await import("@dokploy/server");
+		return await getCloudflareSaasSettings();
+	}),
+
+	/** Platform Admin: Update Cloudflare for SaaS configuration */
+	updateCloudflareSaasSettings: platformAdminProcedure
+		.input(
+			z.object({
+				enabled: z.boolean().optional(),
+				apiToken: z.string().nullable().optional(),
+				zoneId: z.string().nullable().optional(),
+				cnameTarget: z.string().nullable().optional(),
+				fallbackOrigin: z.string().nullable().optional(),
+				defaultSslMethod: z.enum(["http", "txt", "cname"]).optional(),
+				autoProvision: z.boolean().optional(),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const { updateCloudflareSaasSettings } = await import("@dokploy/server");
+			return await updateCloudflareSaasSettings(input);
+		}),
+
+	/** Platform Admin: Test Cloudflare API connection, zone, and fallback origin */
+	testCloudflareSaasConnection: platformAdminProcedure
+		.input(
+			z.object({
+				apiToken: z.string().nullable().optional(),
+				zoneId: z.string().nullable().optional(),
+			}).optional(),
+		)
+		.mutation(async ({ input }) => {
+			const { testCloudflareConnection } = await import("@dokploy/server");
+			return await testCloudflareConnection(input);
+		}),
+
+	/** Platform Admin: Force manual background status reconciliation for all custom hostnames */
+	syncAllCloudflareHostnames: platformAdminProcedure.mutation(async () => {
+		const { reconcileCloudflareHostnames } = await import("@dokploy/server");
+		return await reconcileCloudflareHostnames({ forceAll: true });
+	}),
 });

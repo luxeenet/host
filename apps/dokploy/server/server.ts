@@ -83,6 +83,14 @@ void app.prepare().then(async () => {
 		runBillingCycle().catch(console.error);
 		setInterval(() => runBillingCycle().catch(console.error), 60 * 60 * 1000);
 
+		// Start Cloudflare for SaaS hostname status reconciliation
+		try {
+			const { startCloudflareSaasSyncJob } = await import("@dokploy/server");
+			startCloudflareSaasSyncJob(2);
+		} catch (e) {
+			console.error("[platform] Cloudflare SaaS sync job start failed:", e);
+		}
+
 		if (!IS_CLOUD) {
 			console.log("Starting Deployment Worker");
 			const { startDeploymentWorker } = await import("./queues/queueSetup");

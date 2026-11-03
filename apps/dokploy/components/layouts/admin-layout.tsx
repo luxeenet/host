@@ -4,6 +4,7 @@ import { type ReactNode, useState } from "react";
 import {
 	Activity,
 	ChevronRight,
+	Cloud,
 	CreditCard,
 	Database,
 	Globe,
@@ -24,11 +25,13 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 
-const ADMIN_NAV_ITEMS = [
+export const ADMIN_NAV_ITEMS = [
 	{ label: "Admin Overview", icon: LayoutDashboard, href: "/admin" },
 	{ label: "Plans & Pricing", icon: Zap, href: "/admin/plans" },
 	{ label: "Customers", icon: Users, href: "/admin/customers" },
 	{ label: "Server Nodes", icon: Server, href: "/admin/servers" },
+	{ label: "Cloudflare for SaaS", icon: Cloud, href: "/admin#cloudflare-saas" },
+	{ label: "Web Server Settings", icon: Settings, href: "/dashboard/settings/server" },
 	{ label: "Hatdot Infra Control", icon: ShieldCheck, href: "/dashboard/home" },
 ];
 

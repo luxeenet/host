@@ -26,6 +26,8 @@ import { DnsHelperModal } from "@/components/dashboard/application/domains/dns-h
 import { api } from "@/utils/api";
 
 export default function CustomDomainsPage() {
+	const { data: auth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean((auth as any)?.user?.isPlatformAdmin || (auth as any)?.isPlatformAdmin);
 	const { data: domains, refetch: refetchDomains, isLoading: isLoadingDomains } =
 		api.domain.all.useQuery();
 	const { data: projects } = api.project.all.useQuery();
@@ -248,6 +250,30 @@ export default function CustomDomainsPage() {
 					</Button>
 				</div>
 
+				{isPlatformAdmin && (
+					<div className="rounded-xl bg-cyan-950/20 border border-cyan-500/30 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+						<div className="flex items-center gap-3">
+							<div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-500/30 flex items-center justify-center shrink-0">
+								<Cloud className="w-4 h-4 text-cyan-400" />
+							</div>
+							<div>
+								<h4 className="text-xs font-bold text-white">Platform Admin: Cloudflare for SaaS Configuration</h4>
+								<p className="text-[11px] text-slate-400">
+									Manage Cloudflare Custom Hostnames, Zone ID, CNAME target ({assignedTarget}), Fallback Origin, and edge SSL automation.
+								</p>
+							</div>
+						</div>
+						<Link href="/dashboard/settings/server#cloudflare-saas">
+							<Button
+								variant="outline"
+								size="sm"
+								className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40 text-xs gap-1.5 shrink-0"
+							>
+								<Cloud className="w-3.5 h-3.5 text-cyan-400" /> Configure Cloudflare for SaaS
+							</Button>
+						</Link>
+					</div>
+				)}
 				{/* DNS Instructions Banner - Provider-Managed CNAME Target */}
 				<div className="rounded-xl bg-slate-900/80 border border-slate-800 p-6 space-y-4">
 					<div className="flex items-center gap-3 border-b border-slate-800 pb-3">

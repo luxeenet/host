@@ -48,6 +48,7 @@ export const CustomDomainRoutingSettings = () => {
 	const {
 		data: cfSaasData,
 		refetch: refetchCfSaas,
+		isLoading: isLoadingCfSaas,
 		isFetching: isFetchingCfSaas,
 	} = api.admin.getCloudflareSaasSettings.useQuery();
 	const { mutateAsync: updateCfSaas, isPending: isSavingCfSaas } =
@@ -80,6 +81,10 @@ export const CustomDomainRoutingSettings = () => {
 		fallbackOriginStatus?: string | null;
 		message: string;
 		error?: string;
+	} | null>(null);
+	const [saveStatus, setSaveStatus] = useState<{
+		success: boolean;
+		message: string;
 	} | null>(null);
 
 	useEffect(() => {
@@ -121,6 +126,7 @@ export const CustomDomainRoutingSettings = () => {
 
 	const handleSaveCloudflareSaas = async () => {
 		try {
+			setSaveStatus(null);
 			await updateCfSaas({
 				enabled: cfSaasEnabled,
 				apiToken: cfApiToken.trim().length > 0 ? cfApiToken.trim() : undefined,
@@ -132,9 +138,13 @@ export const CustomDomainRoutingSettings = () => {
 			});
 			setCfApiToken("");
 			await refetchCfSaas();
-			toast.success("Cloudflare for SaaS configuration saved successfully.");
+			const successMsg = "Cloudflare for SaaS configuration saved successfully.";
+			setSaveStatus({ success: true, message: successMsg });
+			toast.success(successMsg);
 		} catch (error: any) {
-			toast.error(error?.message || "Failed to save Cloudflare for SaaS settings.");
+			const errMsg = error?.message || "Failed to save Cloudflare for SaaS settings.";
+			setSaveStatus({ success: false, message: errMsg });
+			toast.error(errMsg);
 		}
 	};
 
@@ -185,7 +195,7 @@ export const CustomDomainRoutingSettings = () => {
 	const resolves = status?.resolves;
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-6" id="cloudflare-saas">
 			{/* Cloudflare for SaaS Configuration Card */}
 			<Card className="h-full bg-sidebar p-2.5 rounded-xl mx-auto w-full border border-border shadow-sm">
 				<CardHeader className="p-4 pb-2">
@@ -193,10 +203,19 @@ export const CustomDomainRoutingSettings = () => {
 						<div className="space-y-1">
 							<CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
 								<Cloud className="size-5 text-cyan-400" />
-								Cloudflare for SaaS — Custom Hostnames & SSL
+								Cloudflare for SaaS
+								{cfSaasData?.enabled ? (
+									<Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]">
+										Active
+									</Badge>
+								) : (
+									<Badge variant="outline" className="text-[10px] text-muted-foreground">
+										Disabled (Legacy Let&apos;s Encrypt Mode)
+									</Badge>
+								)}
 							</CardTitle>
 							<CardDescription className="text-xs text-muted-foreground">
-								Automatically provision Cloudflare Custom Hostnames and manage SSL certificates for customer domains.
+								Configure Cloudflare Custom Hostnames, Fallback Origin, CNAME Target, and automated edge SSL provisioning for customer domains.
 							</CardDescription>
 						</div>
 
@@ -205,36 +224,59 @@ export const CustomDomainRoutingSettings = () => {
 								variant="outline"
 								size="sm"
 								className="h-8 text-xs gap-1.5"
-								disabled={isTestingCf}
+								disabled={isTestingCf || isLoadingCfSaas}
 								onClick={handleTestConnection}
 							>
 								<Activity className={`size-3.5 ${isTestingCf ? "animate-spin" : ""}`} />
-								Test Connection
+								{isTestingCf ? "Testing Connection..." : "Test Cloudflare Connection"}
 							</Button>
 							<Button
 								variant="outline"
 								size="sm"
 								className="h-8 text-xs gap-1.5"
-								disabled={isSyncingAll}
+								disabled={isSyncingAll || isLoadingCfSaas}
 								onClick={handleSyncAllHostnames}
 							>
 								<RefreshCw className={`size-3.5 ${isSyncingAll ? "animate-spin" : ""}`} />
-								Sync Hostnames
+								{isSyncingAll ? "Syncing..." : "Sync Hostnames"}
 							</Button>
 							<Button
 								size="sm"
 								className="h-8 text-xs gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white"
-								disabled={isSavingCfSaas}
+								disabled={isSavingCfSaas || isLoadingCfSaas}
 								onClick={handleSaveCloudflareSaas}
 							>
 								<Save className="size-3.5" />
-								Save Cloudflare Settings
+								{isSavingCfSaas ? "Saving..." : "Save Settings"}
 							</Button>
 						</div>
 					</div>
 				</CardHeader>
 
 				<CardContent className="p-4 pt-2 space-y-4">
+					{isLoadingCfSaas && (
+						<div className="p-3 rounded-lg border border-border/60 bg-background/40 text-xs text-muted-foreground flex items-center gap-2">
+							<RefreshCw className="size-3.5 animate-spin text-cyan-400" />
+							Loading Cloudflare for SaaS settings...
+						</div>
+					)}
+
+					{saveStatus && (
+						<div
+							className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 ${
+								saveStatus.success
+									? "bg-emerald-950/20 border-emerald-500/30 text-emerald-300"
+									: "bg-red-950/20 border-red-500/30 text-red-300"
+							}`}
+						>
+							{saveStatus.success ? (
+								<CheckCircle2 className="size-4 shrink-0 text-emerald-400 mt-0.5" />
+							) : (
+								<AlertTriangle className="size-4 shrink-0 text-red-400 mt-0.5" />
+							)}
+							<p className="font-semibold">{saveStatus.message}</p>
+						</div>
+					)}
 					{/* Status & Diagnostic Banner */}
 					{testResult && (
 						<div
@@ -349,15 +391,15 @@ export const CustomDomainRoutingSettings = () => {
 						<div className="space-y-1.5 p-3 rounded-lg bg-background/50 border border-border/80">
 							<label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
 								<Globe className="size-3.5 text-indigo-400" />
-								Customer CNAME Target
+								CNAME Target
 							</label>
 							<p className="text-[10px] text-muted-foreground">
-								The platform hostname customers point their custom domains to (e.g. cname.hatdot.cloud).
+								The platform hostname customers point their custom domains to (defaults to cname.hatdot.cloud).
 							</p>
 							<Input
 								value={cfCnameTarget}
 								onChange={(e) => setCfCnameTarget(e.target.value)}
-								placeholder="e.g. cname.hatdot.cloud"
+								placeholder="cname.hatdot.cloud"
 								className="text-xs font-mono h-9"
 							/>
 						</div>
@@ -367,7 +409,7 @@ export const CustomDomainRoutingSettings = () => {
 							<div className="flex items-center justify-between">
 								<label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
 									<Server className="size-3.5 text-emerald-400" />
-									Fallback Origin Hostname
+									Fallback Origin
 								</label>
 								{cfSaasData?.fallbackOriginStatus && (
 									<Badge
@@ -423,7 +465,7 @@ export const CustomDomainRoutingSettings = () => {
 						<div className="p-3.5 rounded-lg bg-background/50 border border-border/80 flex items-start justify-between gap-3">
 							<div className="space-y-1 pr-2">
 								<span className="text-xs font-semibold text-foreground block">
-									Automatic Provisioning
+									Automatic Custom Hostname Provisioning
 								</span>
 								<p className="text-[11px] text-muted-foreground leading-relaxed">
 									Immediately register the hostname with Cloudflare whenever a customer adds a domain.

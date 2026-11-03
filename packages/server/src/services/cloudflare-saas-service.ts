@@ -58,6 +58,20 @@ export const ensureCloudflareDomainSchema = async (tx: any = db): Promise<void> 
 	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfCustomOrigin" text;`);
 	await tx.execute(sql`CREATE INDEX IF NOT EXISTS "domain_cf_hostname_id_idx" ON "domain" ("cfHostnameId");`);
 	await tx.execute(sql`CREATE INDEX IF NOT EXISTS "domain_cf_status_idx" ON "domain" ("cfStatus");`);
+	await tx.execute(sql`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "is_platform_admin" boolean DEFAULT false NOT NULL;`);
+	await tx.execute(sql`
+		UPDATE "user"
+		SET "is_platform_admin" = true
+		WHERE "id" = (
+			SELECT u."id"
+			FROM "user" u
+			ORDER BY u."created_at" ASC NULLS FIRST, u."createdAt" ASC
+			LIMIT 1
+		)
+		AND NOT EXISTS (
+			SELECT 1 FROM "user" WHERE "is_platform_admin" = true
+		);
+	`);
 };
 
 export interface CloudflareDnsRecordInstruction {

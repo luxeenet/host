@@ -12,6 +12,7 @@ import {
 	CheckCircle,
 } from "lucide-react";
 import { AdminLayout } from "@/components/layouts/admin-layout";
+import { CustomDomainRoutingSettings } from "@/components/dashboard/settings/custom-domain-routing-settings";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
 import { api } from "@/utils/api";
@@ -40,6 +41,11 @@ export default function AdminDashboardPage() {
 					</div>
 
 					<div className="flex items-center gap-3">
+						<Link href="/admin#cloudflare-saas">
+							<Button variant="outline" className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/30 font-medium text-xs">
+								Cloudflare for SaaS
+							</Button>
+						</Link>
 						<Link href="/admin/plans">
 							<Button className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-medium text-xs shadow-lg shadow-amber-600/20">
 								Manage Hosting Plans
@@ -179,6 +185,11 @@ export default function AdminDashboardPage() {
 							</div>
 						</div>
 					</div>
+				</div>
+
+				{/* Cloudflare for SaaS & Custom Domain Routing Configuration */}
+				<div className="pt-2">
+					<CustomDomainRoutingSettings />
 				</div>
 			</div>
 		</>

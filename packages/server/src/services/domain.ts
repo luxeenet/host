@@ -42,6 +42,7 @@ import {
 	resolveCloudflareCnameTarget,
 	syncCustomHostnameStatus,
 } from "./cloudflare-saas-service";
+import { getCloudflareSaasSettings } from "./cloudflare-saas-settings";
 
 type DomainOptionalKeys =
 	| "isPrimary"
@@ -463,10 +464,20 @@ export const createDomain = async (
 
 	let finalDomain = domain;
 	if (willUseCloudflare) {
-		try {
-			finalDomain = await provisionCustomHostname(domain.domainId, { tx });
-		} catch (cfErr) {
-			console.error(`[Cloudflare SaaS] Error auto-provisioning domain ${host}:`, cfErr);
+		const cfSettings = await getCloudflareSaasSettings();
+		if (cfSettings.autoProvision !== false) {
+			try {
+				finalDomain = await provisionCustomHostname(domain.domainId, { tx });
+			} catch (cfErr) {
+				console.error(`[Cloudflare SaaS] Error auto-provisioning domain ${host}:`, cfErr);
+			}
+		} else {
+			const updatedPending = await tx
+				.update(domains)
+				.set({ cfStatus: "pending", cfSslStatus: "initializing" })
+				.where(eq(domains.domainId, domain.domainId))
+				.returning();
+			finalDomain = updatedPending[0] || domain;
 		}
 	}
 

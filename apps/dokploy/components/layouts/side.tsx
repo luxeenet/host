@@ -14,6 +14,7 @@ import {
 	CircleHelp,
 	ClipboardList,
 	Clock,
+	Cloud,
 	CreditCard,
 	Database,
 	Folder,
@@ -268,6 +269,13 @@ export const MENU: Menu = {
 		},
 		{
 			isSingle: true,
+			title: "Cloudflare for SaaS",
+			url: "/dashboard/settings/server#cloudflare-saas",
+			icon: Cloud,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
+		},
+		{
+			isSingle: true,
 			title: "Profile",
 			url: "/dashboard/settings/profile",
 			icon: User,
@@ -452,7 +460,7 @@ export const MENU: Menu = {
  * Creates a menu based on the current user's role and permissions
  * @returns a menu object with the home, settings, and help items
  */
-function createMenuForAuthUser(opts: {
+export function createMenuForAuthUser(opts: {
 	auth?: AuthQueryOutput;
 	permissions?: PermissionsOutput;
 	isCloud: boolean;

@@ -195,12 +195,64 @@ export const getCloudflareSaasSettings = async (): Promise<CloudflareSaasSetting
 	};
 };
 
+const VALID_ZONE_ID_REGEX = /^[a-zA-Z0-9_-]{4,64}$/;
+
 /**
  * Update Cloudflare for SaaS administrator settings with encrypted secret persistence.
  */
 export const updateCloudflareSaasSettings = async (
 	input: UpdateCloudflareSaasSettingsInput,
 ): Promise<CloudflareSaasSettingsView> => {
+	if (input.zoneId !== undefined) {
+		const cleanZoneId = input.zoneId?.trim() || null;
+		if (cleanZoneId && !VALID_ZONE_ID_REGEX.test(cleanZoneId)) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "Invalid Cloudflare Zone ID format.",
+			});
+		}
+	}
+
+	if (input.cnameTarget !== undefined) {
+		const clean = input.cnameTarget?.trim().toLowerCase() || null;
+		if (clean && !VALID_HOSTNAME_REGEX.test(clean)) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: INVALID_HOSTNAME_MESSAGE,
+			});
+		}
+	}
+
+	if (input.fallbackOrigin !== undefined) {
+		const clean = input.fallbackOrigin?.trim().toLowerCase() || null;
+		if (clean && !VALID_HOSTNAME_REGEX.test(clean)) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: INVALID_HOSTNAME_MESSAGE,
+			});
+		}
+	}
+
+	if (input.enabled === true) {
+		const currentSettings = await getCloudflareSaasSettings();
+		const willHaveToken =
+			input.apiToken !== undefined
+				? Boolean(input.apiToken && input.apiToken.trim().length > 0)
+				: currentSettings.hasApiToken;
+		const willHaveZoneId =
+			input.zoneId !== undefined
+				? Boolean(input.zoneId && input.zoneId.trim().length > 0)
+				: Boolean(currentSettings.zoneId && currentSettings.zoneId.trim().length > 0);
+
+		if (!willHaveToken || !willHaveZoneId) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message:
+					"Cloudflare API Token and Cloudflare Zone ID are required when enabling Cloudflare for SaaS.",
+			});
+		}
+	}
+
 	if (input.enabled !== undefined) {
 		await setPlatformSettingValue(
 			PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_ENABLED,
@@ -309,7 +361,10 @@ export const testCloudflareConnection = async (
 		options?.zoneId?.trim() ||
 		(await getPlatformSettingValue(
 			PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_ZONE_ID,
-		));
+		))?.trim() ||
+		process.env.CLOUDFLARE_SAAS_ZONE_ID?.trim() ||
+		process.env.CLOUDFLARE_ZONE_ID?.trim() ||
+		null;
 
 	if (!zoneId) {
 		return {

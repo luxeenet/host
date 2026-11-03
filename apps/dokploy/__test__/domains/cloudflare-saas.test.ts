@@ -987,5 +987,98 @@ describe("Cloudflare for SaaS Custom Hostnames & SSL Management", () => {
 			expect(sql0204).toContain('ADD COLUMN IF NOT EXISTS "cfOwnershipVerification"');
 			expect(sql0204).toContain('ADD COLUMN IF NOT EXISTS "cfSslValidationRecords"');
 		});
+
+		it("should expose Cloudflare for SaaS in Admin Navigation and Settings Sidebar for platform administrators only", () => {
+			const sideSrc = fs.readFileSync(
+				path.resolve(__dirname, "../../components/layouts/side.tsx"),
+				"utf8",
+			);
+			const adminLayoutSrc = fs.readFileSync(
+				path.resolve(__dirname, "../../components/layouts/admin-layout.tsx"),
+				"utf8",
+			);
+			const adminIndexSrc = fs.readFileSync(
+				path.resolve(__dirname, "../../pages/admin/index.tsx"),
+				"utf8",
+			);
+			const serverSettingsSrc = fs.readFileSync(
+				path.resolve(__dirname, "../../pages/dashboard/settings/server.tsx"),
+				"utf8",
+			);
+			const componentSrc = fs.readFileSync(
+				path.resolve(
+					__dirname,
+					"../../components/dashboard/settings/custom-domain-routing-settings.tsx",
+				),
+				"utf8",
+			);
+
+			// Sidebar menu includes Cloudflare for SaaS gated by isPlatformAdmin
+			expect(sideSrc).toContain('title: "Cloudflare for SaaS"');
+			expect(sideSrc).toContain('url: "/dashboard/settings/server#cloudflare-saas"');
+
+			// Admin portal layout includes Cloudflare for SaaS navigation item
+			expect(adminLayoutSrc).toContain('label: "Cloudflare for SaaS"');
+			expect(adminLayoutSrc).toContain('href: "/admin#cloudflare-saas"');
+
+			// Both /admin and /dashboard/settings/server render CustomDomainRoutingSettings
+			expect(adminIndexSrc).toContain("<CustomDomainRoutingSettings />");
+			expect(serverSettingsSrc).toContain("<CustomDomainRoutingSettings />");
+
+			// Component includes all required Cloudflare for SaaS fields and actions
+			expect(componentSrc).toContain("Cloudflare for SaaS");
+			expect(componentSrc).toContain("Cloudflare API Token");
+			expect(componentSrc).toContain("Cloudflare Zone ID");
+			expect(componentSrc).toContain("CNAME Target");
+			expect(componentSrc).toContain("Fallback Origin");
+			expect(componentSrc).toContain("Default SSL Validation Method");
+			expect(componentSrc).toContain("Automatic Custom Hostname Provisioning");
+			expect(componentSrc).toContain("Test Cloudflare Connection");
+			expect(componentSrc).toContain("Save Settings");
+		});
+
+		it("should validate required API Token and Zone ID when enabling Cloudflare for SaaS and support env fallbacks", async () => {
+			// Clear stored token and zoneId and env vars
+			const prevToken = process.env.CLOUDFLARE_SAAS_API_TOKEN;
+			const prevZone = process.env.CLOUDFLARE_SAAS_ZONE_ID;
+			delete process.env.CLOUDFLARE_SAAS_API_TOKEN;
+			delete process.env.CLOUDFLARE_API_TOKEN;
+			delete process.env.CLOUDFLARE_SAAS_ZONE_ID;
+			delete process.env.CLOUDFLARE_ZONE_ID;
+
+			await updateCloudflareSaasSettings({
+				enabled: false,
+				apiToken: null,
+				zoneId: null,
+			});
+
+			// Enabling without token or zoneId must be rejected
+			await expect(
+				updateCloudflareSaasSettings({ enabled: true }),
+			).rejects.toThrow(/Cloudflare API Token and Cloudflare Zone ID are required/);
+
+			// Invalid Zone ID format must be rejected
+			await expect(
+				updateCloudflareSaasSettings({ zoneId: "invalid zone id with spaces!" }),
+			).rejects.toThrow(/Invalid Cloudflare Zone ID format/);
+
+			// Environment variable fallbacks allow enabling and connection testing
+			process.env.CLOUDFLARE_SAAS_API_TOKEN = "cf_env_fallback_token_9988";
+			process.env.CLOUDFLARE_SAAS_ZONE_ID = "zone_env_fallback_1234";
+
+			const settingsFromEnv = await updateCloudflareSaasSettings({
+				enabled: true,
+			});
+			expect(settingsFromEnv.enabled).toBe(true);
+			expect(settingsFromEnv.hasApiToken).toBe(true);
+			expect(settingsFromEnv.maskedApiToken).toBe("••••••••••••9988");
+			expect(settingsFromEnv.zoneId).toBe("zone_env_fallback_1234");
+
+			// Restore env vars
+			if (prevToken !== undefined) process.env.CLOUDFLARE_SAAS_API_TOKEN = prevToken;
+			else delete process.env.CLOUDFLARE_SAAS_API_TOKEN;
+			if (prevZone !== undefined) process.env.CLOUDFLARE_SAAS_ZONE_ID = prevZone;
+			else delete process.env.CLOUDFLARE_SAAS_ZONE_ID;
+		});
 	});
 });

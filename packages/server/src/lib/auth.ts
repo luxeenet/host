@@ -267,6 +267,9 @@ const createBetterAuth = () =>
 							where: eq(schema.member.role, "owner"),
 						});
 
+						if (!isAdminPresent) {
+							await db.update(schema.user).set({ isPlatformAdmin: true }).where(eq(schema.user.id, user.id));
+						}
 						if (!IS_CLOUD && !isAdminPresent) {
 							await updateWebServerSettings({
 								serverIp: await getPublicIpWithFallback(),
@@ -708,7 +711,7 @@ export const validateRequest = async (request: IncomingMessage) => {
 			});
 			isPlatformAdmin = dbUser?.isPlatformAdmin;
 		}
-		session.user.isPlatformAdmin = isPlatformAdmin === true;
+		session.user.isPlatformAdmin = isPlatformAdmin === true || Boolean(process.env.USER_ADMIN_ID && session.user.id === process.env.USER_ADMIN_ID);
 		session.session.activeOrganizationId = member?.organization.id || "";
 		if (member) {
 			session.user.ownerId = member.organization.ownerId;

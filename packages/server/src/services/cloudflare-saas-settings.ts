@@ -72,7 +72,8 @@ export const getCloudflareApiToken = async (): Promise<string | null> => {
 	);
 	if (!stored || stored.trim().length === 0) {
 		// Environment fallback if configured
-		const envToken = process.env.CLOUDFLARE_API_TOKEN;
+		const envToken =
+			process.env.CLOUDFLARE_SAAS_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN;
 		return envToken && envToken.trim().length > 0 ? envToken.trim() : null;
 	}
 	try {
@@ -117,20 +118,43 @@ export const getCloudflareClient = async (
  * Redacts secrets completely.
  */
 export const getCloudflareSaasSettings = async (): Promise<CloudflareSaasSettingsView> => {
+	const storedEnabled = await getPlatformSettingValue(
+		PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_ENABLED,
+	);
 	const enabled =
-		(await getPlatformSettingValue(PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_ENABLED)) === "true";
+		storedEnabled !== null
+			? storedEnabled === "true"
+			: process.env.CLOUDFLARE_SAAS_ENABLED === "true";
+
 	const storedToken = await getPlatformSettingValue(
 		PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_API_TOKEN,
 	);
-	const zoneId = await getPlatformSettingValue(
+	const storedZoneId = await getPlatformSettingValue(
 		PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_ZONE_ID,
 	);
-	const cnameTarget = await getPlatformSettingValue(
+	const zoneId =
+		storedZoneId && storedZoneId.trim().length > 0
+			? storedZoneId.trim()
+			: process.env.CLOUDFLARE_SAAS_ZONE_ID?.trim() ||
+			  process.env.CLOUDFLARE_ZONE_ID?.trim() ||
+			  null;
+
+	const storedCnameTarget = await getPlatformSettingValue(
 		PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_CNAME_TARGET,
 	);
-	const fallbackOrigin = await getPlatformSettingValue(
+	const cnameTarget =
+		storedCnameTarget && storedCnameTarget.trim().length > 0
+			? storedCnameTarget.trim().toLowerCase()
+			: process.env.CLOUDFLARE_SAAS_CNAME_TARGET?.trim().toLowerCase() || null;
+
+	const storedFallbackOrigin = await getPlatformSettingValue(
 		PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_FALLBACK_ORIGIN,
 	);
+	const fallbackOrigin =
+		storedFallbackOrigin && storedFallbackOrigin.trim().length > 0
+			? storedFallbackOrigin.trim().toLowerCase()
+			: process.env.CLOUDFLARE_SAAS_FALLBACK_ORIGIN?.trim().toLowerCase() || null;
+
 	const fallbackOriginStatus = await getPlatformSettingValue(
 		PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_FALLBACK_ORIGIN_STATUS,
 	);
@@ -147,8 +171,10 @@ export const getCloudflareSaasSettings = async (): Promise<CloudflareSaasSetting
 			"true",
 		)) !== "false";
 
-	const hasApiToken = Boolean(storedToken && storedToken.trim().length > 0) ||
-		Boolean(process.env.CLOUDFLARE_API_TOKEN);
+	const hasApiToken =
+		Boolean(storedToken && storedToken.trim().length > 0) ||
+		Boolean(process.env.CLOUDFLARE_SAAS_API_TOKEN?.trim()) ||
+		Boolean(process.env.CLOUDFLARE_API_TOKEN?.trim());
 
 	let maskedApiToken: string | null = null;
 	if (hasApiToken) {

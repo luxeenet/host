@@ -25,11 +25,40 @@ import {
 	type CloudflareCustomHostname,
 	type CloudflareSslValidationRecord,
 } from "./cloudflare-client";
-import { isPlatformOrTestDomain } from "./domain";
+import { getConfiguredPlatformDomain, isPlatformOrTestDomain } from "./domain";
 import { findApplicationById } from "./application";
 import { manageDomain } from "../utils/traefik/domain";
 
 export type DomainRow = typeof domains.$inferSelect;
+
+/**
+ * Idempotently ensure that the `paas_platform_setting` table and all custom domain
+ * columns (`isPrimary` from 0203 and `cf*` from 0204) exist on the database.
+ */
+export const ensureCloudflareDomainSchema = async (tx: any = db): Promise<void> => {
+	await tx.execute(sql`
+		CREATE TABLE IF NOT EXISTS "paas_platform_setting" (
+			"id" text PRIMARY KEY NOT NULL,
+			"key" text NOT NULL UNIQUE,
+			"value" text,
+			"description" text,
+			"updated_at" timestamp DEFAULT now() NOT NULL
+		);
+	`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "isPrimary" boolean DEFAULT false NOT NULL;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfHostnameId" text;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfStatus" text;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfSslStatus" text;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfVerificationErrors" jsonb;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfOwnershipVerification" jsonb;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfSslValidationRecords" jsonb;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfSslCertificates" jsonb;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfLastSyncAt" text;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfLastError" text;`);
+	await tx.execute(sql`ALTER TABLE "domain" ADD COLUMN IF NOT EXISTS "cfCustomOrigin" text;`);
+	await tx.execute(sql`CREATE INDEX IF NOT EXISTS "domain_cf_hostname_id_idx" ON "domain" ("cfHostnameId");`);
+	await tx.execute(sql`CREATE INDEX IF NOT EXISTS "domain_cf_status_idx" ON "domain" ("cfStatus");`);
+};
 
 export interface CloudflareDnsRecordInstruction {
 	type: "CNAME" | "TXT" | "HTTP";
@@ -79,23 +108,35 @@ export const resolveCloudflareCnameTarget = async (
 		composeId?: string | null;
 	},
 ): Promise<string> => {
+	const settings = await getCloudflareSaasSettings();
+
 	// 1. Specific Cloudflare SaaS customer CNAME target
-	const cfTarget = await getPlatformSettingValue(
-		PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_CNAME_TARGET,
-	);
-	if (cfTarget && cfTarget.trim().length > 0) {
-		return cfTarget.trim().toLowerCase();
+	if (settings.cnameTarget && settings.cnameTarget.trim().length > 0) {
+		return settings.cnameTarget.trim().toLowerCase();
 	}
 
 	// 2. Cloudflare Fallback Origin
-	const fallbackOrigin = await getPlatformSettingValue(
-		PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_FALLBACK_ORIGIN,
-	);
-	if (fallbackOrigin && fallbackOrigin.trim().length > 0) {
-		return fallbackOrigin.trim().toLowerCase();
+	if (settings.fallbackOrigin && settings.fallbackOrigin.trim().length > 0) {
+		return settings.fallbackOrigin.trim().toLowerCase();
 	}
 
-	// 3. Fallback to platform routing target
+	// 3. Explicit custom domain CNAME target setting / env
+	const customCnameTarget =
+		(await getPlatformSettingValue(
+			PLATFORM_SETTING_KEYS.CUSTOM_DOMAIN_CNAME_TARGET,
+		)) || process.env.CUSTOM_DOMAIN_CNAME_TARGET;
+	if (customCnameTarget && customCnameTarget.trim().length > 0) {
+		return customCnameTarget.trim().toLowerCase();
+	}
+
+	// 4. Platform-wide edge CNAME target (cname.<platformDomain>) so Cloudflare for SaaS
+	// never instructs customers to CNAME to an individual app subdomain unless overridden
+	const platformDomain = await getConfiguredPlatformDomain();
+	if (platformDomain) {
+		return `cname.${platformDomain}`;
+	}
+
+	// 5. Fallback to platform routing target
 	return await resolveCnameTargetForService(options || {});
 };
 
@@ -195,6 +236,8 @@ export const provisionCustomHostname = async (
 		}
 
 		// Persist returned Cloudflare details
+		const isFullyActive =
+			cfHostname.status === "active" && cfHostname.ssl?.status === "active";
 		const updated = await tx
 			.update(domains)
 			.set({
@@ -207,11 +250,32 @@ export const provisionCustomHostname = async (
 				cfSslCertificates: cfHostname.ssl?.certificates || null,
 				cfLastSyncAt: new Date(),
 				cfLastError: null,
+				https: isFullyActive,
+				certificateType: "none",
 			})
 			.where(eq(domains.domainId, domainId))
 			.returning();
 
-		return updated[0];
+		const resultDomain = updated[0];
+		if (
+			resultDomain?.applicationId &&
+			(domain.https !== resultDomain.https ||
+				domain.certificateType !== resultDomain.certificateType)
+		) {
+			try {
+				const app = await findApplicationById(resultDomain.applicationId);
+				if (app) {
+					await manageDomain(app, resultDomain as any);
+				}
+			} catch (traefikErr) {
+				console.error(
+					`[Cloudflare SaaS] Traefik router sync error for ${domain.host}:`,
+					traefikErr,
+				);
+			}
+		}
+
+		return resultDomain;
 	} catch (err: any) {
 		const errorMessage =
 			err instanceof CloudflareClientError
@@ -220,13 +284,15 @@ export const provisionCustomHostname = async (
 				? err.message
 				: "Cloudflare custom hostname registration failed";
 
-		// Record error on domain record so user and admin see what happened
+		// Record error on domain record and ensure https is not falsely reported active
 		const updated = await tx
 			.update(domains)
 			.set({
 				cfStatus: "error",
 				cfLastError: errorMessage,
 				cfLastSyncAt: new Date(),
+				https: false,
+				certificateType: "none",
 			})
 			.where(eq(domains.domainId, domainId))
 			.returning();
@@ -303,9 +369,16 @@ export const syncCustomHostnameStatus = async (
 			cfLastError: null,
 		};
 
-		// If Cloudflare hostname and SSL are active, activate HTTPS on the domain!
-		if (isFullyActive && !domain.https) {
+		// Accurate HTTPS and certificate state based on Cloudflare edge status
+		if (isFullyActive) {
 			updatePayload.https = true;
+			updatePayload.certificateType = "none";
+		} else {
+			// Not yet active on Cloudflare edge: HTTPS must be false to avoid false "SSL Active"
+			updatePayload.https = false;
+			if (domain.certificateType === "letsencrypt") {
+				updatePayload.certificateType = "none";
+			}
 		}
 
 		const updated = await tx
@@ -316,8 +389,12 @@ export const syncCustomHostnameStatus = async (
 
 		const resultDomain = updated[0];
 
-		// If HTTPS was just activated, ensure Traefik router is reconfigured
-		if (isFullyActive && !domain.https && resultDomain?.applicationId) {
+		// If HTTPS or certificateType transitioned, ensure Traefik router is reconfigured
+		if (
+			resultDomain?.applicationId &&
+			(domain.https !== resultDomain.https ||
+				domain.certificateType !== resultDomain.certificateType)
+		) {
 			try {
 				const app = await findApplicationById(resultDomain.applicationId);
 				if (app) {
@@ -339,8 +416,10 @@ export const syncCustomHostnameStatus = async (
 				.update(domains)
 				.set({
 					cfHostnameId: null,
-					cfStatus: null,
+					cfStatus: "error",
 					cfSslStatus: null,
+					https: false,
+					certificateType: "none",
 					cfLastError: "Custom hostname not found on Cloudflare (deleted externally).",
 					cfLastSyncAt: new Date(),
 				})
@@ -430,17 +509,24 @@ export const mapDomainCloudflareStatus = (
 	const isCloudflareSaas = Boolean(domain.cfHostnameId || domain.cfStatus);
 
 	if (!isCloudflareSaas) {
+		const isLegacyHttpsActive = Boolean(
+			domain.https &&
+				(domain.certificateType === "letsencrypt" ||
+					domain.certificateType === "custom"),
+		);
 		return {
 			isCloudflareSaas: false,
 			hostnameId: null,
-			status: domain.https ? "active" : "pending",
-			stageName: domain.https ? "Active — HTTPS ready" : "Awaiting DNS configuration",
-			stageStep: domain.https ? 4 : 1,
+			status: isLegacyHttpsActive ? "active" : "pending",
+			stageName: isLegacyHttpsActive
+				? "Active — HTTPS ready"
+				: "Awaiting DNS configuration",
+			stageStep: isLegacyHttpsActive ? 4 : 1,
 			hostnameStatus: null,
 			sslStatus: null,
 			lastSyncAt: domain.cfLastSyncAt ? new Date(domain.cfLastSyncAt) : null,
 			lastError: null,
-			isHttpsReady: domain.https,
+			isHttpsReady: isLegacyHttpsActive,
 			records: [],
 			customerActionRequired: "Configure standard DNS records.",
 		};
@@ -586,7 +672,9 @@ export const mapDomainCloudflareStatus = (
 		sslStatus,
 		lastSyncAt: domain.cfLastSyncAt ? new Date(domain.cfLastSyncAt) : null,
 		lastError,
-		isHttpsReady: domain.https,
+		isHttpsReady: isCloudflareSaas
+			? Boolean(isHostnameActive && isSslActive && domain.https)
+			: Boolean(domain.https),
 		records,
 		customerActionRequired,
 	};

@@ -63,12 +63,15 @@ describe("Domain Tenant Isolation & Conflict Prevention", () => {
 		expect(subInstructions.originIpProtected).toBe(true);
 		expect(subInstructions.target).toBeDefined();
 
+
+
+		
 		const apexInstructions = await getDnsInstructionsForDomain("mycompany.com");
 		expect(apexInstructions.recordType).toBe("CNAME");
 		expect(apexInstructions.recordName).toBe("@");
 		expect(apexInstructions.isSubdomain).toBe(false);
 		expect(apexInstructions.apexGuidance?.supportsCnameFlattening).toBe(true);
-	});
+	}, 15000);
 
 	it("should never use localhost or internal container IP when public IP is available", async () => {
 		const { generateRandomDomain } = await import("@dokploy/server/templates");

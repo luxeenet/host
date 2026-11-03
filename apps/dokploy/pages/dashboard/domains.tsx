@@ -123,7 +123,7 @@ export default function CustomDomainsPage() {
 
 	const { data: routingTargetData } = api.domain.getRoutingTarget.useQuery(
 		{ applicationId: activeAppId || undefined },
-		{ enabled: !!activeAppId },
+		{},
 	);
 	const assignedTarget = routingTargetData?.target || "hatdot.cloud";
 
@@ -159,10 +159,10 @@ export default function CustomDomainsPage() {
 		}
 	};
 
-	const handleCheckDns = async (host: string) => {
+	const handleCheckDns = async (host: string, applicationId?: string | null, composeId?: string | null) => {
 		setCheckingHost(host);
 		try {
-			const res = await validateDomain({ domain: host });
+			const res = await validateDomain({ domain: host, applicationId, composeId });
 			if (res.isValid) {
 				toast.success(`DNS for ${host} is properly configured!`);
 			} else {
@@ -218,15 +218,25 @@ export default function CustomDomainsPage() {
 	return (
 		<>
 			<Head>
-				<title>Custom Domains & Auto-SSL - {brand.APP_NAME}</title>
+				<title>
+					{routingTargetData?.isCloudflareSaas
+						? `Custom Domains & Cloudflare Edge SSL - ${brand.APP_NAME}`
+						: `Custom Domains & Auto-SSL - ${brand.APP_NAME}`}
+				</title>
 			</Head>
 			<div className="space-y-8">
 				{/* Header */}
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 					<div>
-						<h1 className="text-2xl font-bold text-white tracking-tight">Custom Domains & Auto-SSL</h1>
+						<h1 className="text-2xl font-bold text-white tracking-tight">
+							{routingTargetData?.isCloudflareSaas
+								? "Custom Domains & Cloudflare Edge SSL"
+								: "Custom Domains & Auto-SSL"}
+						</h1>
 						<p className="text-slate-400 text-sm mt-1">
-							Attach your own custom domains with automated Let's Encrypt SSL certificates.
+							{routingTargetData?.isCloudflareSaas
+								? "Attach your custom domains with automated Cloudflare for SaaS edge SSL, DDoS protection, and global routing."
+								: "Attach your own custom domains with automated Let's Encrypt SSL certificates."}
 						</p>
 					</div>
 
@@ -377,7 +387,11 @@ export default function CustomDomainsPage() {
 				<div className="rounded-xl bg-slate-900/60 border border-slate-800 overflow-hidden">
 					<div className="p-6 border-b border-slate-800">
 						<h3 className="text-base font-semibold text-white">Your Attached Custom Domains</h3>
-						<p className="text-xs text-slate-400">All domains automatically provision Let's Encrypt TLS certificates once DNS points to the server.</p>
+						<p className="text-xs text-slate-400">
+							{routingTargetData?.isCloudflareSaas
+								? "Domains are routed and secured at Cloudflare's edge with automatic TLS once DNS records are verified."
+								: "All domains automatically provision Let's Encrypt TLS certificates once DNS points to the server."}
+						</p>
 					</div>
 
 					{isLoadingDomains ? (
@@ -413,17 +427,33 @@ export default function CustomDomainsPage() {
 													Primary
 												</span>
 											)}
-											{getCloudflareStageBadge(dom)}
-											<span
-												className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
-													dom.https
-														? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-														: "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-												}`}
-											>
-												<ShieldCheck className="w-3 h-3" />
-												{dom.https ? "SSL Active" : "HTTP Only"}
-											</span>
+											{Boolean(dom.cfHostnameId || dom.cfStatus) ? (
+												<>
+													{getCloudflareStageBadge(dom)}
+													{dom.cfStatus === "active" && dom.cfSslStatus === "active" && dom.https && (
+														<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+															<ShieldCheck className="w-3 h-3" />
+															Edge SSL Active
+														</span>
+													)}
+												</>
+											) : (
+												<>
+													<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+														Let&apos;s Encrypt
+													</span>
+													<span
+														className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+															dom.https && dom.certificateType === "letsencrypt"
+																? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+																: "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+														}`}
+													>
+														<ShieldCheck className="w-3 h-3" />
+														{dom.https && dom.certificateType === "letsencrypt" ? "SSL Active" : "HTTP Only"}
+													</span>
+												</>
+											)}
 										</div>
 										<p className="text-xs text-slate-400">
 											Routed to{" "}
@@ -464,6 +494,18 @@ export default function CustomDomainsPage() {
 												<RefreshCw className={`w-3.5 h-3.5 ${isRetryingCf ? "animate-spin" : ""}`} /> Retry
 											</Button>
 										)}
+										{routingTargetData?.isCloudflareSaas && !dom.cfHostnameId && !dom.cfStatus && (
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={isRetryingCf}
+												onClick={() => handleRetryCf(dom.domainId, dom.host)}
+												className="border-cyan-800/60 text-cyan-400 hover:bg-cyan-950/20 text-xs gap-1.5 h-8"
+												title="Upgrade legacy Let's Encrypt domain to Cloudflare Edge SSL"
+											>
+												<Cloud className={`w-3.5 h-3.5 ${isRetryingCf ? "animate-spin" : ""}`} /> Upgrade to Edge SSL
+											</Button>
+										)}
 										{(dom.cfHostnameId || dom.cfStatus) && (
 											<Button
 												variant="outline"
@@ -475,7 +517,7 @@ export default function CustomDomainsPage() {
 												<Cloud className={`w-3.5 h-3.5 ${isRecheckingCf ? "animate-spin" : ""}`} /> Sync Status
 											</Button>
 										)}
-										{!dom.https && !dom.cfHostnameId && (
+										{!dom.https && !dom.cfHostnameId && !dom.cfStatus && (
 											<Button
 												variant="outline"
 												size="sm"
@@ -490,7 +532,7 @@ export default function CustomDomainsPage() {
 											variant="outline"
 											size="sm"
 											disabled={checkingHost === dom.host}
-											onClick={() => handleCheckDns(dom.host)}
+											onClick={() => handleCheckDns(dom.host, dom.applicationId, dom.composeId)}
 											className="border-slate-800 text-slate-300 hover:bg-slate-800 text-xs gap-1.5 h-8"
 										>
 											{checkingHost === dom.host ? (

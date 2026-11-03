@@ -85,7 +85,8 @@ void app.prepare().then(async () => {
 
 		// Start Cloudflare for SaaS hostname status reconciliation
 		try {
-			const { startCloudflareSaasSyncJob } = await import("@dokploy/server");
+			const { ensureCloudflareDomainSchema, startCloudflareSaasSyncJob } = await import("@dokploy/server");
+			await ensureCloudflareDomainSchema();
 			startCloudflareSaasSyncJob(2);
 		} catch (e) {
 			console.error("[platform] Cloudflare SaaS sync job start failed:", e);

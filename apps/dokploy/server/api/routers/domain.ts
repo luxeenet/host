@@ -62,7 +62,7 @@ export const domainRouter = createTRPCRouter({
 					ctx.session.activeOrganizationId,
 					async (tx) => {
 						// Plan entitlement — enforce custom domain quota only for customer custom domains
-						if (!isPlatformOrTestDomain(input.host)) {
+						if (!(await isPlatformOrTestDomain(input.host))) {
 							await assertEntitlement(
 								PlanEntitlementService.checkCanAddDomain(
 									ctx.session.activeOrganizationId,
@@ -70,8 +70,10 @@ export const domainRouter = createTRPCRouter({
 								),
 							);
 
-							// If user requested Let's Encrypt / HTTPS upfront on a custom domain, check DNS first
-							if (input.https || input.certificateType === "letsencrypt") {
+							// If user requested Let's Encrypt / HTTPS upfront on a custom domain, check DNS first (legacy flow only)
+							const { isCloudflareSaasActive } = await import("@dokploy/server");
+							const saasActive = await isCloudflareSaasActive();
+							if (!saasActive && (input.https || input.certificateType === "letsencrypt")) {
 								let serverId: string | undefined = undefined;
 								if (input.applicationId) {
 									try {
@@ -80,7 +82,8 @@ export const domainRouter = createTRPCRouter({
 									} catch {}
 								}
 								const expectedIps = await getServerIpCandidates(serverId);
-								const dnsCheck = await validateDomain(input.host, expectedIps);
+								const expectedTarget = await resolveCnameTargetForService({ applicationId: input.applicationId, composeId: input.composeId, serverId });
+								const dnsCheck = await validateDomain(input.host, expectedIps, { expectedTarget });
 								if (!dnsCheck.isValid) {
 									// Safely default to HTTP so Traefik ACME challenges don't fail before DNS propagates
 									input.https = false;
@@ -218,7 +221,21 @@ export const domainRouter = createTRPCRouter({
 				} catch {}
 			}
 			const expectedIps = await getServerIpCandidates(serverId);
-			const dnsCheck = await validateDomain(currentDomain.host, expectedIps);
+			const { isCloudflareSaasActive, mapDomainCloudflareStatus, resolveCloudflareCnameTarget, syncCustomHostnameStatus } = await import("@dokploy/server");
+			const isCfDomain = Boolean((currentDomain as any).cfHostnameId || (currentDomain as any).cfStatus) || ((await isCloudflareSaasActive()) && !(await isPlatformOrTestDomain(currentDomain.host)));
+			if (isCfDomain) {
+				const synced = await syncCustomHostnameStatus(input.domainId);
+				const cnameTarget = await resolveCloudflareCnameTarget({ applicationId: synced.applicationId, composeId: synced.composeId });
+				const lifecycle = mapDomainCloudflareStatus(synced, cnameTarget);
+				return {
+					...synced,
+					message: lifecycle.isHttpsReady
+						? `Cloudflare Edge HTTPS is active for ${synced.host}`
+						: `Cloudflare Edge SSL status: ${lifecycle.stageName}. ${lifecycle.customerActionRequired}`,
+				};
+			}
+			const expectedTarget = await resolveCnameTargetForService({ applicationId: currentDomain.applicationId, composeId: currentDomain.composeId, serverId });
+			const dnsCheck = await validateDomain(currentDomain.host, expectedIps, { expectedTarget });
 			if (!dnsCheck.isValid) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
@@ -281,7 +298,7 @@ export const domainRouter = createTRPCRouter({
 
 			// If enabling HTTPS / Let's Encrypt on a custom domain, enforce DNS check and plan entitlement
 			if (
-				!isPlatformOrTestDomain(targetHost) &&
+				!(await isPlatformOrTestDomain(targetHost)) &&
 				(input.https || input.certificateType === "letsencrypt")
 			) {
 				await assertEntitlement(
@@ -298,7 +315,28 @@ export const domainRouter = createTRPCRouter({
 					} catch {}
 				}
 				const expectedIps = await getServerIpCandidates(serverId);
-				const dnsCheck = await validateDomain(targetHost, expectedIps);
+				const { isCloudflareSaasActive } = await import("@dokploy/server");
+				const isCfDomain = Boolean((currentDomain as any).cfHostnameId || (currentDomain as any).cfStatus) || (await isCloudflareSaasActive());
+				if (isCfDomain) {
+					input.certificateType = "none";
+					const isCfFullyActive = (currentDomain as any).cfStatus === "active" && (currentDomain as any).cfSslStatus === "active";
+					if (!isCfFullyActive) {
+						input.https = false;
+					}
+				} else {
+					const expectedTarget = await resolveCnameTargetForService({ applicationId: currentDomain.applicationId, composeId: currentDomain.composeId, serverId });
+					const dnsCheck = await validateDomain(targetHost, expectedIps, { expectedTarget });
+					if (!dnsCheck.isValid) {
+						throw new TRPCError({
+							code: "BAD_REQUEST",
+							message: `Cannot activate HTTPS: DNS for "${targetHost}" is not pointing to this server (${expectedIps.join(", ")}). Currently resolves to: ${dnsCheck.resolvedIp ? dnsCheck.resolvedIp : "no records found"}. Please update your DNS records first.`,
+						});
+					}
+				}
+			}
+			if (false) {
+				const expectedIps: string[] = [];
+				const dnsCheck = { isValid: true, resolvedIp: "" };
 				if (!dnsCheck.isValid) {
 					throw new TRPCError({
 						code: "BAD_REQUEST",
@@ -482,7 +520,11 @@ export const domainRouter = createTRPCRouter({
 				}
 			}
 
-			const expectedTarget = await resolveCnameTargetForService({
+			const { isCloudflareSaasActive, resolveCloudflareCnameTarget } = await import("@dokploy/server");
+			const saasActive = (await isCloudflareSaasActive()) && !(await isPlatformOrTestDomain(input.domain));
+			const expectedTarget = saasActive
+				? await resolveCloudflareCnameTarget({ applicationId: input.applicationId, composeId: input.composeId })
+				: await resolveCnameTargetForService({
 				applicationId: input.applicationId,
 				composeId: input.composeId,
 				serverId: input.serverId,
@@ -548,11 +590,22 @@ export const domainRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input }) => {
-			const target = await resolveCnameTargetForService({
-				applicationId: input.applicationId,
-				composeId: input.composeId,
-			});
-			return { target };
+			const { isCloudflareSaasActive, resolveCloudflareCnameTarget } =
+				await import("@dokploy/server");
+			const saasActive = await isCloudflareSaasActive();
+			const target = saasActive
+				? await resolveCloudflareCnameTarget({
+						applicationId: input.applicationId,
+						composeId: input.composeId,
+				  })
+				: await resolveCnameTargetForService({
+						applicationId: input.applicationId,
+						composeId: input.composeId,
+				  });
+			return {
+				target,
+				isCloudflareSaas: saasActive,
+			};
 		}),
 
 	/** On-demand live Cloudflare for SaaS custom hostname status recheck */

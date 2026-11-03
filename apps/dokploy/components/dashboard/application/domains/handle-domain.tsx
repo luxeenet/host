@@ -8,6 +8,7 @@ import {
 	CheckCircle2,
 	ChevronDown,
 	ChevronRight,
+	Cloud,
 	Copy,
 	DatabaseZap,
 	Dices,
@@ -256,6 +257,13 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 		host?.includes("sslip.io") || host?.includes("traefik.me") || false;
 
 	// DNS instructions query for custom domains
+	const { data: routingTargetData } = api.domain.getRoutingTarget.useQuery(
+		{
+			applicationId: type === "application" ? id : null,
+			composeId: type === "compose" ? id : null,
+		},
+		{ enabled: isOpen, refetchOnWindowFocus: false },
+	);
 	const isCustomDomain = !!host && !isTraefikMeDomain && host.includes(".");
 	const {
 		data: dnsInfo,
@@ -265,6 +273,8 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 		{
 			host: host || "",
 			serverId: application?.serverId || null,
+			applicationId: type === "application" ? id : null,
+			composeId: type === "compose" ? id : null,
 		},
 		{
 			enabled: isOpen && isCustomDomain,
@@ -314,6 +324,13 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 		}
 	}, [certificateType, form]);
 
+	const isCloudflareSaas = Boolean(
+		dnsInfo?.cloudflareSaas?.isActive ||
+			(routingTargetData?.isCloudflareSaas && !isTraefikMeDomain) ||
+			(data as any)?.cfHostnameId ||
+			(data as any)?.cfStatus,
+	);
+
 	const dictionary = {
 		success: domainId ? "Domain Updated" : "Domain Connected Successfully",
 		error: domainId ? "Error updating the domain" : "Error connecting domain",
@@ -333,7 +350,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 			...formData,
 			path: formData.path || "/",
 			port: formData.port || 3000,
-			certificateType: formData.https
+			certificateType: isCloudflareSaas ? "none" : formData.https
 				? formData.certificateType || "letsencrypt"
 				: "none",
 			customEntrypoint: formData.useCustomEntrypoint
@@ -471,7 +488,23 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 							<div className="p-4 rounded-lg border bg-muted/30 flex flex-col gap-3">
 								<div className="flex items-center justify-between">
 									<div className="flex items-center gap-2">
-										{dnsInfo.verified ? (
+										{dnsInfo.cloudflareSaas?.isActive ? (
+											<Badge
+												variant="outline"
+												className={
+													dnsInfo.cloudflareSaas.status === "active"
+														? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1.5"
+														: dnsInfo.cloudflareSaas.status === "error"
+															? "bg-red-500/10 text-red-400 border-red-500/30 flex items-center gap-1.5"
+															: dnsInfo.cloudflareSaas.status === "pending_certificate"
+																? "bg-amber-500/10 text-amber-400 border-amber-500/30 flex items-center gap-1.5"
+																: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30 flex items-center gap-1.5"
+												}
+											>
+												<Cloud className="size-3.5 text-cyan-400" />
+												{dnsInfo.cloudflareSaas.stageName}
+											</Badge>
+										) : dnsInfo.verified ? (
 											<Badge
 												variant="outline"
 												className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 flex items-center gap-1.5"
@@ -507,10 +540,82 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								</div>
 
 								<div className="text-xs text-muted-foreground">
-									{dnsInfo.message}
+									{dnsInfo.cloudflareSaas?.isActive
+										? dnsInfo.cloudflareSaas.customerActionRequired || dnsInfo.message
+										: dnsInfo.message}
 								</div>
 
-								{!dnsInfo.verified && (
+								{dnsInfo.cloudflareSaas?.isActive && dnsInfo.cloudflareSaas.records.length > 0 ? (
+									<div className="space-y-2">
+										<span className="font-semibold text-foreground text-xs block">
+											Configure these DNS records at your domain registrar (Cloudflare, GoDaddy, Namecheap):
+										</span>
+										{dnsInfo.cloudflareSaas.records.map((rec, idx) => (
+											<div
+												key={`${rec.type}-${rec.name}-${idx}`}
+												className="p-3 bg-background rounded-md border text-xs flex flex-col gap-1.5"
+											>
+												<div className="flex items-center justify-between">
+													<span className="font-bold text-[11px] text-foreground flex items-center gap-1.5">
+														<span className="px-1.5 py-0.5 rounded bg-muted text-primary text-[10px] font-mono">
+															{rec.type}
+														</span>
+														{rec.purpose}
+													</span>
+													<Badge
+														variant="outline"
+														className={
+															rec.status === "active" || rec.status === "verified"
+																? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]"
+																: "bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]"
+														}
+													>
+														{rec.status}
+													</Badge>
+												</div>
+												<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono text-xs">
+													<div className="flex items-center justify-between p-1.5 rounded bg-muted/40">
+														<div className="overflow-hidden pr-2">
+															<span className="text-muted-foreground block text-[9px] uppercase font-sans">
+																Host / Name
+															</span>
+															<span className="font-bold truncate block">{rec.name}</span>
+														</div>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon"
+															className="size-6 shrink-0"
+															onClick={() => copyToClipboard(rec.name)}
+														>
+															<Copy className="size-3" />
+														</Button>
+													</div>
+													<div className="flex items-center justify-between p-1.5 rounded bg-muted/40">
+														<div className="overflow-hidden pr-2">
+															<span className="text-muted-foreground block text-[9px] uppercase font-sans">
+																Target / Value
+															</span>
+															<span className="font-bold truncate block">{rec.value}</span>
+														</div>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon"
+															className="size-6 shrink-0"
+															onClick={() => copyToClipboard(rec.value)}
+														>
+															<Copy className="size-3" />
+														</Button>
+													</div>
+												</div>
+												{rec.description && (
+													<p className="text-[11px] text-muted-foreground">{rec.description}</p>
+												)}
+											</div>
+										))}
+									</div>
+								) : !dnsInfo.verified && (
 									<div className="p-3 bg-background rounded-md border text-xs flex flex-col gap-2">
 										<span className="font-semibold text-foreground">
 											Add this DNS record at your domain provider (Cloudflare,
@@ -597,14 +702,21 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 									<FormItem className="flex flex-row items-center justify-between p-3.5 border rounded-lg bg-card">
 										<div className="space-y-0.5">
 											<div className="flex items-center gap-1.5">
-												<ShieldCheck className="size-4 text-emerald-500" />
+												{isCloudflareSaas ? (
+													<Cloud className="size-4 text-cyan-400" />
+												) : (
+													<ShieldCheck className="size-4 text-emerald-500" />
+												)}
 												<FormLabel className="text-sm font-semibold cursor-pointer">
-													Automatic HTTPS & SSL
+													{isCloudflareSaas
+														? "Cloudflare Edge SSL"
+														: "Automatic HTTPS & SSL"}
 												</FormLabel>
 											</div>
 											<FormDescription className="text-xs">
-												SSL certificate will be issued automatically with Let's
-												Encrypt once DNS points to this server.
+												{false ? "" : isCloudflareSaas
+												? "SSL certificate is automatically provisioned and managed at the Cloudflare edge once DNS records are verified."
+													: "SSL certificate will be issued automatically with Let's Encrypt once DNS points to this server."}
 											</FormDescription>
 										</div>
 										<FormControl>
@@ -613,7 +725,12 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 												onCheckedChange={(checked) => {
 													field.onChange(checked);
 													if (checked) {
-														form.setValue("certificateType", "letsencrypt");
+														form.setValue(
+															"certificateType",
+															false ? "none" : isCloudflareSaas
+																? "none"
+																: "letsencrypt",
+														);
 													} else {
 														form.setValue("certificateType", "none");
 													}
@@ -753,7 +870,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 									/>
 
 									{/* Certificate Provider */}
-									{https && (
+									{https && !isCloudflareSaas && (
 										<FormField
 											control={form.control}
 											name="certificateType"

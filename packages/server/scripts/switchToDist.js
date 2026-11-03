@@ -20,6 +20,9 @@ pkg.exports = {
 	"./constants": {
 		import: "./dist/constants/index.js",
 	},
+	"./templates": {
+		import: "./dist/templates/index.js",
+	},
 	"./*": {
 		import: "./dist/*",
 	},

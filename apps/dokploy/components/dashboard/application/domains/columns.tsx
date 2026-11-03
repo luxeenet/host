@@ -62,8 +62,8 @@ export const createColumns = ({
 	canCreateDomain,
 	canDeleteDomain,
 }: ColumnsProps): ColumnDef<Domain>[] => [
-	...(type === "compose"
-		? [
+		...(type === "compose"
+			? [
 				{
 					accessorKey: "serviceName",
 					header: "Service",
@@ -79,294 +79,335 @@ export const createColumns = ({
 					},
 				} satisfies ColumnDef<Domain>,
 			]
-		: []),
-	{
-		accessorKey: "host",
-		header: ({ column }) => {
-			return (
-				<Button
-					variant="ghost"
-					onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-				>
-					Host
-					<ArrowUpDown className="ml-2 h-4 w-4" />
-				</Button>
-			);
-		},
-		cell: ({ row }) => {
-			const domain = row.original;
-			return (
-				<Link
-					className="flex items-center gap-2 font-medium hover:underline"
-					target="_blank"
-					href={`${domain.https ? "https" : "http"}://${domain.host}${domain.path}`}
-				>
-					{domain.host}
-					<ExternalLink className="size-3" />
-				</Link>
-			);
-		},
-	},
-	{
-		accessorKey: "path",
-		header: ({ column }) => {
-			return (
-				<Button
-					variant="ghost"
-					onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-				>
-					Path
-					<ArrowUpDown className="ml-2 h-4 w-4" />
-				</Button>
-			);
-		},
-		cell: ({ row }) => {
-			const path = row.getValue("path") as string;
-			return <div className="font-mono text-sm">{path || "/"}</div>;
-		},
-	},
-	{
-		accessorKey: "port",
-		header: ({ column }) => {
-			return (
-				<Button
-					variant="ghost"
-					onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-				>
-					Port
-					<ArrowUpDown className="ml-2 h-4 w-4" />
-				</Button>
-			);
-		},
-		cell: ({ row }) => {
-			const port = row.getValue("port") as number;
-			return <Badge variant="secondary">{port}</Badge>;
-		},
-	},
-	{
-		accessorKey: "customEntrypoint",
-		header: "Entrypoint",
-		cell: ({ row }) => {
-			const entrypoint = row.getValue("customEntrypoint") as string | null;
-			if (!entrypoint) return <span className="text-muted-foreground">-</span>;
-			return <div className="font-mono text-sm">{entrypoint}</div>;
-		},
-	},
-	{
-		accessorKey: "https",
-		header: "Protocol",
-		cell: ({ row }) => {
-			const https = row.getValue("https") as boolean;
-			return (
-				<Badge variant={https ? "outline" : "secondary"}>
-					{https ? "HTTPS" : "HTTP"}
-				</Badge>
-			);
-		},
-	},
-	{
-		id: "certificate",
-		header: "Certificate",
-		cell: ({ row }) => {
-			const domain = row.original;
-			const validationState = validationStates[domain.host];
-
-			return (
-				<div className="flex items-center gap-2">
-					{(domain as any).cfHostnameId ? (
-						<Badge variant="outline" className="text-cyan-400 border-cyan-500/30 capitalize">
-							Cloudflare SaaS
-						</Badge>
-					) : (
-						domain.certificateType && (
-							<Badge variant="outline" className="capitalize">
-								{domain.certificateType}
-							</Badge>
-						)
-					)}
-					{!domain.https && canCreateDomain && handleActivateHttps && (
-						<Button
-							variant="outline"
-							size="sm"
-							className="h-6 px-2 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
-							disabled={isActivatingHttps}
-							onClick={() => handleActivateHttps(domain.domainId)}
-						>
-							<ShieldCheck className="size-3" />
-							Activate HTTPS
-						</Button>
-					)}
-					{!domain.host.includes("sslip.io") && (
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Badge
-										variant="outline"
-										className={
-											validationState?.isValid
-												? "bg-green-500/10 text-green-500 cursor-pointer"
-												: validationState?.error
-													? "bg-red-500/10 text-red-500 cursor-pointer"
-													: "bg-yellow-500/10 text-yellow-500 cursor-pointer"
-										}
-										onClick={() => handleValidateDomain(domain.host)}
-									>
-										{validationState?.isLoading ? (
-											<>
-												<Loader2 className="size-3 mr-1 animate-spin" />
-												Checking...
-											</>
-										) : validationState?.isValid ? (
-											<>
-												<CheckCircle2 className="size-3 mr-1" />
-												{validationState.message && validationState.cdnProvider
-													? `${validationState.cdnProvider}`
-													: "Valid"}
-											</>
-										) : validationState?.error ? (
-											<>
-												<XCircle className="size-3 mr-1" />
-												Invalid
-											</>
-										) : (
-											<>
-												<RefreshCw className="size-3 mr-1" />
-												Validate
-											</>
-										)}
-									</Badge>
-								</TooltipTrigger>
-								<TooltipContent className="max-w-xs">
-									{validationState?.isValid && validationState?.message ? (
-										<p>{validationState.message}</p>
-									) : validationState?.error ? (
-										<div className="flex flex-col gap-1">
-											<p className="font-medium text-red-500">Error:</p>
-											<p>{validationState.error}</p>
-										</div>
-									) : (
-										"Click to validate DNS configuration"
-									)}
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
-					)}
-				</div>
-			);
-		},
-	},
-	{
-		accessorKey: "createdAt",
-		header: ({ column }) => {
-			return (
-				<Button
-					variant="ghost"
-					onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-				>
-					Created
-					<ArrowUpDown className="ml-2 h-4 w-4" />
-				</Button>
-			);
-		},
-		cell: ({ row }) => {
-			const createdAt = row.getValue("createdAt") as string;
-			return (
-				<div className="text-sm text-muted-foreground">
-					{new Date(createdAt).toLocaleDateString()}
-				</div>
-			);
-		},
-	},
-	{
-		id: "status",
-		header: "Status",
-		cell: ({ row }) => {
-			const domain = row.original;
-			if (!canCreateDomain) {
+			: []),
+		{
+			accessorKey: "host",
+			header: ({ column }) => {
 				return (
-					<Badge variant={domain.enabled ? "outline" : "secondary"}>
-						{domain.enabled ? "Enabled" : "Disabled"}
+					<Button
+						variant="ghost"
+						onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+					>
+						Host
+						<ArrowUpDown className="ml-2 h-4 w-4" />
+					</Button>
+				);
+			},
+			cell: ({ row }) => {
+				const domain = row.original;
+				return (
+					<Link
+						className="flex items-center gap-2 font-medium hover:underline"
+						target="_blank"
+						href={`${domain.https ? "https" : "http"}://${domain.host}${domain.path}`}
+					>
+						{domain.host}
+						<ExternalLink className="size-3" />
+					</Link>
+				);
+			},
+		},
+		{
+			accessorKey: "path",
+			header: ({ column }) => {
+				return (
+					<Button
+						variant="ghost"
+						onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+					>
+						Path
+						<ArrowUpDown className="ml-2 h-4 w-4" />
+					</Button>
+				);
+			},
+			cell: ({ row }) => {
+				const path = row.getValue("path") as string;
+				return <div className="font-mono text-sm">{path || "/"}</div>;
+			},
+		},
+		{
+			accessorKey: "port",
+			header: ({ column }) => {
+				return (
+					<Button
+						variant="ghost"
+						onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+					>
+						Port
+						<ArrowUpDown className="ml-2 h-4 w-4" />
+					</Button>
+				);
+			},
+			cell: ({ row }) => {
+				const port = row.getValue("port") as number;
+				return <Badge variant="secondary">{port}</Badge>;
+			},
+		},
+		{
+			accessorKey: "customEntrypoint",
+			header: "Entrypoint",
+			cell: ({ row }) => {
+				const entrypoint = row.getValue("customEntrypoint") as string | null;
+				if (!entrypoint) return <span className="text-muted-foreground">-</span>;
+				return <div className="font-mono text-sm">{entrypoint}</div>;
+			},
+		},
+		{
+			accessorKey: "https",
+			header: "Protocol",
+			cell: ({ row }) => {
+				const domain = row.original;
+				const isCf = Boolean((domain as any).cfHostnameId || (domain as any).cfStatus);
+				const isCfActive = (domain as any).cfStatus === "active" && (domain as any).cfSslStatus === "active";
+
+				if (isCf) {
+					return (
+						<Badge variant={domain.https && isCfActive ? "outline" : "secondary"}>
+							{domain.https && isCfActive ? "HTTPS" : "HTTP"}
+						</Badge>
+					);
+				}
+
+				const https = row.getValue("https") as boolean;
+				return (
+					<Badge variant={https ? "outline" : "secondary"}>
+						{https ? "HTTPS" : "HTTP"}
 					</Badge>
 				);
-			}
-			return (
-				<TooltipProvider>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<div className="flex items-center">
-								<Switch
-									checked={domain.enabled}
-									onCheckedChange={() => handleToggleEnable(domain.domainId)}
-									disabled={isToggling}
-								/>
-							</div>
-						</TooltipTrigger>
-						<TooltipContent>
-							<p>
-								{domain.enabled
-									? "Domain is active. Toggle to disable routing without deleting it."
-									: "Domain is disabled and not routed. Toggle to enable it again."}
-							</p>
-						</TooltipContent>
-					</Tooltip>
-				</TooltipProvider>
-			);
+			},
 		},
-	},
-	{
-		id: "actions",
-		header: "Actions",
-		enableHiding: false,
-		cell: ({ row }) => {
-			const domain = row.original;
+		{
+			id: "certificate",
+			header: "Certificate",
+			cell: ({ row }) => {
+				const domain = row.original;
+				const validationState = validationStates[domain.host];
+				const isCf = Boolean((domain as any).cfHostnameId || (domain as any).cfStatus);
+				const cfStatus = (domain as any).cfStatus;
+				const cfSslStatus = (domain as any).cfSslStatus;
 
-			return (
-				<div className="flex items-center gap-2">
-					{!domain.host.includes("sslip.io") && (
-						<DnsHelperModal
-							domain={{
-								domainId: domain.domainId,
-								host: domain.host,
-								https: domain.https,
-								path: domain.path || undefined,
-							}}
-							serverIp={serverIp}
-							applicationId={type === "application" ? id : undefined}
-							composeId={type === "compose" ? id : undefined}
-						/>
-					)}
-					{canCreateDomain && (
-						<AddDomain id={id} type={type} domainId={domain.domainId}>
+				return (
+					<div className="flex items-center gap-2">
+						{isCf ? (
+							<div className="flex items-center gap-1.5">
+								<Badge variant="outline" className="text-cyan-400 border-cyan-500/30">
+									Cloudflare Edge
+								</Badge>
+								{cfStatus === "active" && cfSslStatus === "active" && domain.https ? (
+									<Badge variant="outline" className="text-emerald-500 border-emerald-500/30 bg-emerald-500/10">
+										SSL Active
+									</Badge>
+								) : cfStatus === "error" || cfSslStatus === "error" || cfSslStatus === "timed_out" ? (
+									<Badge variant="outline" className="text-red-500 border-red-500/30 bg-red-500/10">
+										SSL Error
+									</Badge>
+								) : cfStatus === "active" && cfSslStatus !== "active" ? (
+									<Badge variant="outline" className="text-amber-500 border-amber-500/30 bg-amber-500/10">
+										Issuing SSL
+									</Badge>
+								) : (
+									<Badge variant="outline" className="text-cyan-400 border-cyan-500/30 bg-cyan-500/10">
+										Verifying
+									</Badge>
+								)}
+							</div>
+						) : (
+							<div className="flex items-center gap-1.5">
+								{domain.certificateType && domain.certificateType !== "none" && (
+									<Badge variant="outline" className="capitalize">
+										{domain.certificateType === "letsencrypt" ? "Let's Encrypt" : domain.certificateType}
+									</Badge>
+								)}
+								{domain.https && domain.certificateType === "letsencrypt" && (
+									<Badge variant="outline" className="text-emerald-500 border-emerald-500/30 bg-emerald-500/10">
+										SSL Active
+									</Badge>
+								)}
+							</div>
+						)}
+						{!isCf && !domain.https && canCreateDomain && handleActivateHttps && (
 							<Button
-								variant="ghost"
-								size="icon"
-								className="group hover:bg-blue-500/10 h-8 w-8"
+								variant="outline"
+								size="sm"
+								className="h-6 px-2 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+								disabled={isActivatingHttps}
+								onClick={() => handleActivateHttps(domain.domainId)}
 							>
-								<PenBoxIcon className="size-3.5 text-primary group-hover:text-blue-500" />
+								<ShieldCheck className="size-3" />
+								Activate HTTPS
 							</Button>
-						</AddDomain>
-					)}
-					{canDeleteDomain && (
-						<DialogAction
-							title="Delete Domain"
-							description="Are you sure you want to delete this domain?"
-							type="destructive"
-							onClick={async () => {
-								await handleDeleteDomain(domain.domainId);
-							}}
-						>
-							<Button
-								variant="ghost"
-								size="icon"
-								className="group hover:bg-red-500/10 h-8 w-8"
-								isLoading={isDeleting}
-							>
-								<Trash2 className="size-4 text-primary group-hover:text-red-500" />
-							</Button>
-						</DialogAction>
-					)}
-				</div>
-			);
+						)}
+						{!domain.host.includes("sslip.io") && (
+							<TooltipProvider>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Badge
+											variant="outline"
+											className={
+												validationState?.isValid
+													? "bg-green-500/10 text-green-500 cursor-pointer"
+													: validationState?.error
+														? "bg-red-500/10 text-red-500 cursor-pointer"
+														: "bg-yellow-500/10 text-yellow-500 cursor-pointer"
+											}
+											onClick={() => handleValidateDomain(domain.host)}
+										>
+											{validationState?.isLoading ? (
+												<>
+													<Loader2 className="size-3 mr-1 animate-spin" />
+													Checking...
+												</>
+											) : validationState?.isValid ? (
+												<>
+													<CheckCircle2 className="size-3 mr-1" />
+													{validationState.message && validationState.cdnProvider
+														? `${validationState.cdnProvider}`
+														: "Valid"}
+												</>
+											) : validationState?.error ? (
+												<>
+													<XCircle className="size-3 mr-1" />
+													Invalid
+												</>
+											) : (
+												<>
+													<RefreshCw className="size-3 mr-1" />
+													Validate
+												</>
+											)}
+										</Badge>
+									</TooltipTrigger>
+									<TooltipContent className="max-w-xs">
+										{validationState?.isValid && validationState?.message ? (
+											<p>{validationState.message}</p>
+										) : validationState?.error ? (
+											<div className="flex flex-col gap-1">
+												<p className="font-medium text-red-500">Error:</p>
+												<p>{validationState.error}</p>
+											</div>
+										) : (
+											"Click to validate DNS configuration"
+										)}
+									</TooltipContent>
+								</Tooltip>
+							</TooltipProvider>
+						)}
+					</div>
+				);
+			},
 		},
-	},
-];
+		{
+			accessorKey: "createdAt",
+			header: ({ column }) => {
+				return (
+					<Button
+						variant="ghost"
+						onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+					>
+						Created
+						<ArrowUpDown className="ml-2 h-4 w-4" />
+					</Button>
+				);
+			},
+			cell: ({ row }) => {
+				const createdAt = row.getValue("createdAt") as string;
+				return (
+					<div className="text-sm text-muted-foreground">
+						{new Date(createdAt).toLocaleDateString()}
+					</div>
+				);
+			},
+		},
+		{
+			id: "status",
+			header: "Status",
+			cell: ({ row }) => {
+				const domain = row.original;
+				if (!canCreateDomain) {
+					return (
+						<Badge variant={domain.enabled ? "outline" : "secondary"}>
+							{domain.enabled ? "Enabled" : "Disabled"}
+						</Badge>
+					);
+				}
+				return (
+					<TooltipProvider>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<div className="flex items-center">
+									<Switch
+										checked={domain.enabled}
+										onCheckedChange={() => handleToggleEnable(domain.domainId)}
+										disabled={isToggling}
+									/>
+								</div>
+							</TooltipTrigger>
+							<TooltipContent>
+								<p>
+									{domain.enabled
+										? "Domain is active. Toggle to disable routing without deleting it."
+										: "Domain is disabled and not routed. Toggle to enable it again."}
+								</p>
+							</TooltipContent>
+						</Tooltip>
+					</TooltipProvider>
+				);
+			},
+		},
+		{
+			id: "actions",
+			header: "Actions",
+			enableHiding: false,
+			cell: ({ row }) => {
+				const domain = row.original;
+
+				return (
+					<div className="flex items-center gap-2">
+						{!domain.host.includes("sslip.io") && (
+							<DnsHelperModal
+								domain={{
+									domainId: domain.domainId,
+									host: domain.host,
+									https: domain.https,
+									path: domain.path || undefined,
+								}}
+								serverIp={serverIp}
+								applicationId={type === "application" ? id : undefined}
+								composeId={type === "compose" ? id : undefined}
+							/>
+						)}
+						{canCreateDomain && (
+							<AddDomain id={id} type={type} domainId={domain.domainId}>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="group hover:bg-blue-500/10 h-8 w-8"
+								>
+									<PenBoxIcon className="size-3.5 text-primary group-hover:text-blue-500" />
+								</Button>
+							</AddDomain>
+						)}
+						{canDeleteDomain && (
+							<DialogAction
+								title="Delete Domain"
+								description="Are you sure you want to delete this domain?"
+								type="destructive"
+								onClick={async () => {
+									await handleDeleteDomain(domain.domainId);
+								}}
+							>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="group hover:bg-red-500/10 h-8 w-8"
+									isLoading={isDeleting}
+								>
+									<Trash2 className="size-4 text-primary group-hover:text-red-500" />
+								</Button>
+							</DialogAction>
+						)}
+					</div>
+				);
+			},
+		},
+	];

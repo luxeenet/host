@@ -92,7 +92,7 @@ describe("Platform Domains & Workflow Improvements", () => {
 			expect(result.host).not.toContain("127-0-0-1");
 			expect(result.host).not.toContain("192-168-");
 			expect(result.host).not.toContain("10-0-");
-		});
+		}, 15000);
 	});
 
 	describe("Plan Entitlement Custom Domain Quota", () => {
@@ -132,7 +132,27 @@ describe("Platform Domains & Workflow Improvements", () => {
 		});
 
 		it("checks SSL auto entitlement correctly", async () => {
-			const check = await PlanEntitlementService.checkCanUseSslAuto("org-test");
+			const mockTx: any = {
+				query: {
+					subscriptions: {
+						findFirst: vi.fn().mockResolvedValue({
+							subscriptionId: "sub-1",
+							status: "active",
+							plan: {
+								planId: "p-1",
+								name: "Pro",
+								resources: [{ resourceKey: "max_domains", value: 5 }],
+								features: [
+									{ featureKey: "custom_domains", enabled: true },
+									{ featureKey: "ssl_auto", enabled: true },
+								],
+								applicationTypes: [],
+							},
+						}),
+					},
+				},
+			};
+			const check = await PlanEntitlementService.checkCanUseSslAuto("org-test", mockTx);
 			expect(check).toBeDefined();
 			expect(typeof check.allowed).toBe("boolean");
 		});

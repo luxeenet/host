@@ -50,21 +50,24 @@ const resolveDns = async (host: string): Promise<string[]> => {
 // ---------------------------------------------------------------------------
 
 const runtimeSettingsCache = new Map<string, string | null>();
+let dbUnavailableUntil = 0;
 
 export const getPlatformSettingValue = async (
 	key: string,
 	fallback: string | null = null,
 ): Promise<string | null> => {
-	try {
-		const row = await db.query.platformSettings.findFirst({
-			where: eq(platformSettings.key, key),
-		});
-		if (row?.value !== undefined && row?.value !== null) {
-			runtimeSettingsCache.set(key, row.value);
-			return row.value;
+	if (Date.now() > dbUnavailableUntil) {
+		try {
+			const row = await db.query.platformSettings.findFirst({
+				where: eq(platformSettings.key, key),
+			});
+			if (row?.value !== undefined && row?.value !== null) {
+				runtimeSettingsCache.set(key, row.value);
+				return row.value;
+			}
+		} catch {
+			dbUnavailableUntil = Date.now() + 30_000;
 		}
-	} catch {
-		// Fall through to cache/fallback
 	}
 	if (runtimeSettingsCache.has(key)) {
 		return runtimeSettingsCache.get(key) ?? fallback;
@@ -78,25 +81,27 @@ export const setPlatformSettingValue = async (
 	description?: string,
 ): Promise<void> => {
 	runtimeSettingsCache.set(key, value);
-	try {
-		await db
-			.insert(platformSettings)
-			.values({
-				key,
-				value,
-				description: description ?? null,
-				updatedAt: new Date(),
-			})
-			.onConflictDoUpdate({
-				target: platformSettings.key,
-				set: {
+	if (Date.now() > dbUnavailableUntil) {
+		try {
+			await db
+				.insert(platformSettings)
+				.values({
+					key,
 					value,
+					description: description ?? null,
 					updatedAt: new Date(),
-					...(description ? { description } : {}),
-				},
-			});
-	} catch {
-		// Fallback in environments where onConflictDoUpdate is unhandled by driver mock
+				})
+				.onConflictDoUpdate({
+					target: platformSettings.key,
+					set: {
+						value,
+						updatedAt: new Date(),
+						...(description ? { description } : {}),
+					},
+				});
+		} catch {
+			dbUnavailableUntil = Date.now() + 30_000;
+		}
 	}
 };
 

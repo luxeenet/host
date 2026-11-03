@@ -7,8 +7,9 @@
 
 import { db } from "@dokploy/server/db";
 import { domains } from "../db/schema/domain";
-import { and, isNotNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, ne, or, sql } from "drizzle-orm";
 import {
+	ensureCloudflareDomainSchema,
 	isCloudflareSaasActive,
 	syncCustomHostnameStatus,
 } from "./cloudflare-saas-service";
@@ -48,34 +49,47 @@ export const reconcileCloudflareHostnames = async (options?: {
 
 		const batchLimit = options?.batchSize ?? 50;
 
-		// Select domains with a Cloudflare hostname ID that either:
+		// Select domains with a Cloudflare hostname ID or failed provisioning that either:
 		// 1. Are not yet fully active (hostname != 'active' OR ssl != 'active')
 		// 2. Or haven't been synced in over 1 hour
 		// 3. Or forceAll is true
 		const queryCondition = options?.forceAll
-			? isNotNull(domains.cfHostnameId)
-			: and(
-					isNotNull(domains.cfHostnameId),
-					or(
-						ne(domains.cfStatus, "active"),
-						ne(domains.cfSslStatus, "active"),
-						sql`${domains.cfStatus} IS NULL`,
-						sql`${domains.cfSslStatus} IS NULL`,
-						sql`${domains.cfLastSyncAt} < NOW() - INTERVAL '1 hour'`,
-						sql`${domains.cfLastSyncAt} IS NULL`,
+			? or(isNotNull(domains.cfHostnameId), eq(domains.cfStatus, "error"))
+			: or(
+					eq(domains.cfStatus, "error"),
+					and(
+						isNotNull(domains.cfHostnameId),
+						or(
+							ne(domains.cfStatus, "active"),
+							ne(domains.cfSslStatus, "active"),
+							sql`${domains.cfStatus} IS NULL`,
+							sql`${domains.cfSslStatus} IS NULL`,
+							sql`${domains.cfLastSyncAt} < NOW() - INTERVAL '1 hour'`,
+							sql`${domains.cfLastSyncAt} IS NULL`,
+						),
 					),
 			  );
 
-		const pendingDomains = await db
-			.select({
-				domainId: domains.domainId,
-				host: domains.host,
-				cfStatus: domains.cfStatus,
-				cfSslStatus: domains.cfSslStatus,
-			})
-			.from(domains)
-			.where(queryCondition)
-			.limit(batchLimit);
+		let pendingDomains: Array<{
+			domainId: string;
+			host: string;
+			cfStatus: string | null;
+			cfSslStatus: string | null;
+		}> = [];
+		try {
+			pendingDomains = await db
+				.select({
+					domainId: domains.domainId,
+					host: domains.host,
+					cfStatus: domains.cfStatus,
+					cfSslStatus: domains.cfSslStatus,
+				})
+				.from(domains)
+				.where(queryCondition)
+				.limit(batchLimit);
+		} catch {
+			return { processed: 0, updated: 0, errors: [] };
+		}
 
 		for (const domain of pendingDomains) {
 			processed++;

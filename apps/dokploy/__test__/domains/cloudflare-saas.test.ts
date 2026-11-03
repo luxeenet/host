@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
 	CloudflareClient,
@@ -11,8 +13,11 @@ import {
 	testCloudflareConnection,
 } from "@dokploy/server/services/cloudflare-saas-settings";
 import {
+	ensureCloudflareDomainSchema,
 	isCloudflareSaasActive,
+	provisionCustomHostname,
 	resolveCloudflareCnameTarget,
+	syncCustomHostnameStatus,
 	mapDomainCloudflareStatus,
 	deleteCustomHostname,
 	type DomainRow,
@@ -605,6 +610,382 @@ describe("Cloudflare for SaaS Custom Hostnames & SSL Management", () => {
 			expect(await isPlatformOrTestDomain("customer-domain.com")).toBe(false);
 			expect(await isPlatformOrTestDomain("portal.fintech.io")).toBe(false);
 			expect(await isPlatformOrTestDomain("shop.luxeenet.com")).toBe(false);
+		});
+	});
+
+	describe("Provider Selection & Accurate Status Presentation", () => {
+		const sampleDomain: DomainRow = {
+			domainId: "test-domain-id",
+			host: "app.acmecorp.com",
+			path: "/",
+			port: 3000,
+			customEntrypoint: null,
+			https: false,
+			certificateType: "none",
+			customCertResolver: null,
+			applicationId: "app-1",
+			composeId: null,
+			previewDeploymentId: null,
+			serviceName: null,
+			domainType: "application",
+			uniqueConfigKey: 1,
+			createdAt: new Date().toISOString(),
+			internalPath: "/",
+			stripPath: false,
+			middlewares: [],
+			forwardAuthEnabled: false,
+			enabled: true,
+			isPrimary: false,
+			cfHostnameId: "cf-host-123",
+			cfStatus: "pending",
+			cfSslStatus: "initializing",
+			cfVerificationErrors: null,
+			cfOwnershipVerification: null,
+			cfSslValidationRecords: null,
+			cfSslCertificates: null,
+			cfLastSyncAt: null,
+			cfLastError: null,
+			cfCustomOrigin: null,
+		};
+
+		it("should not mark domain as HTTPS ready when Cloudflare status or SSL status is pending", () => {
+			const pendingDomain: DomainRow = {
+				...sampleDomain,
+				cfStatus: "pending",
+				cfSslStatus: "initializing",
+				https: false,
+			};
+			const status = mapDomainCloudflareStatus(pendingDomain, "cname.hatdot.cloud");
+			expect(status.isCloudflareSaas).toBe(true);
+			expect(status.isHttpsReady).toBe(false);
+			expect(status.status).toBe("pending");
+			expect(status.stageStep).toBe(1);
+			expect(status.stageName).toBe("Awaiting DNS configuration");
+		});
+
+		it("should not mark domain as HTTPS ready when hostname is active but SSL is issuing", () => {
+			const issuingDomain: DomainRow = {
+				...sampleDomain,
+				cfStatus: "active",
+				cfSslStatus: "pending_validation",
+				https: false,
+			};
+			const status = mapDomainCloudflareStatus(issuingDomain, "cname.hatdot.cloud");
+			expect(status.isCloudflareSaas).toBe(true);
+			expect(status.isHttpsReady).toBe(false);
+			expect(status.status).toBe("pending_certificate");
+			expect(status.stageStep).toBe(3);
+			expect(status.stageName).toBe("Issuing SSL certificate");
+		});
+
+		it("should not mark domain active solely because legacy https flag is true if Cloudflare SSL is pending", () => {
+			const staleHttpsDomain: DomainRow = {
+				...sampleDomain,
+				cfStatus: "pending",
+				cfSslStatus: "initializing",
+				https: true, // stale flag from legacy or prior state
+			};
+			const status = mapDomainCloudflareStatus(staleHttpsDomain, "cname.hatdot.cloud");
+			// Must evaluate actual Cloudflare lifecycle, NOT trust stale https flag!
+			expect(status.isHttpsReady).toBe(false);
+			expect(status.status).toBe("pending");
+		});
+
+		it("should mark domain as HTTPS ready ONLY when both hostname and SSL are active", () => {
+			const activeDomain: DomainRow = {
+				...sampleDomain,
+				cfStatus: "active",
+				cfSslStatus: "active",
+				https: true,
+			};
+			const status = mapDomainCloudflareStatus(activeDomain, "cname.hatdot.cloud");
+			expect(status.isCloudflareSaas).toBe(true);
+			expect(status.isHttpsReady).toBe(true);
+			expect(status.status).toBe("active");
+			expect(status.stageStep).toBe(4);
+			expect(status.stageName).toBe("Active — HTTPS ready");
+		});
+
+		it("should identify legacy Let's Encrypt domain when no Cloudflare metadata exists", () => {
+			const legacyDomain: DomainRow = {
+				...sampleDomain,
+				cfHostnameId: null,
+				cfStatus: null,
+				cfSslStatus: null,
+				certificateType: "letsencrypt",
+				https: true,
+			};
+			const status = mapDomainCloudflareStatus(legacyDomain, "cname.hatdot.cloud");
+			expect(status.isCloudflareSaas).toBe(false);
+			expect(status.isHttpsReady).toBe(true);
+			expect(status.stageStep).toBe(4);
+		});
+
+		it("should resolve Cloudflare SaaS CNAME target when configured in platform settings", async () => {
+			await setPlatformSettingValue(
+				PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_CNAME_TARGET,
+				"cname.hatdot.cloud",
+			);
+			const target = await resolveCloudflareCnameTarget({});
+			expect(target).toBe("cname.hatdot.cloud");
+		});
+
+		it("should default Cloudflare SaaS CNAME target to cname.<platformDomain> rather than per-app subdomain when unset", async () => {
+			process.env.PLATFORM_DOMAIN = "hatdot.cloud";
+			await setPlatformSettingValue(
+				PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_CNAME_TARGET,
+				null,
+			);
+			await setPlatformSettingValue(
+				PLATFORM_SETTING_KEYS.CLOUDFLARE_SAAS_FALLBACK_ORIGIN,
+				null,
+			);
+			await setPlatformSettingValue(
+				PLATFORM_SETTING_KEYS.CUSTOM_DOMAIN_CNAME_TARGET,
+				null,
+			);
+
+			const target = await resolveCloudflareCnameTarget({
+				applicationId: "qrcode-3d-p7aloo",
+			});
+			expect(target).toBe("cname.hatdot.cloud");
+			expect(target).not.toBe("qrcode-3d-p7aloo.hatdot.cloud");
+		});
+
+		it("should not mark a legacy domain as HTTPS ready if certificateType is 'none' even with stale https=true", () => {
+			const staleLegacyDomain: DomainRow = {
+				...sampleDomain,
+				cfHostnameId: null,
+				cfStatus: null,
+				cfSslStatus: null,
+				certificateType: "none",
+				https: true,
+			};
+			const status = mapDomainCloudflareStatus(staleLegacyDomain, "cname.hatdot.cloud");
+			expect(status.isCloudflareSaas).toBe(false);
+			expect(status.isHttpsReady).toBe(false);
+			expect(status.status).toBe("pending");
+		});
+	});
+
+	describe("Cloudflare Custom Hostname Provisioning, Sync & Migration Safety", () => {
+		const createMockTx = (initialRow: DomainRow) => {
+			let currentRow = { ...initialRow };
+			const executedSql: string[] = [];
+			const tx = {
+				select: () => ({
+					from: () => ({
+						where: () => ({
+							limit: async () => [currentRow],
+						}),
+					}),
+				}),
+				update: () => ({
+					set: (payload: Partial<DomainRow>) => ({
+						where: () => ({
+							returning: async () => {
+								currentRow = { ...currentRow, ...payload };
+								return [currentRow];
+							},
+						}),
+					}),
+				}),
+				execute: async (query: any) => {
+					executedSql.push(String(query?.queryChunks ? "sql" : query));
+					return [];
+				},
+				getRow: () => currentRow,
+				getExecutedCount: () => executedSql.length,
+			};
+			return tx;
+		};
+
+		const baseCustomDomain: DomainRow = {
+			domainId: "dom-luxee-1",
+			host: "luxeenet.com",
+			path: "/",
+			port: 3000,
+			customEntrypoint: null,
+			https: true, // Even if passed true initially
+			certificateType: "letsencrypt", // Even if passed letsencrypt initially
+			customCertResolver: null,
+			applicationId: null,
+			composeId: null,
+			previewDeploymentId: null,
+			serviceName: null,
+			domainType: "application",
+			uniqueConfigKey: 1,
+			createdAt: new Date().toISOString(),
+			internalPath: "/",
+			stripPath: false,
+			middlewares: [],
+			forwardAuthEnabled: false,
+			enabled: true,
+			isPrimary: false,
+			cfHostnameId: null,
+			cfStatus: null,
+			cfSslStatus: null,
+			cfVerificationErrors: null,
+			cfOwnershipVerification: null,
+			cfSslValidationRecords: null,
+			cfSslCertificates: null,
+			cfLastSyncAt: null,
+			cfLastError: null,
+			cfCustomOrigin: null,
+		};
+
+		it("should register custom hostname with Cloudflare, persist validation records, and set https=false / certificateType='none' while pending", async () => {
+			await updateCloudflareSaasSettings({
+				enabled: true,
+				apiToken: "cf_live_token_test_12345678",
+				zoneId: "zone-hatdot-123",
+				cnameTarget: "cname.hatdot.cloud",
+			});
+
+			const mockTx = createMockTx(baseCustomDomain);
+			const mockFetch: typeof fetch = async () =>
+				new Response(
+					JSON.stringify({
+						success: true,
+						errors: [],
+						messages: [],
+						result: {
+							id: "cf-hostname-luxee-999",
+							hostname: "luxeenet.com",
+							status: "pending",
+							ssl: {
+								id: "ssl-luxee-999",
+								type: "dv",
+								method: "http",
+								status: "pending_validation",
+								validation_records: [
+									{
+										status: "pending",
+										txt_name: "_acme-challenge.luxeenet.com",
+										txt_value: "acme-token-xyz",
+									},
+								],
+							},
+							ownership_verification: {
+								type: "txt",
+								name: "_cf-custom-hostname.luxeenet.com",
+								value: "ownership-token-abc",
+							},
+							created_at: new Date().toISOString(),
+						},
+					}),
+					{ status: 201, headers: { "Content-Type": "application/json" } },
+				);
+
+			const updated = await provisionCustomHostname("dom-luxee-1", {
+				tx: mockTx,
+				fetchImpl: mockFetch,
+			});
+
+			expect(updated.cfHostnameId).toBe("cf-hostname-luxee-999");
+			expect(updated.cfStatus).toBe("pending");
+			expect(updated.cfSslStatus).toBe("pending_validation");
+			expect(updated.https).toBe(false);
+			expect(updated.certificateType).toBe("none");
+			expect(updated.cfOwnershipVerification).toEqual({
+				type: "txt",
+				name: "_cf-custom-hostname.luxeenet.com",
+				value: "ownership-token-abc",
+			});
+		});
+
+		it("should transition https=true when syncCustomHostnameStatus observes active hostname and active SSL", async () => {
+			const pendingRow: DomainRow = {
+				...baseCustomDomain,
+				https: false,
+				certificateType: "none",
+				cfHostnameId: "cf-hostname-luxee-999",
+				cfStatus: "pending",
+				cfSslStatus: "pending_validation",
+			};
+			const mockTx = createMockTx(pendingRow);
+
+			const mockFetch: typeof fetch = async () =>
+				new Response(
+					JSON.stringify({
+						success: true,
+						errors: [],
+						messages: [],
+						result: {
+							id: "cf-hostname-luxee-999",
+							hostname: "luxeenet.com",
+							status: "active",
+							ssl: {
+								id: "ssl-luxee-999",
+								type: "dv",
+								method: "http",
+								status: "active",
+							},
+							created_at: new Date().toISOString(),
+						},
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+
+			const synced = await syncCustomHostnameStatus("dom-luxee-1", {
+				tx: mockTx,
+				fetchImpl: mockFetch,
+			});
+
+			expect(synced.cfStatus).toBe("active");
+			expect(synced.cfSslStatus).toBe("active");
+			expect(synced.https).toBe(true);
+			expect(synced.certificateType).toBe("none");
+		});
+
+		it("should reset https=false and certificateType='none' if Cloudflare registration fails", async () => {
+			const mockTx = createMockTx(baseCustomDomain);
+			const failingFetch: typeof fetch = async () =>
+				new Response(
+					JSON.stringify({
+						success: false,
+						errors: [{ code: 10000, message: "Authentication error" }],
+						messages: [],
+					}),
+					{ status: 401, headers: { "Content-Type": "application/json" } },
+				);
+
+			const updated = await provisionCustomHostname("dom-luxee-1", {
+				tx: mockTx,
+				fetchImpl: failingFetch,
+			});
+
+			expect(updated.cfStatus).toBe("error");
+			expect(updated.https).toBe(false);
+			expect(updated.certificateType).toBe("none");
+			expect(updated.cfLastError).toContain("Authentication error");
+		});
+
+		it("should verify migrations 0200 and 0204 are idempotent and ensureCloudflareDomainSchema executes all required DDL", async () => {
+			const mockTx = createMockTx(baseCustomDomain);
+			await ensureCloudflareDomainSchema(mockTx);
+			expect(mockTx.getExecutedCount()).toBeGreaterThanOrEqual(13);
+
+			const drizzleDir = path.resolve(__dirname, "../../drizzle");
+			const sql0200 = fs.readFileSync(
+				path.join(drizzleDir, "0200_natural_psylocke.sql"),
+				"utf8",
+			);
+			const sql0204 = fs.readFileSync(
+				path.join(drizzleDir, "0204_cloudflare_saas_custom_domains.sql"),
+				"utf8",
+			);
+
+			// 0200 must use EXCEPTION WHEN duplicate_object and CREATE TABLE IF NOT EXISTS so it never blocks 0204
+			expect(sql0200).toContain("EXCEPTION WHEN duplicate_object");
+			expect(sql0200).toContain('CREATE TABLE IF NOT EXISTS "paas_platform_setting"');
+
+			// 0204 must add all Cloudflare custom hostname columns idempotently
+			expect(sql0204).toContain('ADD COLUMN IF NOT EXISTS "cfHostnameId"');
+			expect(sql0204).toContain('ADD COLUMN IF NOT EXISTS "cfStatus"');
+			expect(sql0204).toContain('ADD COLUMN IF NOT EXISTS "cfSslStatus"');
+			expect(sql0204).toContain('ADD COLUMN IF NOT EXISTS "cfOwnershipVerification"');
+			expect(sql0204).toContain('ADD COLUMN IF NOT EXISTS "cfSslValidationRecords"');
 		});
 	});
 });

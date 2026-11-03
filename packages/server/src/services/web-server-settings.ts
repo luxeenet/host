@@ -5,7 +5,9 @@ import { eq } from "drizzle-orm";
 /**
  * Get the web server settings (singleton - only one row should exist)
  */
+let webServerSettingsDbUnavailableUntil = 0;
 export const getWebServerSettings = async () => {
+	if (Date.now() < webServerSettingsDbUnavailableUntil) return null;
 	try {
 		const settings = await db.query.webServerSettings.findFirst({
 			orderBy: (settings, { asc }) => [asc(settings.createdAt)],
@@ -23,6 +25,7 @@ export const getWebServerSettings = async () => {
 
 		return settings;
 	} catch {
+		webServerSettingsDbUnavailableUntil = Date.now() + 30_000;
 		return null;
 	}
 };

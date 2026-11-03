@@ -12,6 +12,7 @@ import {
 import {
 	CheckCircle2,
 	ChevronDown,
+	Cloud,
 	ExternalLink,
 	GlobeIcon,
 	InfoIcon,
@@ -154,6 +155,8 @@ export const ShowDomains = ({ id, type }: Props) => {
 		api.domain.toggleEnable.useMutation();
 	const { mutateAsync: activateHttps, isPending: isActivatingHttps } =
 		api.domain.activateHttps.useMutation();
+	const { mutateAsync: recheckCloudflare, isPending: isRecheckingCf } =
+		api.domain.recheckCloudflareStatus.useMutation();
 
 	const handleActivateHttps = async (domainId: string) => {
 		try {
@@ -162,6 +165,16 @@ export const ShowDomains = ({ id, type }: Props) => {
 			refetch();
 		} catch (err: any) {
 			toast.error(err?.message || "Failed to activate HTTPS");
+		}
+	};
+
+	const handleRecheckCloudflare = async (domainId: string) => {
+		try {
+			const res = await recheckCloudflare({ domainId });
+			toast.success(res.lifecycle?.stageName ? `Cloudflare status: ${res.lifecycle.stageName}` : "Cloudflare status updated");
+			refetch();
+		} catch (err: any) {
+			toast.error(err?.message || "Failed to refresh Cloudflare status");
 		}
 	};
 
@@ -478,6 +491,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 														{!item.host.includes("sslip.io") && (
 															<DnsHelperModal
 																domain={{
+																	domainId: item.domainId,
 																	host: item.host,
 																	https: item.https,
 																	path: item.path || undefined,
@@ -486,6 +500,8 @@ export const ShowDomains = ({ id, type }: Props) => {
 																	application?.server?.ipAddress?.toString() ||
 																	ip?.toString()
 																}
+																applicationId={type === "application" ? id : undefined}
+																composeId={type === "compose" ? id : undefined}
 															/>
 														)}
 														{canCreateDomain && (
@@ -597,51 +613,135 @@ export const ShowDomains = ({ id, type }: Props) => {
 														</Tooltip>
 													</TooltipProvider>
 
-													<TooltipProvider>
-														<Tooltip>
-															<TooltipTrigger asChild>
+													{Boolean((item as any).cfHostnameId || (item as any).cfStatus) ? (
+														<>
+															<TooltipProvider>
+																<Tooltip>
+																	<TooltipTrigger asChild>
+																		<Badge
+																			variant="outline"
+																			className="text-cyan-400 border-cyan-500/30 flex items-center gap-1"
+																		>
+																			<Cloud className="size-3 text-cyan-400" />
+																			Cloudflare Edge
+																		</Badge>
+																	</TooltipTrigger>
+																	<TooltipContent>
+																		<p>Cloudflare for SaaS Edge SSL & Routing</p>
+																	</TooltipContent>
+																</Tooltip>
+															</TooltipProvider>
+
+															{(item as any).cfStatus === "active" &&
+															(item as any).cfSslStatus === "active" &&
+															item.https ? (
 																<Badge
-																	variant={item.https ? "outline" : "secondary"}
+																	variant="outline"
+																	className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1"
 																>
-																	{item.https ? "HTTPS" : "HTTP"}
+																	<ShieldCheck className="size-3" />
+																	SSL Active
 																</Badge>
-															</TooltipTrigger>
-															<TooltipContent>
-																<p>
-																	{item.https
-																		? "Secure HTTPS connection"
-																		: "Standard HTTP connection"}
-																</p>
-															</TooltipContent>
-														</Tooltip>
-													</TooltipProvider>
+															) : (item as any).cfStatus === "error" ||
+															  (item as any).cfSslStatus === "error" ||
+															  (item as any).cfSslStatus === "timed_out" ? (
+																<Badge
+																	variant="outline"
+																	className="bg-red-500/10 text-red-400 border-red-500/30 flex items-center gap-1"
+																	title={(item as any).cfLastError || "Cloudflare error"}
+																>
+																	<XCircle className="size-3" />
+																	SSL Error
+																</Badge>
+															) : (item as any).cfStatus === "active" &&
+															  (item as any).cfSslStatus !== "active" ? (
+																<Badge
+																	variant="outline"
+																	className="bg-amber-500/10 text-amber-400 border-amber-500/30 flex items-center gap-1"
+																>
+																	<RefreshCw className="size-3 animate-spin" />
+																	Issuing SSL
+																</Badge>
+															) : (
+																<Badge
+																	variant="outline"
+																	className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 flex items-center gap-1"
+																>
+																	<Cloud className="size-3" />
+																	Verifying Ownership
+																</Badge>
+															)}
 
-													{!item.https && canCreateDomain && (
-														<Button
-															variant="outline"
-															size="sm"
-															className="h-6 px-2 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
-															disabled={isActivatingHttps}
-															onClick={() => handleActivateHttps(item.domainId)}
-														>
-															<ShieldCheck className="size-3" />
-															Activate HTTPS
-														</Button>
-													)}
+															<Button
+																variant="outline"
+																size="sm"
+																className="h-6 px-2 text-xs gap-1 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+																disabled={isRecheckingCf}
+																onClick={() => handleRecheckCloudflare(item.domainId)}
+															>
+																<RefreshCw className={`size-3 ${isRecheckingCf ? "animate-spin" : ""}`} />
+																Sync SSL
+															</Button>
+														</>
+													) : (
+														<>
+															<TooltipProvider>
+																<Tooltip>
+																	<TooltipTrigger asChild>
+																		<Badge
+																			variant={item.https ? "outline" : "secondary"}
+																		>
+																			{item.https ? "HTTPS" : "HTTP"}
+																		</Badge>
+																	</TooltipTrigger>
+																	<TooltipContent>
+																		<p>
+																			{item.https
+																				? "Secure HTTPS connection"
+																				: "Standard HTTP connection"}
+																		</p>
+																	</TooltipContent>
+																</Tooltip>
+															</TooltipProvider>
 
-													{item.certificateType && (
-														<TooltipProvider>
-															<Tooltip>
-																<TooltipTrigger asChild>
-																	<Badge variant="outline">
-																		Cert: {item.certificateType}
-																	</Badge>
-																</TooltipTrigger>
-																<TooltipContent>
-																	<p>SSL Certificate Provider</p>
-																</TooltipContent>
-															</Tooltip>
-														</TooltipProvider>
+															{item.https && item.certificateType === "letsencrypt" && (
+																<Badge
+																	variant="outline"
+																	className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1"
+																>
+																	<ShieldCheck className="size-3" />
+																	SSL Active
+																</Badge>
+															)}
+
+															{!item.https && canCreateDomain && (
+																<Button
+																	variant="outline"
+																	size="sm"
+																	className="h-6 px-2 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+																	disabled={isActivatingHttps}
+																	onClick={() => handleActivateHttps(item.domainId)}
+																>
+																	<ShieldCheck className="size-3" />
+																	Activate HTTPS
+																</Button>
+															)}
+
+															{item.certificateType && item.certificateType !== "none" && (
+																<TooltipProvider>
+																	<Tooltip>
+																		<TooltipTrigger asChild>
+																			<Badge variant="outline">
+																				Cert: {item.certificateType === "letsencrypt" ? "Let's Encrypt" : item.certificateType}
+																			</Badge>
+																		</TooltipTrigger>
+																		<TooltipContent>
+																			<p>SSL Certificate Provider</p>
+																		</TooltipContent>
+																	</Tooltip>
+																</TooltipProvider>
+															)}
+														</>
 													)}
 
 													{item.middlewares?.map((middleware, index) => (

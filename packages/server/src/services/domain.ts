@@ -43,9 +43,21 @@ import {
 	syncCustomHostnameStatus,
 } from "./cloudflare-saas-service";
 
-export type Domain = Omit<typeof domains.$inferSelect, "isPrimary"> & {
-	isPrimary?: boolean;
-};
+type DomainOptionalKeys =
+	| "isPrimary"
+	| "cfHostnameId"
+	| "cfStatus"
+	| "cfSslStatus"
+	| "cfVerificationErrors"
+	| "cfOwnershipVerification"
+	| "cfSslValidationRecords"
+	| "cfSslCertificates"
+	| "cfLastSyncAt"
+	| "cfLastError"
+	| "cfCustomOrigin";
+
+export type Domain = Omit<typeof domains.$inferSelect, DomainOptionalKeys> &
+	Partial<Pick<typeof domains.$inferSelect, DomainOptionalKeys>>;
 
 export const getServiceOrganizationId = async (
 	options: {
@@ -409,18 +421,28 @@ export const createDomain = async (
 		} catch {}
 	}
 
-	const certTypeToUse =
-		input.certificateType && input.certificateType !== "none"
+	const saasActive = await isCloudflareSaasActive();
+	const isCustom = !(await isPlatformOrTestDomain(host));
+	const willUseCloudflare = saasActive && isCustom;
+
+	// For Cloudflare SaaS custom domains, edge SSL is handled by Cloudflare.
+	// Do NOT initialize with letsencrypt or upfront https=true before Cloudflare verifies.
+	const certTypeToUse = willUseCloudflare
+		? "none"
+		: input.certificateType && input.certificateType !== "none"
 			? input.certificateType
 			: input.https
 				? "letsencrypt"
 				: (input.certificateType ?? "none");
+
+	const httpsToUse = willUseCloudflare ? false : input.https;
 
 	const domain = await tx
 		.insert(domains)
 		.values({
 			...input,
 			certificateType: certTypeToUse,
+			https: httpsToUse,
 			port: portToUse !== undefined ? portToUse : (input.port ?? null),
 			host: host,
 		} as typeof domains.$inferInsert)
@@ -440,13 +462,12 @@ export const createDomain = async (
 	}
 
 	let finalDomain = domain;
-	try {
-		const saasActive = await isCloudflareSaasActive();
-		if (saasActive && !(await isPlatformOrTestDomain(host))) {
+	if (willUseCloudflare) {
+		try {
 			finalDomain = await provisionCustomHostname(domain.domainId, { tx });
+		} catch (cfErr) {
+			console.error(`[Cloudflare SaaS] Error auto-provisioning domain ${host}:`, cfErr);
 		}
-	} catch (cfErr) {
-		console.error(`[Cloudflare SaaS] Error auto-provisioning domain ${host}:`, cfErr);
 	}
 
 	return finalDomain;
@@ -1112,6 +1133,10 @@ export const validateDomain = async (
 	}
 };
 
+let cachedPublicIp: string | null = null;
+let cachedPublicIpAt = 0;
+let domainDbUnavailableUntil = 0;
+
 export const getServerIpCandidates = async (
 	serverId?: string | null,
 ): Promise<string[]> => {
@@ -1157,9 +1182,15 @@ export const getServerIpCandidates = async (
 			}
 		}
 
-		const publicIp = await withTimeout(getPublicIpWithFallback(), 7000);
-		if (publicIp && isIP(publicIp)) {
-			candidates.add(publicIp);
+		if (cachedPublicIp && Date.now() - cachedPublicIpAt < 60_000) {
+			candidates.add(cachedPublicIp);
+		} else {
+			const publicIp = await withTimeout(getPublicIpWithFallback(), 2500);
+			if (publicIp && isIP(publicIp)) {
+				cachedPublicIp = publicIp;
+				cachedPublicIpAt = Date.now();
+				candidates.add(publicIp);
+			}
 		}
 	}
 
@@ -1262,14 +1293,18 @@ export const getDnsInstructionsForDomain = async (
 
 	// Check if this domain is tracked by Cloudflare for SaaS in the database
 	let dbDomain: (typeof domains.$inferSelect) | undefined;
-	try {
-		const found = await db
-			.select()
-			.from(domains)
-			.where(sql`lower(trim(${domains.host})) = ${cleanHost}`)
-			.limit(1);
-		dbDomain = found[0];
-	} catch {}
+	if (Date.now() > domainDbUnavailableUntil) {
+		try {
+			const found = await db
+				.select()
+				.from(domains)
+				.where(sql`lower(trim(${domains.host})) = ${cleanHost}`)
+				.limit(1);
+			dbDomain = found[0];
+		} catch {
+			domainDbUnavailableUntil = Date.now() + 30_000;
+		}
+	}
 
 	const saasActive = await isCloudflareSaasActive();
 	const useCloudflareSaas =

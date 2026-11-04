@@ -33,7 +33,7 @@ const createMockApp = (
 		applicationId?: string;
 		isPrimary?: boolean;
 	}> = [],
-	overrides: Partial<ApplicationNested> = {},
+	overrides: Record<string, any> = {},
 ): ApplicationNested =>
 	({
 		applicationId: `app-${appName}`,
@@ -340,6 +340,88 @@ export default defineConfig({
 		expect(rejection).not.toBeNull();
 		expect(rejection?.framework).toBe("vite");
 		expect(rejection?.message).toContain("Vite rejected the Host header");
+	});
+
+	// Scenario 13: Vite preview on port 4173 detected even when framework is "React" or generic
+	it("Scenario 13: Vite preview on port 4173 is recognized and injected even when framework is detected as React", () => {
+		const app = createMockApp("profile-profile-z4lec0", [
+			{ host: "luxeenet.com", enabled: true, verified: true, cfStatus: "active" },
+		], {
+			suggestedPort: 4173,
+			command: "npm run preview -- --port 4173 --host 0.0.0.0",
+		});
+
+		const plan = resolveDeploymentPlan({
+			application: app,
+			platformDomain: "hatdot.cloud",
+			files: [
+				{
+					name: "package.json",
+					path: "package.json",
+					content: JSON.stringify({
+						name: "pamtok-frontend",
+						scripts: {
+							preview: "vite preview --port 4173 --host 0.0.0.0",
+						},
+						dependencies: {
+							react: "^18.2.0",
+							"react-dom": "^18.2.0",
+						},
+						devDependencies: {
+							vite: "^5.4.12",
+						},
+					}),
+				},
+			],
+		});
+
+		const envs = buildContainerEnvironmentVariables(app, plan);
+		const viteEnv = envs.find((e) => e.startsWith("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="));
+		expect(viteEnv).toBeDefined();
+		expect(viteEnv).toContain("luxeenet.com");
+		expect(viteEnv).toContain("profile-profile-z4lec0.hatdot.cloud");
+	});
+
+	// Scenario 14: Dynamic addition of custom domain merges with existing __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+	it("Scenario 14: dynamically merging custom domains into existing __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS without overwriting user env", () => {
+		// App originally deployed with only the platform subdomain
+		const appOriginal = createMockApp("profile-app", [], {
+			env: "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=profile-app.hatdot.cloud",
+			suggestedPort: 4173,
+		});
+
+		// Now customer adds luxeenet.com
+		const appWithCustomDomain = createMockApp("profile-app", [
+			{ host: "luxeenet.com", enabled: true, verified: true, cfStatus: "active" },
+		], {
+			env: "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=profile-app.hatdot.cloud",
+			suggestedPort: 4173,
+		});
+
+		const envs = buildContainerEnvironmentVariables(appWithCustomDomain);
+		const viteEnv = envs.find((e) => e.startsWith("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="));
+		expect(viteEnv).toBeDefined();
+		// Both the existing platform host and newly attached custom domain must be present
+		expect(viteEnv).toContain("luxeenet.com");
+		expect(viteEnv).toContain("profile-app.hatdot.cloud");
+	});
+
+	// Scenario 15: Separate verification for www variants (no guessing)
+	it("Scenario 15: includes www variants only when those hostnames are separately verified and attached", () => {
+		const appRootOnly = createMockApp("luxee-app", [
+			{ host: "luxeenet.com", enabled: true, verified: true },
+		]);
+		const hostsRootOnly = getAuthorizedHostsSync(appRootOnly, "hatdot.cloud");
+		expect(hostsRootOnly).toContain("luxeenet.com");
+		expect(hostsRootOnly).not.toContain("www.luxeenet.com");
+
+		const appWithWww = createMockApp("luxee-app", [
+			{ host: "luxeenet.com", enabled: true, verified: true },
+			{ host: "www.luxeenet.com", enabled: true, verified: true },
+		]);
+		const hostsWithWww = getAuthorizedHostsSync(appWithWww, "hatdot.cloud");
+		expect(hostsWithWww).toContain("luxeenet.com");
+		expect(hostsWithWww).toContain("www.luxeenet.com");
 	});
 });
 

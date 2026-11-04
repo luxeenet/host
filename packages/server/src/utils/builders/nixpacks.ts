@@ -382,6 +382,11 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 		args.push("--no-error-without-start");
 	}
 
+	const authorizedHostsCsv = (plan.routing?.allAuthorizedHosts || getAuthorizedHostsSync(application)).join(",");
+	if (authorizedHostsCsv && !args.some((a) => a.includes("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="))) {
+		args.push("--env", `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=${authorizedHostsCsv}`);
+	}
+
 	const command = `nixpacks ${args.join(" ")}`;
 
 	// Pinned Nixpkgs archive hashes
@@ -390,7 +395,6 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	const archive2213 = NIXPKGS_ARCHIVES.MODERN_22_13.commit;
 	const archive2411 = NIXPKGS_ARCHIVES.MODERN_24_11.commit;
 
-	const authorizedHostsCsv = (plan.routing?.allAuthorizedHosts || getAuthorizedHostsSync(application)).join(",");
 	// Shell preflight ensures runtime compatibility even if repository was cloned inside the deploy bash script
 	const preflightShell = `
 # HatDot Runtime Compatibility & Nixpacks Preflight

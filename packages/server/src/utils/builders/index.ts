@@ -146,6 +146,25 @@ export const buildContainerEnvironmentVariables = (
 		: plan?.routing?.allAuthorizedHosts && plan.routing.allAuthorizedHosts.length > 0
 			? plan.routing.allAuthorizedHosts
 			: liveHosts;
+	const appCommand = (typeof application.command === "string" ? application.command : "").toLowerCase();
+	const appStartCmd = (typeof (application as any).startCommand === "string" ? (application as any).startCommand : "").toLowerCase();
+	const planStartCmd = (
+		typeof plan?.startCommand === "string"
+			? plan.startCommand
+			: (plan?.startCommand as any)?.effective || (plan?.startCommand as any)?.value || ""
+	).toLowerCase();
+	const isPort4173 =
+		(application as any).suggestedPort === 4173 ||
+		plan?.port?.value === 4173 ||
+		(Array.isArray(application.ports) && application.ports.some((p) => p.targetPort === 4173));
+	const hasViteOrPreviewCommand =
+		appCommand.includes("preview") ||
+		appCommand.includes("vite") ||
+		appStartCmd.includes("preview") ||
+		appStartCmd.includes("vite") ||
+		planStartCmd.includes("preview") ||
+		planStartCmd.includes("vite");
+
 	const usesViteHostValidation =
 		!plan ||
 		plan?.hostValidation?.mechanism === "env" ||
@@ -153,9 +172,23 @@ export const buildContainerEnvironmentVariables = (
 		plan?.deploymentStrategy === "vite-preview" ||
 		Boolean(plan?.hostValidation?.env && plan.hostValidation.env.length > 0) ||
 		(plan?.framework === "Generic Application (Auto)") ||
-		(plan?.framework === "Auto-detected Application");
+		(plan?.framework === "Auto-detected Application") ||
+		isPort4173 ||
+		hasViteOrPreviewCommand;
+
 	if (usesViteHostValidation && effectiveHosts.length > 0) {
-		if (!envVariables.some((e) => e.startsWith("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="))) {
+		const existingIdx = envVariables.findIndex((e) =>
+			e.startsWith("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="),
+		);
+		if (existingIdx >= 0 && envVariables[existingIdx]) {
+			const existingVal = envVariables[existingIdx]?.split("=")[1] || "";
+			const existingList = existingVal
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			const merged = Array.from(new Set([...effectiveHosts, ...existingList]));
+			envVariables[existingIdx] = `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=${merged.join(",")}`;
+		} else {
 			envVariables.push(`__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=${effectiveHosts.join(",")}`);
 		}
 	}

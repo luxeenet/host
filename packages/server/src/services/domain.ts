@@ -566,15 +566,41 @@ export const syncApplicationAllowedHosts = async (
 			platformDomain,
 		});
 
+	const appCommand = (typeof application.command === "string" ? application.command : "").toLowerCase();
+	const planCommand = (
+		typeof basePlan.startCommand === "string"
+			? basePlan.startCommand
+			: (basePlan.startCommand as any)?.effective || (basePlan.startCommand as any)?.value || ""
+	).toLowerCase();
+	const isPort4173 =
+		(application as any).suggestedPort === 4173 ||
+		basePlan.port?.value === 4173 ||
+		(Array.isArray(application.ports) && application.ports.some((p: any) => p.targetPort === 4173));
+	const hasViteCmd =
+		appCommand.includes("preview") ||
+		appCommand.includes("vite") ||
+		planCommand.includes("preview") ||
+		planCommand.includes("vite");
+
 	const isViteApp =
 		basePlan.hostValidation?.mechanism === "env" ||
 		Boolean(basePlan.framework?.toLowerCase().includes("vite")) ||
-		basePlan.deploymentStrategy === "vite-preview";
+		basePlan.deploymentStrategy === "vite-preview" ||
+		isPort4173 ||
+		hasViteCmd;
 
 	const updatedHostValidation = resolveHostValidation({
 		framework: basePlan.framework,
 		language: basePlan.language,
 		runsViteServer: isViteApp,
+		port: isPort4173 ? 4173 : basePlan.port?.value,
+		command:
+			application.command ||
+			(typeof basePlan.startCommand === "string"
+				? basePlan.startCommand
+				: basePlan.startCommand?.effective ||
+					basePlan.startCommand?.intended ||
+					null),
 		hosts: authorizedHosts,
 	});
 

@@ -117,6 +117,10 @@ export interface HostValidationInput {
 	dependencies?: Record<string, string>;
 	/** True when the effective production start command runs a Vite server (preview/dev). */
 	runsViteServer?: boolean;
+	/** Standard or detected port (e.g. 4173 for Vite preview). */
+	port?: number | null;
+	/** Startup command or package script command. */
+	command?: string | null;
 	hosts: string[];
 	/** KEY=VALUE strings already provided by the customer (never overridden). */
 	userEnv?: string[];
@@ -148,7 +152,17 @@ export const resolveHostValidation = (
 		};
 	}
 
-	if (input.runsViteServer || framework.includes("vite") || Boolean(deps.vite)) {
+	const cmd = (input.command ?? "").toLowerCase();
+	const isPort4173 = input.port === 4173;
+	const hasViteCmd = cmd.includes("preview") || cmd.includes("vite");
+	const isViteServer =
+		input.runsViteServer ||
+		framework.includes("vite") ||
+		Boolean(deps.vite) ||
+		isPort4173 ||
+		hasViteCmd;
+
+	if (isViteServer) {
 		if (hasUserEnv(VITE_ALLOWED_HOSTS_ENV)) {
 			return {
 				mechanism: "none",

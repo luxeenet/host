@@ -23,6 +23,7 @@ export type ApplicationWithDomains = {
 		applicationId?: string | null;
 		verified?: boolean | null;
 		cfStatus?: string | null;
+		isPrimary?: boolean | null;
 	}> | null;
 	[key: string]: any;
 };
@@ -65,6 +66,23 @@ export const getAuthorizedHostsSync = (
 	const hosts = new Set<string>();
 
 	const rows = Array.isArray(app.domains) ? app.domains : [];
+
+	// Prioritize canonical primary domain first so authorizedHosts[0] is always the primary host
+	const primaryDomain = rows.find(
+		(d) =>
+			d &&
+			d.isPrimary &&
+			d.enabled !== false &&
+			d.verified !== false &&
+			d.cfStatus !== "blocked" &&
+			d.cfStatus !== "pending_deletion" &&
+			(!d.applicationId || !app.applicationId || d.applicationId === app.applicationId),
+	);
+	if (primaryDomain) {
+		const clean = normalizeHostname(primaryDomain.host);
+		if (clean) hosts.add(clean);
+	}
+
 	for (const d of rows) {
 		if (!d || d.enabled === false) continue;
 		if (d.verified === false) continue;

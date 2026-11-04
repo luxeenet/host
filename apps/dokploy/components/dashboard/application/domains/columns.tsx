@@ -96,14 +96,21 @@ export const createColumns = ({
 			cell: ({ row }) => {
 				const domain = row.original;
 				return (
-					<Link
-						className="flex items-center gap-2 font-medium hover:underline"
-						target="_blank"
-						href={`${domain.https ? "https" : "http"}://${domain.host}${domain.path}`}
-					>
-						{domain.host}
-						<ExternalLink className="size-3" />
-					</Link>
+					<div className="flex items-center gap-2 flex-wrap">
+						<Link
+							className="flex items-center gap-2 font-medium hover:underline"
+							target="_blank"
+							href={`${domain.https ? "https" : "http"}://${domain.host}${domain.path}`}
+						>
+							{domain.host}
+							<ExternalLink className="size-3" />
+						</Link>
+						{domain.isPrimary && (
+							<Badge variant="secondary" className="text-xs bg-primary/15 text-primary border-primary/30">
+								Primary
+							</Badge>
+						)}
+					</div>
 				);
 			},
 		},

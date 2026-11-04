@@ -1,5 +1,7 @@
 import {
 	deployApplication,
+	finalizeApplicationPrimaryDomain,
+	rollbackApplicationPrimaryDomain,
 	deployCompose,
 	deployPreviewApplication,
 	rebuildApplication,
@@ -31,6 +33,13 @@ export const processDeploymentJob = async (job: InMemoryJob) => {
 					applicationId: job.data.applicationId,
 					titleLog: job.data.titleLog,
 					descriptionLog: job.data.descriptionLog,
+				});
+			}
+
+			if (job.data.domainReplacement?.newDomainId) {
+				await finalizeApplicationPrimaryDomain({
+					applicationId: job.data.applicationId,
+					newDomainId: job.data.domainReplacement.newDomainId,
 				});
 			}
 		} else if (job.data.applicationType === "compose") {
@@ -74,6 +83,13 @@ export const processDeploymentJob = async (job: InMemoryJob) => {
 			}
 		}
 	} catch (error) {
+		if (job.data.applicationType === "application" && job.data.domainReplacement?.newDomainId) {
+			await rollbackApplicationPrimaryDomain({
+				applicationId: job.data.applicationId,
+				previousPrimaryDomainId: job.data.domainReplacement.previousPrimaryDomainId,
+				failedDomainId: job.data.domainReplacement.newDomainId,
+			});
+		}
 		console.log("Error", error);
 	}
 };

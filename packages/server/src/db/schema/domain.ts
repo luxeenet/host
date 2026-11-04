@@ -141,6 +141,7 @@ export const apiCreateDomain = createSchema.pick({
 	stripPath: true,
 	middlewares: true,
 	forwardAuthEnabled: true,
+	isPrimary: true,
 });
 
 export const apiFindDomain = z.object({

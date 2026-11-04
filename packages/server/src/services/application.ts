@@ -59,6 +59,8 @@ import {
 	resolveDeploymentPlan,
 	saveDeploymentPlanSync,
 } from "../utils/builders/deployment-plan";
+import { getAuthorizedHostsSync } from "../utils/builders/host-validation";
+import { configureViteAllowedHosts } from "../utils/builders/vite-config";
 import { sanitizeLogContent } from "../utils/deployment/logging-boundary";
 import { encodeBase64 } from "../utils/docker/utils";
 import { getBuildAppDirectory } from "../utils/filesystem/directory";
@@ -576,6 +578,17 @@ export const deployApplication = async ({
 		saveDeploymentPlanSync(application.appName, plan, serverId);
 
 		if (fs.existsSync(buildAppDir)) {
+			try {
+				const authorizedHosts =
+					plan.routing?.allAuthorizedHosts ||
+					getAuthorizedHostsSync(application, platformDomain);
+				configureViteAllowedHosts(buildAppDir, authorizedHosts);
+			} catch (viteErr) {
+				console.error(
+					`[Deployment] Error pre-configuring Vite allowedHosts for ${application.appName}:`,
+					viteErr,
+				);
+			}
 			const stage1Log = formatDeploymentPlanLog(plan);
 			await appendDeploymentLog(deployment.logPath, stage1Log, serverId);
 		}
@@ -952,6 +965,17 @@ export const rebuildApplication = async ({
 		saveDeploymentPlanSync(application.appName, plan, serverId);
 
 		if (fs.existsSync(buildAppDir)) {
+			try {
+				const authorizedHosts =
+					plan.routing?.allAuthorizedHosts ||
+					getAuthorizedHostsSync(application, platformDomain);
+				configureViteAllowedHosts(buildAppDir, authorizedHosts);
+			} catch (viteErr) {
+				console.error(
+					`[Deployment] Error pre-configuring Vite allowedHosts for ${application.appName}:`,
+					viteErr,
+				);
+			}
 			const stage1Log = formatDeploymentPlanLog(plan);
 			await appendDeploymentLog(deployment.logPath, stage1Log, serverId);
 		}

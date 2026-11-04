@@ -451,10 +451,55 @@ export const createDomain = async (
 
 	const httpsToUse = willUseCloudflare ? false : input.https;
 
+	// Determine whether this domain should become the primary domain
+	let isPrimaryToUse = Boolean((input as any).isPrimary);
+	if (input.applicationId) {
+		const existingAppDomains = await tx
+			.select()
+			.from(domains)
+			.where(eq(domains.applicationId, input.applicationId));
+		if (existingAppDomains.length === 0 || isCustom) {
+			isPrimaryToUse = true;
+		}
+	} else if (input.composeId) {
+		const existingComposeDomains = await tx
+			.select()
+			.from(domains)
+			.where(eq(domains.composeId, input.composeId));
+		if (existingComposeDomains.length === 0 || isCustom) {
+			isPrimaryToUse = true;
+		}
+	}
+
+	if (isPrimaryToUse) {
+		if (input.applicationId) {
+			await tx
+				.update(domains)
+				.set({ isPrimary: false })
+				.where(
+					and(
+						eq(domains.applicationId, input.applicationId),
+						eq(domains.isPrimary, true),
+					),
+				);
+		} else if (input.composeId) {
+			await tx
+				.update(domains)
+				.set({ isPrimary: false })
+				.where(
+					and(
+						eq(domains.composeId, input.composeId),
+						eq(domains.isPrimary, true),
+					),
+				);
+		}
+	}
+
 	const domain = await tx
 		.insert(domains)
 		.values({
 			...input,
+			isPrimary: isPrimaryToUse,
 			certificateType: certTypeToUse,
 			https: httpsToUse,
 			port: portToUse !== undefined ? portToUse : (input.port ?? null),
@@ -1136,12 +1181,144 @@ export const removeDomainById = async (domainId: string) => {
 
 	const deletedDomain = result[0] || domain;
 	if (deletedDomain?.applicationId) {
+		if (deletedDomain.isPrimary) {
+			const remaining = await db
+				.select()
+				.from(domains)
+				.where(eq(domains.applicationId, deletedDomain.applicationId));
+			if (remaining.length > 0 && !remaining.some((d: any) => d.isPrimary)) {
+				await db
+					.update(domains)
+					.set({ isPrimary: true })
+					.where(eq(domains.domainId, remaining[0]!.domainId));
+			}
+		}
 		await syncApplicationDomainsTraefik(deletedDomain.applicationId).catch((err) => {
 			console.error(`[Domain Sync] Error syncing Traefik after domain removal:`, err);
 		});
 		await syncApplicationAllowedHosts(deletedDomain.applicationId).catch(() => { });
+	} else if (deletedDomain?.composeId && deletedDomain.isPrimary) {
+		const remaining = await db
+			.select()
+			.from(domains)
+			.where(eq(domains.composeId, deletedDomain.composeId));
+		if (remaining.length > 0 && !remaining.some((d: any) => d.isPrimary)) {
+			await db
+				.update(domains)
+				.set({ isPrimary: true })
+				.where(eq(domains.domainId, remaining[0]!.domainId));
+		}
 	}
 	return deletedDomain;
+};
+
+/**
+ * Finalizes domain replacement after a successful application deployment.
+ * Ensures the new domain is marked as primary and active, updates routing,
+ * and synchronizes Cloudflare SaaS custom hostname if applicable.
+ */
+export const finalizeApplicationPrimaryDomain = async ({
+	applicationId,
+	newDomainId,
+	tx = db,
+}: {
+	applicationId: string;
+	newDomainId: string;
+	tx?: any;
+}) => {
+	try {
+		await tx
+			.update(domains)
+			.set({ isPrimary: true, enabled: true })
+			.where(eq(domains.domainId, newDomainId));
+
+		await tx
+			.update(domains)
+			.set({ isPrimary: false })
+			.where(
+				and(
+					eq(domains.applicationId, applicationId),
+					ne(domains.domainId, newDomainId),
+				),
+			);
+
+		try {
+			const targetDomain = await findDomainById(newDomainId, tx);
+			if (targetDomain && (targetDomain.cfHostnameId || targetDomain.cfStatus)) {
+				await syncCustomHostnameStatus(newDomainId).catch(() => {});
+			}
+		} catch {}
+
+		await syncApplicationAllowedHosts(applicationId, { tx }).catch(() => {});
+		await syncApplicationDomainsTraefik(applicationId).catch(() => {});
+		return true;
+	} catch (err) {
+		console.error(`[Domain Finalize] Error finalizing primary domain for ${applicationId}:`, err);
+		return false;
+	}
+};
+
+/**
+ * Transactionally rolls back domain replacement if the deployment fails.
+ * Restores the previous primary domain, demotes the failed domain,
+ * and synchronizes Traefik routing so the previous working deployment remains available.
+ */
+export const rollbackApplicationPrimaryDomain = async ({
+	applicationId,
+	previousPrimaryDomainId,
+	failedDomainId,
+	tx = db,
+}: {
+	applicationId: string;
+	previousPrimaryDomainId?: string | null;
+	failedDomainId?: string | null;
+	tx?: any;
+}) => {
+	try {
+		if (failedDomainId) {
+			await tx
+				.update(domains)
+				.set({ isPrimary: false })
+				.where(eq(domains.domainId, failedDomainId));
+		}
+
+		if (previousPrimaryDomainId) {
+			await tx
+				.update(domains)
+				.set({ isPrimary: true })
+				.where(eq(domains.domainId, previousPrimaryDomainId));
+		}
+
+		await syncApplicationAllowedHosts(applicationId, { tx }).catch(() => {});
+		await syncApplicationDomainsTraefik(applicationId).catch(() => {});
+		return true;
+	} catch (err) {
+		console.error(`[Domain Rollback] Error rolling back domain for ${applicationId}:`, err);
+		return false;
+	}
+};
+
+/**
+ * Checks whether an application is currently deployed and running.
+ */
+export const isApplicationDeployed = (application: {
+	applicationStatus?: string | null;
+	deployments?: Array<{ status?: string | null }> | null;
+}): boolean => {
+	if (!application) return false;
+	if (
+		application.applicationStatus === "done" ||
+		application.applicationStatus === "running"
+	) {
+		return true;
+	}
+	if (
+		Array.isArray(application.deployments) &&
+		application.deployments.some((d) => d && d.status === "done")
+	) {
+		return true;
+	}
+	return false;
 };
 
 export const recheckDomainCloudflareStatus = async (domainId: string) => {

@@ -368,16 +368,39 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 			}),
 			...payload,
 		})
-			.then(async () => {
-				toast.success(
-					dictionary.success,
-					formData.domainType === "compose"
-						? { description: COMPOSE_REDEPLOY_TOAST }
-						: undefined,
-				);
+			.then(async (result: any) => {
+				if (result?.replacementDeployment?.queued) {
+					toast.info("Your domain is being configured", {
+						description: (
+							<div className="space-y-1">
+								<p>
+									HatDot is updating your application's domain and preparing a new deployment. Please wait while this process completes.
+								</p>
+								<p className="font-semibold text-foreground">
+									Your application will become available at:{" "}
+									<span className="font-mono text-primary">{formData.host}</span>
+								</p>
+							</div>
+						),
+						duration: 9000,
+					});
+				} else {
+					toast.success(
+						dictionary.success,
+						formData.domainType === "compose"
+							? { description: COMPOSE_REDEPLOY_TOAST }
+							: undefined,
+					);
+				}
 
 				if (formData.domainType === "application") {
 					await utils.domain.byApplicationId.invalidate({
+						applicationId: id,
+					});
+					await utils.application.one.invalidate({
+						applicationId: id,
+					});
+					await utils.deployment.all.invalidate({
 						applicationId: id,
 					});
 					await utils.application.readTraefikConfig.invalidate({

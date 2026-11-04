@@ -7,6 +7,10 @@ type DeployJob =
 			type: "deploy" | "redeploy";
 			applicationType: "application";
 			serverId?: string;
+			domainReplacement?: {
+				newDomainId: string;
+				previousPrimaryDomainId?: string | null;
+			};
 	  }
 	| {
 			composeId: string;
@@ -17,6 +21,10 @@ type DeployJob =
 			applicationType: "compose";
 			serverId?: string;
 			freshVolumes?: boolean;
+			domainReplacement?: {
+				newDomainId: string;
+				previousPrimaryDomainId?: string | null;
+			};
 	  }
 	| {
 			applicationId: string;

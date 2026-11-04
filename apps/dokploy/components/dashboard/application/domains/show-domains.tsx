@@ -27,7 +27,7 @@ import {
 	XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DialogAction } from "@/components/shared/dialog-action";
 import { Badge } from "@/components/ui/badge";
@@ -124,6 +124,8 @@ export const ShowDomains = ({ id, type }: Props) => {
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 	const [rowSelection, setRowSelection] = useState({});
 	const { data: ip } = api.settings.getIp.useQuery();
+	const serviceStatus = type === "application" ? (application as any)?.applicationStatus : (application as any)?.composeStatus;
+	const isDeploying = serviceStatus === "running";
 
 	const {
 		data,
@@ -324,7 +326,18 @@ export const ShowDomains = ({ id, type }: Props) => {
 						<ComposeRedeployAlert />
 					</div>
 				)}
-				<CardContent className="flex w-full flex-row gap-4">
+				<CardContent className="flex w-full flex-col gap-4">
+					{isDeploying && (
+						<div className="flex items-start gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-4 text-cyan-400">
+							<Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-cyan-400" />
+							<div className="space-y-1">
+								<div className="font-semibold text-sm">Your domain is being configured</div>
+								<div className="text-xs text-muted-foreground">
+									HatDot is updating your application's domain and preparing a new deployment. Please wait while this process completes.
+								</div>
+							</div>
+						</div>
+					)}
 					{isLoadingDomains ? (
 						<div className="flex w-full flex-row gap-4 min-h-[40vh] justify-center items-center">
 							<Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -547,7 +560,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 													</div>
 												</div>
 												<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-													<div className="w-full break-all">
+													<div className="w-full break-all flex items-center gap-2 flex-wrap">
 														<Link
 															className="flex items-center gap-2 text-base font-medium hover:underline"
 															target="_blank"
@@ -556,6 +569,11 @@ export const ShowDomains = ({ id, type }: Props) => {
 															{item.host}
 															<ExternalLink className="size-4 min-w-4" />
 														</Link>
+														{item.isPrimary && (
+															<Badge variant="secondary" className="text-xs bg-primary/15 text-primary border-primary/30">
+																Primary
+															</Badge>
+														)}
 													</div>
 													{canCreateDomain && (
 														<TooltipProvider>

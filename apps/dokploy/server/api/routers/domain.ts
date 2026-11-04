@@ -12,6 +12,7 @@ import {
 	getDnsInstructionsForDomain,
 	getServerIpCandidates,
 	getWebServerSettings,
+	isApplicationDeployed,
 	isPlatformOrTestDomain,
 	manageDomain,
 	removeDomain,
@@ -22,6 +23,7 @@ import {
 	updateDomainById,
 	validateDomain,
 } from "@dokploy/server";
+import type { DeploymentJob } from "@/server/queues/queue-types";
 import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -58,7 +60,31 @@ export const domainRouter = createTRPCRouter({
 					});
 				}
 
-				return await PlanEntitlementService.withAtomicQuotaLock(
+				// Prevent duplicate domain attachment on rapid clicks
+				let previousPrimaryDomain: any = null;
+				if (input.domainType === "application" && input.applicationId) {
+					const existingDomains = await findDomainsByApplicationId(input.applicationId);
+					const cleanHost = input.host?.trim().toLowerCase();
+					const duplicate = existingDomains.find(
+						(d) => d.host.trim().toLowerCase() === cleanHost,
+					);
+					if (duplicate) {
+						const app = await findApplicationById(input.applicationId);
+						return {
+							...duplicate,
+							replacementDeployment: {
+								queued: false,
+								alreadyExists: true,
+								isDeployed: isApplicationDeployed(app),
+								host: duplicate.host,
+							},
+						};
+					}
+					previousPrimaryDomain =
+						existingDomains.find((d) => d.isPrimary) || existingDomains[0] || null;
+				}
+
+				const createdDomain = await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
 					async (tx) => {
 						// Plan entitlement — enforce custom domain quota only for customer custom domains
@@ -102,6 +128,80 @@ export const domainRouter = createTRPCRouter({
 						return domain;
 					},
 				);
+
+				// Automatic Redeployment Workflow for Already Deployed Applications
+				let replacementDeployment: {
+					queued: boolean;
+					isDeployed: boolean;
+					alreadyRunning?: boolean;
+					host: string;
+					previousHost?: string | null;
+				} = {
+					queued: false,
+					isDeployed: false,
+					host: createdDomain.host,
+					previousHost: previousPrimaryDomain?.host || null,
+				};
+
+				if (input.domainType === "application" && input.applicationId) {
+					const app = await findApplicationById(input.applicationId);
+					const isDeployed = isApplicationDeployed(app);
+					const isCustom = !(await isPlatformOrTestDomain(createdDomain.host));
+
+					if (isDeployed && isCustom) {
+						const isAlreadyRunning = app.applicationStatus === "running";
+						if (isAlreadyRunning) {
+							replacementDeployment = {
+								queued: true,
+								alreadyRunning: true,
+								isDeployed: true,
+								host: createdDomain.host,
+								previousHost: previousPrimaryDomain?.host || null,
+							};
+						} else {
+							const jobData: DeploymentJob = {
+								applicationId: input.applicationId,
+								titleLog: `Domain replacement: ${createdDomain.host}`,
+								descriptionLog: `Automated redeployment replacing primary domain with ${createdDomain.host}`,
+								type: "deploy",
+								applicationType: "application",
+								server: !!app.serverId,
+								serverId: app.serverId ?? undefined,
+								domainReplacement: {
+									newDomainId: createdDomain.domainId,
+									previousPrimaryDomainId: previousPrimaryDomain?.domainId || null,
+								},
+							};
+
+							const { IS_CLOUD } = await import("@dokploy/server");
+							if (IS_CLOUD && app.serverId) {
+								const { deploy } = await import("@/server/utils/deploy");
+								deploy(jobData).catch((err) => {
+									console.error("[Domain Replacement] Deployment error:", err);
+								});
+							} else {
+								const { myQueue } = await import("@/server/queues/queueSetup");
+								await myQueue.add(
+									"deployments",
+									{ ...jobData },
+									{ removeOnComplete: true, removeOnFail: true },
+								);
+							}
+
+							replacementDeployment = {
+								queued: true,
+								isDeployed: true,
+								host: createdDomain.host,
+								previousHost: previousPrimaryDomain?.host || null,
+							};
+						}
+					}
+				}
+
+				return {
+					...createdDomain,
+					replacementDeployment,
+				};
 			} catch (error) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
@@ -456,7 +556,45 @@ export const domainRouter = createTRPCRouter({
 				});
 			}
 
+			let previousPrimaryDomain: any = null;
+			if (domain.applicationId) {
+				const existingAppDomains = await findDomainsByApplicationId(domain.applicationId);
+				previousPrimaryDomain = existingAppDomains.find((d) => d.isPrimary) || null;
+			}
+
 			const result = await setPrimaryDomain(input.domainId);
+
+			if (domain.applicationId) {
+				const app = await findApplicationById(domain.applicationId);
+				if (isApplicationDeployed(app) && app.applicationStatus !== "running") {
+					const jobData: DeploymentJob = {
+						applicationId: domain.applicationId,
+						titleLog: `Primary domain update: ${domain.host}`,
+						descriptionLog: `Automated redeployment for primary domain change to ${domain.host}`,
+						type: "deploy",
+						applicationType: "application",
+						server: !!app.serverId,
+						serverId: app.serverId ?? undefined,
+						domainReplacement: {
+							newDomainId: domain.domainId,
+							previousPrimaryDomainId: previousPrimaryDomain?.domainId || null,
+						},
+					};
+					const { IS_CLOUD } = await import("@dokploy/server");
+					if (IS_CLOUD && app.serverId) {
+						const { deploy } = await import("@/server/utils/deploy");
+						deploy(jobData).catch((err) => console.error(err));
+					} else {
+						const { myQueue } = await import("@/server/queues/queueSetup");
+						await myQueue.add(
+							"deployments",
+							{ ...jobData },
+							{ removeOnComplete: true, removeOnFail: true },
+						);
+					}
+				}
+			}
+
 			await audit(ctx, {
 				action: "update",
 				resourceType: "domain",

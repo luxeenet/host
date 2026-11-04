@@ -1,33 +1,33 @@
 import fs from "node:fs";
 import path from "node:path";
-import { docker, paths } from "@dokploy/server/constants";
-import { db } from "@dokploy/server/db";
+import { docker, paths } from "../constants";
+import { db } from "../db";
 import {
 	type apiCreateApplication,
 	applications,
 	buildAppName,
-} from "@dokploy/server/db/schema";
-import { getAdvancedStats } from "@dokploy/server/monitoring/utils";
+} from "../db/schema";
+import { getAdvancedStats } from "../monitoring/utils";
 import {
 	getBuildCommand,
 	mechanizeDockerContainer,
-} from "@dokploy/server/utils/builders";
-import { sendBuildErrorNotifications } from "@dokploy/server/utils/notifications/build-error";
-import { sendBuildSuccessNotifications } from "@dokploy/server/utils/notifications/build-success";
+} from "../utils/builders";
+import { sendBuildErrorNotifications } from "../utils/notifications/build-error";
+import { sendBuildSuccessNotifications } from "../utils/notifications/build-success";
 import {
 	ExecError,
 	execAsync,
 	execAsyncRemote,
-} from "@dokploy/server/utils/process/execAsync";
-import { cloneBitbucketRepository } from "@dokploy/server/utils/providers/bitbucket";
-import { buildRemoteDocker } from "@dokploy/server/utils/providers/docker";
+} from "../utils/process/execAsync";
+import { cloneBitbucketRepository } from "../utils/providers/bitbucket";
+import { buildRemoteDocker } from "../utils/providers/docker";
 import {
 	cloneGitRepository,
 	getGitCommitInfo,
-} from "@dokploy/server/utils/providers/git";
-import { cloneGiteaRepository } from "@dokploy/server/utils/providers/gitea";
-import { cloneGithubRepository } from "@dokploy/server/utils/providers/github";
-import { cloneGitlabRepository } from "@dokploy/server/utils/providers/gitlab";
+} from "../utils/providers/git";
+import { cloneGiteaRepository } from "../utils/providers/gitea";
+import { cloneGithubRepository } from "../utils/providers/github";
+import { cloneGitlabRepository } from "../utils/providers/gitlab";
 import {
 	createServiceConfig,
 	createTraefikConfig,

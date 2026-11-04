@@ -224,8 +224,9 @@ export const createRouterConfig = async (
 			routerConfig.tls = { certResolver: "letsencrypt" };
 		} else if (certificateType === "custom" && domain.customCertResolver) {
 			routerConfig.tls = { certResolver: domain.customCertResolver };
-		} else if (certificateType === "none" && !https) {
-			routerConfig.tls = undefined;
+		} else if (certificateType === "none") {
+			// Cloudflare for SaaS or edge-managed SSL: TLS termination uses Traefik default cert without invoking Let's Encrypt
+			routerConfig.tls = {};
 		} else {
 			// When HTTPS is enabled, ensure a trusted certResolver is configured
 			routerConfig.tls = { certResolver: "letsencrypt" };

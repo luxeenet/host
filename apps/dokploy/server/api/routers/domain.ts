@@ -120,39 +120,6 @@ export const domainRouter = createTRPCRouter({
 				domain: ["read"],
 			});
 			const existing = await findDomainsByApplicationId(input.applicationId);
-			if (existing.length === 0) {
-				try {
-					const app = await findApplicationById(input.applicationId);
-					if (app) {
-						const { host, supportsHttps } =
-							await resolveGeneratedApplicationDomain(
-								app.appName,
-								app.serverId || undefined,
-							);
-						if (host) {
-							let port = 3000;
-							if (app.buildType === "static") {
-								port = 80;
-							} else if (app.ports && app.ports[0]?.targetPort) {
-								port = app.ports[0].targetPort;
-							}
-
-							await createDomain({
-								applicationId: app.applicationId,
-								domainType: "application",
-								host,
-								https: supportsHttps,
-								certificateType: supportsHttps ? "letsencrypt" : "none",
-								port,
-								path: "/",
-							});
-							return await findDomainsByApplicationId(input.applicationId);
-						}
-					}
-				} catch (err) {
-					console.error("Auto-provision domain in byApplicationId failed:", err);
-				}
-			}
 			return existing;
 		}),
 	byComposeId: protectedProcedure

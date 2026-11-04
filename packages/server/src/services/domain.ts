@@ -36,7 +36,7 @@ import { configureViteAllowedHosts } from "../utils/builders/vite-config";
 import { mechanizeDockerContainer } from "../utils/builders";
 import { getBuildAppDirectory } from "../utils/filesystem/directory";
 
-import { findApplicationById } from "./application";
+import { findApplicationById, syncApplicationDomainsTraefik } from "./application";
 import { detectCDNProvider } from "./cdn";
 import { findComposeById } from "./compose";
 import { findServerById } from "./server";
@@ -495,6 +495,9 @@ export const createDomain = async (
 	}
 
 	if (finalDomain?.applicationId) {
+		await syncApplicationDomainsTraefik(finalDomain.applicationId).catch((err) => {
+			console.error(`[Domain Sync] Failed to synchronize Traefik routing for ${finalDomain.applicationId}:`, err);
+		});
 		await syncApplicationAllowedHosts(finalDomain.applicationId, { tx }).catch((err) => {
 			console.error(`[Domain Sync] Failed to synchronize allowedHosts for ${finalDomain.applicationId}:`, err);
 		});
@@ -1106,6 +1109,9 @@ export const updateDomainById = async (
 
 	const updatedDomain = domain[0];
 	if (updatedDomain?.applicationId) {
+		await syncApplicationDomainsTraefik(updatedDomain.applicationId).catch((err) => {
+			console.error(`[Domain Sync] Error syncing Traefik after domain update:`, err);
+		});
 		await syncApplicationAllowedHosts(updatedDomain.applicationId).catch(() => { });
 	}
 	return updatedDomain;
@@ -1128,8 +1134,11 @@ export const removeDomainById = async (domainId: string) => {
 		.where(eq(domains.domainId, domainId))
 		.returning();
 
-	const deletedDomain = result[0];
+	const deletedDomain = result[0] || domain;
 	if (deletedDomain?.applicationId) {
+		await syncApplicationDomainsTraefik(deletedDomain.applicationId).catch((err) => {
+			console.error(`[Domain Sync] Error syncing Traefik after domain removal:`, err);
+		});
 		await syncApplicationAllowedHosts(deletedDomain.applicationId).catch(() => { });
 	}
 	return deletedDomain;

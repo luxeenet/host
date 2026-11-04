@@ -52,6 +52,8 @@ export const updateViteConfigContent = (
 		return { content, modified: false, addedHosts: [] };
 	}
 
+	const envHostsExpr = `...(process.env.__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS ? process.env.__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.split(",").map((h) => h.trim()).filter(Boolean) : [])`;
+
 	// 3. Check if allowedHosts array is already present anywhere in the content
 	const existingArrayMatch = content.match(/allowedHosts\s*:\s*\[([\s\S]*?)\]/);
 	if (existingArrayMatch) {
@@ -66,7 +68,8 @@ export const updateViteConfigContent = (
 		}
 
 		const toAdd = cleanHosts.filter((h) => !existingItems.includes(h));
-		if (toAdd.length === 0) {
+		const needsEnvExpr = !rawArrayContent.includes("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS");
+		if (toAdd.length === 0 && !needsEnvExpr) {
 			return {
 				content,
 				modified: false,
@@ -75,7 +78,11 @@ export const updateViteConfigContent = (
 			};
 		}
 
-		const formattedToAdd = toAdd.map((h) => JSON.stringify(h)).join(", ");
+		const formattedToAdd = [
+			...(needsEnvExpr ? [envHostsExpr] : []),
+			...toAdd.map((h) => JSON.stringify(h)),
+		].join(", ");
+
 		const newArrayContent = rawArrayContent.trim()
 			? `${rawArrayContent.trimEnd()}, ${formattedToAdd}`
 			: formattedToAdd;
@@ -91,7 +98,10 @@ export const updateViteConfigContent = (
 		};
 	}
 
-	const formattedHosts = cleanHosts.map((h) => JSON.stringify(h)).join(", ");
+	const formattedHosts = [
+		envHostsExpr,
+		...cleanHosts.map((h) => JSON.stringify(h)),
+	].join(", ");
 
 	// 4. If preview: { ... } block exists but no allowedHosts
 	const previewMatch = content.match(/(preview\s*:\s*\{)/i);

@@ -28,8 +28,27 @@ import {
 import { cloneGiteaRepository } from "@dokploy/server/utils/providers/gitea";
 import { cloneGithubRepository } from "@dokploy/server/utils/providers/github";
 import { cloneGitlabRepository } from "@dokploy/server/utils/providers/gitlab";
-import { createTraefikConfig } from "@dokploy/server/utils/traefik/application";
-import { manageDomain } from "@dokploy/server/utils/traefik/domain";
+import {
+	createServiceConfig,
+	createTraefikConfig,
+	removeTraefikConfig,
+	removeTraefikConfigRemote,
+	writeTraefikConfig,
+	writeTraefikConfigRemote,
+} from "@dokploy/server/utils/traefik/application";
+import {
+	createRouterConfig,
+	manageDomain,
+} from "@dokploy/server/utils/traefik/domain";
+import {
+	createPathMiddlewares,
+	removePathMiddlewares,
+} from "@dokploy/server/utils/traefik/middleware";
+import {
+	createForwardAuthMiddleware,
+	removeForwardAuthMiddleware,
+} from "@dokploy/server/utils/traefik/forward-auth";
+import type { FileConfig } from "@dokploy/server/utils/traefik/file-types";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { parse } from "yaml";
@@ -130,32 +149,100 @@ export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 	}
 
 	const appDomains = await findDomainsByApplicationId(applicationId);
-	for (const domain of appDomains) {
-		if (domain.enabled) {
-			let domainPort = domain.port;
-			if (
-				application.buildType === "static" &&
-				(!domainPort || domainPort === 3000)
-			) {
-				domainPort = 80;
-				await updateDomainById(domain.domainId, { port: 80 });
-			} else if (
-				!domainPort ||
-				(domainPort === 3000 && detectedPort !== 3000)
-			) {
-				domainPort = detectedPort;
-				await updateDomainById(domain.domainId, { port: detectedPort });
-			}
+	const activeDomains = appDomains.filter((d) => d.enabled);
 
-			const updatedDomain = {
-				...domain,
-				port: domainPort,
-			};
-			await manageDomain(
-				{ ...application, suggestedPort: detectedPort } as any,
-				updatedDomain,
+	// If no active domains exist, authoritatively purge the Traefik dynamic configuration
+	if (activeDomains.length === 0) {
+		if (application.serverId) {
+			await removeTraefikConfigRemote(application.appName, application.serverId);
+		} else {
+			await removeTraefikConfig(application.appName);
+		}
+		// Also clean up path and forward-auth middlewares for all previously attached domains
+		for (const d of appDomains) {
+			await removePathMiddlewares(application as any, d.uniqueConfigKey).catch(() => {});
+			await removeForwardAuthMiddleware(application as any, d.uniqueConfigKey).catch(() => {});
+		}
+		return;
+	}
+
+	// Authoritatively build fresh Traefik dynamic FileConfig from scratch.
+	// This guarantees that any deleted, detached, or disabled domain router is 100% removed.
+	const config: FileConfig = {
+		http: {
+			routers: {},
+			services: {},
+		},
+	};
+
+	const appNested = {
+		...application,
+		suggestedPort: detectedPort,
+	} as any;
+
+	for (const domain of activeDomains) {
+		let domainPort = domain.port;
+		if (
+			application.buildType === "static" &&
+			(!domainPort || domainPort === 3000)
+		) {
+			domainPort = 80;
+			await updateDomainById(domain.domainId, { port: 80 });
+		} else if (
+			!domainPort ||
+			(domainPort === 3000 && detectedPort !== 3000)
+		) {
+			domainPort = detectedPort;
+			await updateDomainById(domain.domainId, { port: detectedPort });
+		}
+
+		const updatedDomain = {
+			...domain,
+			port: domainPort,
+		};
+
+		const serviceName = `${application.appName}-service-${updatedDomain.uniqueConfigKey}`;
+		const routerName = `${application.appName}-router-${updatedDomain.uniqueConfigKey}`;
+		const routerNameSecure = `${application.appName}-router-websecure-${updatedDomain.uniqueConfigKey}`;
+
+		config.http!.routers![routerName] = await createRouterConfig(
+			appNested,
+			updatedDomain as any,
+			updatedDomain.customEntrypoint || "web",
+		);
+
+		if (!updatedDomain.customEntrypoint && updatedDomain.https) {
+			config.http!.routers![routerNameSecure] = await createRouterConfig(
+				appNested,
+				updatedDomain as any,
+				"websecure",
 			);
 		}
+
+		config.http!.services![serviceName] = createServiceConfig(
+			application.appName,
+			updatedDomain as any,
+			appNested,
+		);
+
+		await createPathMiddlewares(appNested, updatedDomain as any);
+		await createForwardAuthMiddleware(appNested, updatedDomain as any);
+	}
+
+	// Clean up any path middlewares for domains that were disabled or removed
+	const activeKeys = new Set(activeDomains.map((d) => d.uniqueConfigKey));
+	for (const d of appDomains) {
+		if (!activeKeys.has(d.uniqueConfigKey)) {
+			await removePathMiddlewares(appNested, d.uniqueConfigKey).catch(() => {});
+			await removeForwardAuthMiddleware(appNested, d.uniqueConfigKey).catch(() => {});
+		}
+	}
+
+	// Write new dynamic configuration atomically
+	if (application.serverId) {
+		await writeTraefikConfigRemote(config, application.appName, application.serverId);
+	} else {
+		writeTraefikConfig(config, application.appName);
 	}
 };
 

@@ -30,7 +30,7 @@ import {
 	isPlatformOrTestDomain,
 	syncApplicationAllowedHosts,
 } from "./domain";
-import { findApplicationById } from "./application";
+import { findApplicationById, syncApplicationDomainsTraefik } from "./application";
 import { manageDomain } from "../utils/traefik/domain";
 
 export type DomainRow = typeof domains.$inferSelect;
@@ -103,6 +103,10 @@ export interface CloudflareDomainLifecycleStatus {
 	lastSyncAt: Date | null;
 	lastError: string | null;
 	isHttpsReady: boolean;
+	isSslActive: boolean;
+	isRoutingActive: boolean;
+	isWebsiteReady: boolean;
+	routingStatus: "pending" | "active" | "error";
 	records: CloudflareDnsRecordInstruction[];
 	customerActionRequired: string;
 }
@@ -410,25 +414,13 @@ export const syncCustomHostnameStatus = async (
 
 		const resultDomain = updated[0];
 		if (resultDomain?.applicationId) {
-			await syncApplicationAllowedHosts(resultDomain.applicationId, { tx }).catch(() => {});
-		}
-		// If HTTPS or certificateType transitioned, ensure Traefik router is reconfigured
-		if (
-			resultDomain?.applicationId &&
-			(domain.https !== resultDomain.https ||
-				domain.certificateType !== resultDomain.certificateType)
-		) {
-			try {
-				const app = await findApplicationById(resultDomain.applicationId);
-				if (app) {
-					await manageDomain(app, resultDomain as any);
-				}
-			} catch (traefikErr) {
+			await syncApplicationDomainsTraefik(resultDomain.applicationId).catch((traefikErr) => {
 				console.error(
 					`[Cloudflare SaaS] Traefik router sync error for ${domain.host}:`,
 					traefikErr,
 				);
-			}
+			});
+			await syncApplicationAllowedHosts(resultDomain.applicationId, { tx }).catch(() => {});
 		}
 
 		return resultDomain;
@@ -537,6 +529,8 @@ export const mapDomainCloudflareStatus = (
 				(domain.certificateType === "letsencrypt" ||
 					domain.certificateType === "custom"),
 		);
+		const isRoutingActive = Boolean(domain.enabled);
+		const isWebsiteReady = Boolean(isLegacyHttpsActive && isRoutingActive);
 		return {
 			isCloudflareSaas: false,
 			hostnameId: null,
@@ -550,6 +544,10 @@ export const mapDomainCloudflareStatus = (
 			lastSyncAt: domain.cfLastSyncAt ? new Date(domain.cfLastSyncAt) : null,
 			lastError: null,
 			isHttpsReady: isLegacyHttpsActive,
+			isSslActive: isLegacyHttpsActive,
+			isRoutingActive,
+			isWebsiteReady,
+			routingStatus: isRoutingActive ? "active" : "pending",
 			records: [],
 			customerActionRequired: "Configure standard DNS records.",
 		};
@@ -685,6 +683,10 @@ export const mapDomainCloudflareStatus = (
 		}
 	}
 
+	const isRoutingActive = Boolean(domain.enabled && (isHostnameActive || domain.cfHostnameId));
+	const isHttpsReady = Boolean(isHostnameActive && isSslActive && domain.https);
+	const isWebsiteReady = Boolean(isHttpsReady && isRoutingActive);
+
 	return {
 		isCloudflareSaas,
 		hostnameId: domain.cfHostnameId,
@@ -695,9 +697,11 @@ export const mapDomainCloudflareStatus = (
 		sslStatus,
 		lastSyncAt: domain.cfLastSyncAt ? new Date(domain.cfLastSyncAt) : null,
 		lastError,
-		isHttpsReady: isCloudflareSaas
-			? Boolean(isHostnameActive && isSslActive && domain.https)
-			: Boolean(domain.https),
+		isHttpsReady,
+		isSslActive,
+		isRoutingActive,
+		isWebsiteReady,
+		routingStatus: isRoutingActive ? "active" : "pending",
 		records,
 		customerActionRequired,
 	};

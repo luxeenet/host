@@ -35,20 +35,20 @@ import {
 	removeTraefikConfigRemote,
 	writeTraefikConfig,
 	writeTraefikConfigRemote,
-} from "@dokploy/server/utils/traefik/application";
+} from "../utils/traefik/application";
 import {
 	createRouterConfig,
 	manageDomain,
-} from "@dokploy/server/utils/traefik/domain";
+} from "../utils/traefik/domain";
 import {
 	createPathMiddlewares,
 	removePathMiddlewares,
-} from "@dokploy/server/utils/traefik/middleware";
+} from "../utils/traefik/middleware";
 import {
 	createForwardAuthMiddleware,
 	removeForwardAuthMiddleware,
-} from "@dokploy/server/utils/traefik/forward-auth";
-import type { FileConfig } from "@dokploy/server/utils/traefik/file-types";
+} from "../utils/traefik/forward-auth";
+import type { FileConfig } from "../utils/traefik/file-types";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { parse } from "yaml";
@@ -96,6 +96,51 @@ import {
 } from "./preview-deployment";
 import { validUniqueServerAppName } from "./project";
 export type Application = typeof applications.$inferSelect;
+
+export const findApplicationById = async (applicationId: string) => {
+	const application = await db.query.applications.findFirst({
+		where: eq(applications.applicationId, applicationId),
+		with: {
+			environment: { with: { project: true } },
+			domains: true,
+			deployments: true,
+			mounts: true,
+			redirects: true,
+			security: true,
+			ports: true,
+			gitlab: {
+				columns: { secret: false, accessToken: false, refreshToken: false },
+			},
+			github: {
+				columns: {
+					githubClientSecret: false,
+					githubPrivateKey: false,
+					githubWebhookSecret: false,
+				},
+			},
+			bitbucket: { columns: { appPassword: false, apiToken: false } },
+			gitea: {
+				columns: {
+					clientSecret: false,
+					accessToken: false,
+					refreshToken: false,
+				},
+			},
+			server: true,
+			previewDeployments: true,
+			registry: { columns: { password: false } },
+			buildRegistry: { columns: { password: false } },
+			rollbackRegistry: { columns: { password: false } },
+		},
+	});
+	if (!application) {
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: "Application not found",
+		});
+	}
+	return application;
+};
 
 export const syncApplicationDomainsTraefik = async (applicationId: string) => {
 	const application = await findApplicationById(applicationId);
@@ -380,51 +425,6 @@ export const createApplication = async (
 	}
 
 	return newApplication;
-};
-
-export const findApplicationById = async (applicationId: string) => {
-	const application = await db.query.applications.findFirst({
-		where: eq(applications.applicationId, applicationId),
-		with: {
-			environment: { with: { project: true } },
-			domains: true,
-			deployments: true,
-			mounts: true,
-			redirects: true,
-			security: true,
-			ports: true,
-			gitlab: {
-				columns: { secret: false, accessToken: false, refreshToken: false },
-			},
-			github: {
-				columns: {
-					githubClientSecret: false,
-					githubPrivateKey: false,
-					githubWebhookSecret: false,
-				},
-			},
-			bitbucket: { columns: { appPassword: false, apiToken: false } },
-			gitea: {
-				columns: {
-					clientSecret: false,
-					accessToken: false,
-					refreshToken: false,
-				},
-			},
-			server: true,
-			previewDeployments: true,
-			registry: { columns: { password: false } },
-			buildRegistry: { columns: { password: false } },
-			rollbackRegistry: { columns: { password: false } },
-		},
-	});
-	if (!application) {
-		throw new TRPCError({
-			code: "NOT_FOUND",
-			message: "Application not found",
-		});
-	}
-	return application;
 };
 
 export const findApplicationByName = async (appName: string) => {

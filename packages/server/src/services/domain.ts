@@ -7,7 +7,7 @@ import { db } from "@dokploy/server/db";
 import { getWebServerSettings } from "@dokploy/server/services/web-server-settings";
 import { generateRandomDomain } from "@dokploy/server/templates";
 import { execAsyncRemote } from "@dokploy/server/utils/process/execAsync";
-import { manageDomain } from "@dokploy/server/utils/traefik/domain";
+import { manageDomain } from "../utils/traefik/domain";
 import { getPublicIpWithFallback } from "@dokploy/server/wss/utils";
 import { BRAND } from "@paas/branding";
 import { TRPCError } from "@trpc/server";

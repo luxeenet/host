@@ -31,7 +31,6 @@ import {
 	syncApplicationAllowedHosts,
 } from "./domain";
 import { findApplicationById, syncApplicationDomainsTraefik } from "./application";
-import { manageDomain } from "../utils/traefik/domain";
 
 export type DomainRow = typeof domains.$inferSelect;
 
@@ -280,24 +279,13 @@ export const provisionCustomHostname = async (
 
 		const resultDomain = updated[0];
 		if (resultDomain?.applicationId) {
-			await syncApplicationAllowedHosts(resultDomain.applicationId, { tx }).catch(() => {});
-		}
-		if (
-			resultDomain?.applicationId &&
-			(domain.https !== resultDomain.https ||
-				domain.certificateType !== resultDomain.certificateType)
-		) {
-			try {
-				const app = await findApplicationById(resultDomain.applicationId);
-				if (app) {
-					await manageDomain(app, resultDomain as any);
-				}
-			} catch (traefikErr) {
+			await syncApplicationDomainsTraefik(resultDomain.applicationId).catch((traefikErr) => {
 				console.error(
 					`[Cloudflare SaaS] Traefik router sync error for ${domain.host}:`,
 					traefikErr,
 				);
-			}
+			});
+			await syncApplicationAllowedHosts(resultDomain.applicationId, { tx }).catch(() => {});
 		}
 
 		return resultDomain;

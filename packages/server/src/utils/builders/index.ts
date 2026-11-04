@@ -139,6 +139,26 @@ export const buildContainerEnvironmentVariables = (
 	}
 
 	// Inject authorized hostnames only for frameworks that enforce Host validation (e.g. Vite)
+	const liveHosts = getAuthorizedHostsSync(application as any);
+	const hasExplicitDomains = Array.isArray((application as any).domains);
+	const effectiveHosts = hasExplicitDomains
+		? liveHosts
+		: plan?.routing?.allAuthorizedHosts && plan.routing.allAuthorizedHosts.length > 0
+			? plan.routing.allAuthorizedHosts
+			: liveHosts;
+	const usesViteHostValidation =
+		!plan ||
+		plan?.hostValidation?.mechanism === "env" ||
+		Boolean(plan?.framework && String(plan.framework).toLowerCase().includes("vite")) ||
+		plan?.deploymentStrategy === "vite-preview" ||
+		Boolean(plan?.hostValidation?.env && plan.hostValidation.env.length > 0) ||
+		(plan?.framework === "Generic Application (Auto)") ||
+		(plan?.framework === "Auto-detected Application");
+	if (usesViteHostValidation && effectiveHosts.length > 0) {
+		if (!envVariables.some((e) => e.startsWith("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="))) {
+			envVariables.push(`__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=${effectiveHosts.join(",")}`);
+		}
+	}
 	if (plan?.hostValidation?.env && plan.hostValidation.env.length > 0) {
 		for (const envItem of plan.hostValidation.env) {
 			const [k] = envItem.split("=");
@@ -157,7 +177,7 @@ export const buildContainerEnvironmentVariables = (
 		if (!envVariables.some((e: string) => e.startsWith("SECURE_PROXY_SSL_HEADER="))) {
 			envVariables.push("SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https");
 		}
-		const hosts = plan.routing?.allAuthorizedHosts || [];
+		const hosts = effectiveHosts;
 		if (hosts.length > 0) {
 			if (!envVariables.some((e: string) => e.startsWith("DJANGO_ALLOWED_HOSTS=")) && !envVariables.some((e: string) => e.startsWith("ALLOWED_HOSTS="))) {
 				envVariables.push(`DJANGO_ALLOWED_HOSTS=${hosts.join(",")}`);

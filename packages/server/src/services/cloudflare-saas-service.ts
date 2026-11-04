@@ -25,7 +25,11 @@ import {
 	type CloudflareCustomHostname,
 	type CloudflareSslValidationRecord,
 } from "./cloudflare-client";
-import { getConfiguredPlatformDomain, isPlatformOrTestDomain } from "./domain";
+import {
+	getConfiguredPlatformDomain,
+	isPlatformOrTestDomain,
+	syncApplicationAllowedHosts,
+} from "./domain";
 import { findApplicationById } from "./application";
 import { manageDomain } from "../utils/traefik/domain";
 
@@ -271,6 +275,9 @@ export const provisionCustomHostname = async (
 			.returning();
 
 		const resultDomain = updated[0];
+		if (resultDomain?.applicationId) {
+			await syncApplicationAllowedHosts(resultDomain.applicationId, { tx }).catch(() => {});
+		}
 		if (
 			resultDomain?.applicationId &&
 			(domain.https !== resultDomain.https ||
@@ -402,7 +409,9 @@ export const syncCustomHostnameStatus = async (
 			.returning();
 
 		const resultDomain = updated[0];
-
+		if (resultDomain?.applicationId) {
+			await syncApplicationAllowedHosts(resultDomain.applicationId, { tx }).catch(() => {});
+		}
 		// If HTTPS or certificateType transitioned, ensure Traefik router is reconfigured
 		if (
 			resultDomain?.applicationId &&

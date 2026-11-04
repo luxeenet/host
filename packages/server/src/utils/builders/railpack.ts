@@ -7,6 +7,7 @@ import {
 	prepareEnvironmentVariablesForShell,
 } from "../docker/utils";
 import { getBuildAppDirectory } from "../filesystem/directory";
+import { getAuthorizedHostsSync } from "./host-validation";
 import type { ApplicationNested } from ".";
 
 const calculateSecretsHash = (envVariables: string[]): string => {
@@ -36,6 +37,13 @@ export const getRailpackCommand = (application: ApplicationNested) => {
 		`${buildAppDirectory}/railpack-info.json`,
 	];
 
+	const railpackAuthorizedHosts = getAuthorizedHostsSync(application);
+	if (
+		railpackAuthorizedHosts.length > 0 &&
+		!envVariables.some((e) => e.startsWith("__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="))
+	) {
+		prepareArgs.push("--env", `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=${railpackAuthorizedHosts.join(",")}`);
+	}
 	for (const env of envVariables) {
 		prepareArgs.push("--env", env);
 	}

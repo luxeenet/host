@@ -18,6 +18,7 @@ import {
 	resolvePackageManagerAndCommands,
 } from "./runtime-resolver";
 import { getAuthorizedHostsSync } from "./host-validation";
+import { configureViteAllowedHosts } from "./vite-config";
 import {
 	loadDeploymentPlanSync,
 	resolveDeploymentPlan,
@@ -81,6 +82,16 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	if (fs.existsSync(buildAppDirectory)) {
 		try {
 			// Configure Vite allowedHosts for authorized hostnames via framework environment
+			if (
+				plan.framework?.toLowerCase().includes("vite") ||
+				plan.deploymentStrategy === "vite-preview" ||
+				plan.hostValidation?.mechanism === "env"
+			) {
+				configureViteAllowedHosts(
+					buildAppDirectory,
+					plan.routing?.allAuthorizedHosts || getAuthorizedHostsSync(application),
+				);
+			}
 			if (plan.hostValidation.env.length > 0) {
 				for (const envItem of plan.hostValidation.env) {
 					const [key] = envItem.split("=");
@@ -379,6 +390,7 @@ export const getNixpacksCommand = (application: ApplicationNested) => {
 	const archive2213 = NIXPKGS_ARCHIVES.MODERN_22_13.commit;
 	const archive2411 = NIXPKGS_ARCHIVES.MODERN_24_11.commit;
 
+	const authorizedHostsCsv = (plan.routing?.allAuthorizedHosts || getAuthorizedHostsSync(application)).join(",");
 	// Shell preflight ensures runtime compatibility even if repository was cloned inside the deploy bash script
 	const preflightShell = `
 # HatDot Runtime Compatibility & Nixpacks Preflight
@@ -389,6 +401,7 @@ export NIXPACKS_HOST="\${NIXPACKS_HOST:-0.0.0.0}"
 # Correct deprecated npm production config warning (npm warn config production Use --omit=dev instead)
 unset NPM_CONFIG_PRODUCTION 2>/dev/null || export NPM_CONFIG_PRODUCTION=""
 export NPM_CONFIG_UPDATE_NOTIFIER="false"
+${authorizedHostsCsv ? `export __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="\${__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS:-${authorizedHostsCsv}}"` : ""}
 ${activeStartCommand ? `export NIXPACKS_START_CMD="\${NIXPACKS_START_CMD:-${activeStartCommand.replace(/"/g, '\\"')}}"` : ""}
 ${effectivePort ? `export PORT="\${PORT:-${effectivePort}}"\nexport NIXPACKS_PORT="\${NIXPACKS_PORT:-${effectivePort}}"` : ""}
 

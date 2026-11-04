@@ -519,6 +519,14 @@ Stage 5/7: Container Startup & Orchestration
 Deploying Docker Swarm service for ${application.appName}...
 `;
 		await appendDeploymentLog(deployment.logPath, stage5Log, serverId);
+		if (fs.existsSync(buildAppDir)) {
+			const postBuildPlan = resolveDeploymentPlan({
+				application,
+				buildAppDirectory: buildAppDir,
+				platformDomain,
+			});
+			saveDeploymentPlanSync(application.appName, postBuildPlan, serverId);
+		}
 		await mechanizeDockerContainer(application);
 
 		// Stage 6: Application Readiness
@@ -878,6 +886,14 @@ Stage 5/7: Container Startup & Orchestration
 Deploying Docker Swarm service for ${application.appName}...
 `;
 		await appendDeploymentLog(deployment.logPath, stage5Log, serverId);
+		if (fs.existsSync(buildAppDir)) {
+			const postBuildPlan = resolveDeploymentPlan({
+				application,
+				buildAppDirectory: buildAppDir,
+				platformDomain,
+			});
+			saveDeploymentPlanSync(application.appName, postBuildPlan, serverId);
+		}
 		await mechanizeDockerContainer(application);
 
 		// Stage 6: Application Readiness

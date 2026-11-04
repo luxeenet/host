@@ -21,6 +21,8 @@ export type ApplicationWithDomains = {
 		host?: string | null;
 		enabled?: boolean | null;
 		applicationId?: string | null;
+		verified?: boolean | null;
+		cfStatus?: string | null;
 	}> | null;
 	[key: string]: any;
 };
@@ -65,6 +67,8 @@ export const getAuthorizedHostsSync = (
 	const rows = Array.isArray(app.domains) ? app.domains : [];
 	for (const d of rows) {
 		if (!d || d.enabled === false) continue;
+		if (d.verified === false) continue;
+		if (d.cfStatus === "blocked" || d.cfStatus === "pending_deletion") continue;
 		if (d.applicationId && app.applicationId && d.applicationId !== app.applicationId) {
 			continue;
 		}
@@ -144,7 +148,7 @@ export const resolveHostValidation = (
 		};
 	}
 
-	if (input.runsViteServer) {
+	if (input.runsViteServer || framework.includes("vite") || Boolean(deps.vite)) {
 		if (hasUserEnv(VITE_ALLOWED_HOSTS_ENV)) {
 			return {
 				mechanism: "none",

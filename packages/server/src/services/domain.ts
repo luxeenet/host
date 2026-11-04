@@ -1,4 +1,5 @@
 import dns from "node:dns";
+import fs from "node:fs";
 import { isIP } from "node:net";
 import os from "node:os";
 import { promisify } from "node:util";
@@ -21,8 +22,20 @@ import {
 	previewDeployments,
 	projects,
 } from "../db/schema";
-import { loadDeploymentPlanSync } from "../utils/builders/deployment-plan";
-import { detectHostRejection } from "../utils/builders/host-validation";
+import {
+	loadDeploymentPlanSync,
+	resolveDeploymentPlan,
+	saveDeploymentPlanSync,
+} from "../utils/builders/deployment-plan";
+import {
+	detectHostRejection,
+	getAuthorizedHostsSync,
+	resolveHostValidation,
+} from "../utils/builders/host-validation";
+import { configureViteAllowedHosts } from "../utils/builders/vite-config";
+import { mechanizeDockerContainer } from "../utils/builders";
+import { getBuildAppDirectory } from "../utils/filesystem/directory";
+
 import { findApplicationById } from "./application";
 import { detectCDNProvider } from "./cdn";
 import { findComposeById } from "./compose";
@@ -419,7 +432,7 @@ export const createDomain = async (
 					}
 				}
 			}
-		} catch {}
+		} catch { }
 	}
 
 	const saasActive = await isCloudflareSaasActive();
@@ -481,7 +494,127 @@ export const createDomain = async (
 		}
 	}
 
+	if (finalDomain?.applicationId) {
+		await syncApplicationAllowedHosts(finalDomain.applicationId, { tx }).catch((err) => {
+			console.error(`[Domain Sync] Failed to synchronize allowedHosts for ${finalDomain.applicationId}:`, err);
+		});
+	}
+
 	return finalDomain;
+};
+
+/**
+ * Automatically synchronizes the application's effective hostname configuration
+ * (.hatdot/plan.json, vite.config.*, and running Docker Swarm service environment)
+ * whenever domains are attached, updated, verified, disabled, or removed.
+ */
+export const syncApplicationAllowedHosts = async (
+	applicationId: string,
+	options?: {
+		tx?: any;
+		reloadContainer?: boolean;
+	},
+) => {
+	const application = await findApplicationById(applicationId);
+	let currentDomains: any[] = Array.isArray((application as any).domains)
+		? [...(application as any).domains]
+		: [];
+	try {
+		const queryDb = options?.tx || db;
+		if (typeof queryDb?.select === "function") {
+			const rows = await queryDb
+				.select()
+				.from(domains)
+				.where(eq(domains.applicationId, applicationId));
+			if (Array.isArray(rows) && (rows.length > 0 || !options?.tx)) {
+				currentDomains = rows;
+			}
+		}
+	} catch { }
+
+	const appWithDomains = {
+		...application,
+		domains: currentDomains,
+	};
+
+	let platformDomain: string | null = null;
+	try {
+		platformDomain = await getConfiguredPlatformDomain();
+	} catch { }
+
+	const authorizedHosts = getAuthorizedHostsSync(
+		appWithDomains as any,
+		platformDomain,
+	);
+
+	let buildAppDir = "";
+	let hasBuildDir = false;
+	try {
+		buildAppDir = getBuildAppDirectory(appWithDomains as any);
+		hasBuildDir = Boolean(buildAppDir && fs.existsSync(buildAppDir));
+	} catch { }
+
+	const existingPlan = loadDeploymentPlanSync(
+		application.appName,
+		application.serverId,
+	);
+	const basePlan =
+		existingPlan ||
+		resolveDeploymentPlan({
+			application: appWithDomains as any,
+			buildAppDirectory: hasBuildDir ? buildAppDir : undefined,
+			platformDomain,
+		});
+
+	const isViteApp =
+		basePlan.hostValidation?.mechanism === "env" ||
+		Boolean(basePlan.framework?.toLowerCase().includes("vite")) ||
+		basePlan.deploymentStrategy === "vite-preview";
+
+	const updatedHostValidation = resolveHostValidation({
+		framework: basePlan.framework,
+		language: basePlan.language,
+		runsViteServer: isViteApp,
+		hosts: authorizedHosts,
+	});
+
+	const updatedPlan = {
+		...basePlan,
+		routing: {
+			...basePlan.routing,
+			primaryHost:
+				authorizedHosts[0] || basePlan.routing?.primaryHost || "localhost",
+			allAuthorizedHosts: authorizedHosts,
+		},
+		hostValidation: updatedHostValidation,
+	};
+
+	saveDeploymentPlanSync(
+		application.appName,
+		updatedPlan,
+		application.serverId,
+	);
+
+	if (hasBuildDir) {
+		try {
+			configureViteAllowedHosts(buildAppDir, authorizedHosts);
+		} catch { }
+	}
+
+	if (
+		options?.reloadContainer !== false &&
+		(application.applicationStatus === "done" ||
+			application.applicationStatus === "running")
+	) {
+		try {
+			await mechanizeDockerContainer(appWithDomains as any);
+		} catch { }
+	}
+
+	return {
+		hosts: authorizedHosts,
+		plan: updatedPlan,
+	};
 };
 
 export const getPublicServerIp = async (serverId?: string): Promise<string> => {
@@ -495,7 +628,7 @@ export const getPublicServerIp = async (serverId?: string): Promise<string> => {
 			) {
 				return server.ipAddress;
 			}
-		} catch {}
+		} catch { }
 	}
 
 	const settings = await getWebServerSettings();
@@ -512,7 +645,7 @@ export const getPublicServerIp = async (serverId?: string): Promise<string> => {
 		if (publicIp && isIP(publicIp) && !isPrivateOrLocalAddress(publicIp)) {
 			return publicIp;
 		}
-	} catch {}
+	} catch { }
 
 	const candidates = await getServerIpCandidates(serverId);
 	const publicCandidate = candidates.find(
@@ -720,7 +853,7 @@ export const findDomainById = async (domainId: string, tx: any = db) => {
 				appName: fullApp.appName,
 				name: fullApp.name,
 			};
-		} catch {}
+		} catch { }
 	}
 
 	let comp: { composeId: string; appName: string; name: string } | null = null;
@@ -732,7 +865,7 @@ export const findDomainById = async (domainId: string, tx: any = db) => {
 				appName: fullComp.appName,
 				name: fullComp.name,
 			};
-		} catch {}
+		} catch { }
 	}
 
 	return {
@@ -757,7 +890,7 @@ export const findDomainsByApplicationId = async (applicationId: string) => {
 			appName: fullApp.appName,
 			name: fullApp.name,
 		};
-	} catch {}
+	} catch { }
 
 	return rows.map((domain) => ({
 		...domain,
@@ -779,7 +912,7 @@ export const findDomainsByComposeId = async (composeId: string) => {
 			appName: fullComp.appName,
 			name: fullComp.name,
 		};
-	} catch {}
+	} catch { }
 
 	return rows.map((domain) => ({
 		...domain,
@@ -893,7 +1026,11 @@ export const setPrimaryDomain = async (domainId: string, tx: any = db) => {
 			.set({ isPrimary: true })
 			.where(eq(domains.domainId, domainId));
 	}
-	return await findDomainById(domainId, tx);
+	const result = await findDomainById(domainId, tx);
+	if (currentDomain.applicationId) {
+		await syncApplicationAllowedHosts(currentDomain.applicationId, { tx }).catch(() => { });
+	}
+	return result;
 };
 
 export const updateDomainById = async (
@@ -941,7 +1078,11 @@ export const updateDomainById = async (
 		.where(eq(domains.domainId, domainId))
 		.returning();
 
-	return domain[0];
+	const updatedDomain = domain[0];
+	if (updatedDomain?.applicationId) {
+		await syncApplicationAllowedHosts(updatedDomain.applicationId).catch(() => { });
+	}
+	return updatedDomain;
 };
 
 export const removeDomainById = async (domainId: string) => {
@@ -961,7 +1102,11 @@ export const removeDomainById = async (domainId: string) => {
 		.where(eq(domains.domainId, domainId))
 		.returning();
 
-	return result[0];
+	const deletedDomain = result[0];
+	if (deletedDomain?.applicationId) {
+		await syncApplicationAllowedHosts(deletedDomain.applicationId).catch(() => { });
+	}
+	return deletedDomain;
 };
 
 export const recheckDomainCloudflareStatus = async (domainId: string) => {
@@ -1051,10 +1196,10 @@ export const validateDomain = async (
 		const cleanExpectedTarget = options?.expectedTarget?.trim().toLowerCase().replace(/\.$/, "");
 		const cnameMatched = cleanExpectedTarget
 			? resolvedCnames.some(
-					(c) =>
-						c === cleanExpectedTarget ||
-						(platformDomain && (c === platformDomain || c.endsWith(`.${platformDomain}`))),
-			  )
+				(c) =>
+					c === cleanExpectedTarget ||
+					(platformDomain && (c === platformDomain || c.endsWith(`.${platformDomain}`))),
+			)
 			: false;
 
 		// 2. Resolve domain IPs
@@ -1071,7 +1216,7 @@ export const validateDomain = async (
 		if (cleanExpectedTarget && !isIP(cleanExpectedTarget)) {
 			try {
 				targetIps = await resolveDns(cleanExpectedTarget);
-			} catch {}
+			} catch { }
 		}
 
 		// 4. Check if any IP belongs to a CDN provider
@@ -1324,14 +1469,14 @@ export const getDnsInstructionsForDomain = async (
 
 	const cnameTarget = useCloudflareSaas
 		? await resolveCloudflareCnameTarget({
-				applicationId: options?.applicationId || dbDomain?.applicationId,
-				composeId: options?.composeId || dbDomain?.composeId,
-		  })
+			applicationId: options?.applicationId || dbDomain?.applicationId,
+			composeId: options?.composeId || dbDomain?.composeId,
+		})
 		: await resolveCnameTargetForService({
-				applicationId: options?.applicationId,
-				composeId: options?.composeId,
-				serverId,
-		  });
+			applicationId: options?.applicationId,
+			composeId: options?.composeId,
+			serverId,
+		});
 
 	const targetStatus = await checkTargetDnsStatus(cnameTarget);
 
@@ -1432,10 +1577,10 @@ export const getDnsInstructionsForDomain = async (
 			apexGuidance: isSubdomain
 				? undefined
 				: {
-						supportsCnameFlattening: true,
-						note: `Apex domains (@) require a DNS provider supporting CNAME Flattening or ALIAS/ANAME records (e.g. Cloudflare, Route53, Namecheap). Alternatively, add a www.${cleanHost} CNAME record pointing to ${cnameTarget}.`,
-						recommendedAlternative: `www.${cleanHost}`,
-				  },
+					supportsCnameFlattening: true,
+					note: `Apex domains (@) require a DNS provider supporting CNAME Flattening or ALIAS/ANAME records (e.g. Cloudflare, Route53, Namecheap). Alternatively, add a www.${cleanHost} CNAME record pointing to ${cnameTarget}.`,
+					recommendedAlternative: `www.${cleanHost}`,
+				},
 		};
 	}
 
@@ -1604,7 +1749,7 @@ export const verifyApplicationLiveUrl = async (
 				} else if (typeof response.text === "function") {
 					bodyText = await response.text();
 				}
-			} catch {}
+			} catch { }
 
 			const hostRejection =
 				detectHostRejection({
@@ -1612,16 +1757,24 @@ export const verifyApplicationLiveUrl = async (
 					body: bodyText,
 				}) ||
 				(bodyText.includes("Blocked request. This host") ||
-				(bodyText.includes("is not allowed") &&
-					(bodyText.includes("allowedHosts") || bodyText.includes("Host (")))
+					(bodyText.includes("is not allowed") &&
+						(bodyText.includes("allowedHosts") || bodyText.includes("Host (")))
 					? {
-							framework: "vite" as const,
-							message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
-							remediation: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
-						}
+						framework: "vite" as const,
+						message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
+						remediation: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
+					}
 					: null);
 
 			if (hostRejection) {
+				if (attempt < maxRetries) {
+					// Attempt automatic hostname reconciliation before failing
+					await syncApplicationAllowedHosts(applicationId, {
+						reloadContainer: true,
+					}).catch(() => { });
+					await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+					continue;
+				}
 				return {
 					isLive: false,
 					testUrl,
@@ -1725,7 +1878,7 @@ export const verifyApplicationLiveUrl = async (
 							} else if (typeof httpRes.text === "function") {
 								httpBody = await httpRes.text();
 							}
-						} catch {}
+						} catch { }
 
 						const fallbackRejection =
 							detectHostRejection({
@@ -1733,14 +1886,14 @@ export const verifyApplicationLiveUrl = async (
 								body: httpBody,
 							}) ||
 							(httpBody.includes("Blocked request. This host") ||
-							(httpBody.includes("is not allowed") &&
-								(httpBody.includes("allowedHosts") ||
-									httpBody.includes("Host (")))
+								(httpBody.includes("is not allowed") &&
+									(httpBody.includes("allowedHosts") ||
+										httpBody.includes("Host (")))
 								? {
-										framework: "vite" as const,
-										message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
-										remediation: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
-									}
+									framework: "vite" as const,
+									message: `Vite rejected host header: ${host} is not in preview.allowedHosts.`,
+									remediation: `Vite host validation blocked the request for "${host}". Ensure "${host}" is configured in preview.allowedHosts or __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS.`,
+								}
 								: null);
 
 						if (fallbackRejection) {

@@ -417,7 +417,8 @@ export const resolveDeploymentPlan = (
 		const rawStart = pkgScripts.start?.trim() || "";
 		const isViteDev =
 			rawStart === "vite" || /^vite(?:\s+(?:dev|serve))?\b/i.test(rawStart);
-		if (isViteDev || (!rawStart && pkgScripts.preview)) {
+		const isVitePreview = /\b(?:vite|astro)\s+preview\b/i.test(rawStart);
+		if (isViteDev || isVitePreview || (!rawStart && pkgScripts.preview)) {
 			strategy = "vite-preview";
 		} else if (rawStart) {
 			strategy = "node-server";
@@ -497,7 +498,7 @@ export const resolveDeploymentPlan = (
 			portValue = 80;
 			portSource = "framework_default";
 		} else if (strategy === "vite-preview") {
-			const previewScript = pkgScripts.preview || "";
+			const previewScript = pkgScripts.preview || pkgScripts.start || "";
 			const extracted = extractPortFromCommand(previewScript);
 			portValue = extracted || (isAstro ? 4321 : 4173);
 			portSource = "framework_default";
@@ -760,7 +761,7 @@ export const resolveDeploymentPlan = (
 	const userEnvList = (app.env || "").split("\n").map((s) => s.trim()).filter(Boolean);
 	const runsViteServer =
 		strategy === "vite-preview" ||
-		/\bvite(\s+(preview|dev|serve))?\b/i.test(effectiveCmd);
+		isVite || /\bvite(\s+(preview|dev|serve))?\b/i.test(effectiveCmd) || /\bvite(\s+(preview|dev|serve))?\b/i.test(pkgScripts.start || "");
 
 	const hostValidation = resolveHostValidation({
 		framework,

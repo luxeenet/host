@@ -42,18 +42,27 @@ vi.mock("@dokploy/server/services/integration-settings", () => ({
 	getPlatformGithubIntegration: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("@dokploy/server/db", () => ({
-	db: {
-		query: mockDbQuery,
-		update: () => ({
-			set: () => ({
-				where: () => ({
-					returning: mockDbUpdate,
+vi.mock("@dokploy/server/db", () => {
+	const chain = {
+		from: () => chain,
+		where: () => chain,
+		limit: () => chain,
+		then: (resolve: (v: any) => void) => resolve([]),
+	};
+	return {
+		db: {
+			query: mockDbQuery,
+			select: () => chain,
+			update: () => ({
+				set: () => ({
+					where: () => ({
+						returning: mockDbUpdate,
+					}),
 				}),
 			}),
-		}),
-	},
-}));
+		},
+	};
+});
 
 vi.mock("octokit", () => ({
 	Octokit: class {
@@ -396,7 +405,7 @@ describe("GitHub Integration Hardening & Gap Fixes", () => {
 		);
 
 		expect(resDuplicate.statusCode).toBe(200);
-		expect(resDuplicate.body).toEqual({
+		expect(resDuplicate.body).toMatchObject({
 			message: "Delivery already processed",
 			deliveryId: deliveryUUID,
 		});

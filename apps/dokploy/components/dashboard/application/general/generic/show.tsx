@@ -51,11 +51,18 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 	const { data: giteaProviders, isPending: isLoadingGitea } =
 		api.gitea.giteaProviders.useQuery();
 	const { data: availability } = api.integration.availability.useQuery();
+	const { data: installInfo } = api.github.getInstallationUrl.useQuery(undefined, {
+		retry: false,
+	});
 
 	const isProviderEnabled = (provider: TabState) => {
-		if (!availability) return true;
+		if (provider === "docker" || provider === "git" || provider === "drop") {
+			const item = availability?.find((a) => a.id === provider);
+			return item ? item.available : true;
+		}
+		if (!availability) return false;
 		const item = availability.find((a) => a.id === provider);
-		return item ? item.available : true;
+		return item ? item.available : false;
 	};
 
 	const getProviderGuidance = (provider: TabState) => {
@@ -178,83 +185,69 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 							variant="line"
 							className="flex gap-4 justify-start bg-transparent"
 						>
-							<TabsTrigger
-								value="github"
-								disabled={!isProviderEnabled("github") && application?.sourceType !== "github"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<GithubIcon className="size-4 text-current fill-current" />
-								Github
-								{!isProviderEnabled("github") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="gitlab"
-								disabled={!isProviderEnabled("gitlab") && application?.sourceType !== "gitlab"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<GitlabIcon className="size-4 text-current fill-current" />
-								Gitlab
-								{!isProviderEnabled("gitlab") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="bitbucket"
-								disabled={!isProviderEnabled("bitbucket") && application?.sourceType !== "bitbucket"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<BitbucketIcon className="size-4 text-current fill-current" />
-								Bitbucket
-								{!isProviderEnabled("bitbucket") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="gitea"
-								disabled={!isProviderEnabled("gitea") && application?.sourceType !== "gitea"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<GiteaIcon className="size-4 text-current fill-current" />
-								Gitea
-								{!isProviderEnabled("gitea") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="docker"
-								disabled={!isProviderEnabled("docker") && application?.sourceType !== "docker"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<DockerIcon className="size-5 text-current" />
-								Docker
-								{!isProviderEnabled("docker") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="git"
-								disabled={!isProviderEnabled("git") && application?.sourceType !== "git"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<GitIcon />
-								Git
-								{!isProviderEnabled("git") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="drop"
-								disabled={!isProviderEnabled("drop") && application?.sourceType !== "drop"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<UploadCloud className="size-5 text-current" />
-								Drop
-								{!isProviderEnabled("drop") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
+							{(isProviderEnabled("github") || application?.sourceType === "github") && (
+								<TabsTrigger
+									value="github"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<GithubIcon className="size-4 text-current fill-current" />
+									GitHub
+								</TabsTrigger>
+							)}
+							{(isProviderEnabled("gitlab") || application?.sourceType === "gitlab") && (
+								<TabsTrigger
+									value="gitlab"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<GitlabIcon className="size-4 text-current fill-current" />
+									GitLab
+								</TabsTrigger>
+							)}
+							{(isProviderEnabled("bitbucket") || application?.sourceType === "bitbucket") && (
+								<TabsTrigger
+									value="bitbucket"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<BitbucketIcon className="size-4 text-current fill-current" />
+									Bitbucket
+								</TabsTrigger>
+							)}
+							{(isProviderEnabled("gitea") || application?.sourceType === "gitea") && (
+								<TabsTrigger
+									value="gitea"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<GiteaIcon className="size-4 text-current fill-current" />
+									Gitea
+								</TabsTrigger>
+							)}
+							{isProviderEnabled("docker") && (
+								<TabsTrigger
+									value="docker"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<DockerIcon className="size-5 text-current" />
+									Docker
+								</TabsTrigger>
+							)}
+							{isProviderEnabled("git") && (
+								<TabsTrigger
+									value="git"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<GitIcon />
+									Git
+								</TabsTrigger>
+							)}
+							{isProviderEnabled("drop") && (
+								<TabsTrigger
+									value="drop"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<UploadCloud className="size-5 text-current" />
+									Drop
+								</TabsTrigger>
+							)}
 						</TabsList>
 					</div>
 
@@ -273,16 +266,24 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 								<div className="space-y-1 max-w-md">
 									<h4 className="text-sm font-semibold">GitHub Not Connected</h4>
 									<p className="text-xs text-muted-foreground">
-										Connect your GitHub account or organization to select repositories and configure automated branch deployments.
+										Connect your GitHub account or organization through the HatDot GitHub App to select repositories and configure automated branch deployments.
 									</p>
 								</div>
 								<div className="flex items-center gap-3">
-									<AddGithubProvider />
-									<Button variant="outline" asChild size="sm">
-										<Link href="/dashboard/settings/git-providers">
-											Manage Providers
-										</Link>
-									</Button>
+									{installInfo?.url ? (
+										<Button asChild size="sm">
+											<Link href={installInfo.url} target="_blank">
+												<GithubIcon className="size-4 mr-2" />
+												Connect GitHub
+											</Link>
+										</Button>
+									) : (
+										<Button variant="outline" asChild size="sm">
+											<Link href="/dashboard/settings/git-providers">
+												Connect GitHub Provider
+											</Link>
+										</Button>
+									)}
 								</div>
 							</div>
 						)}

@@ -46,6 +46,10 @@ import { EditGitlabProvider } from "./gitlab/edit-gitlab-provider";
 
 export const ShowGitProviders = () => {
 	const { data, isPending, refetch } = api.gitProvider.getAll.useQuery();
+	const { data: availability } = api.integration.availability.useQuery();
+	const { data: installInfo } = api.github.getInstallationUrl.useQuery(undefined, {
+		retry: false,
+	});
 	const { mutateAsync, isPending: isRemoving } =
 		api.gitProvider.remove.useMutation();
 	const { mutateAsync: toggleShare, isPending: isToggling } =
@@ -55,6 +59,20 @@ export const ShowGitProviders = () => {
 	const url = useUrl();
 	const isOrgAdmin =
 		currentMember?.role === "owner" || currentMember?.role === "admin";
+
+	const isProviderAvailable = (providerId: string) => {
+		if (!availability) return false;
+		const item = availability.find((a) => a.id === providerId);
+		return item ? item.available : false;
+	};
+
+	const githubIntegration = availability?.find((a) => a.id === "github");
+	const isGithubAvailable = isProviderAvailable("github");
+	const isGitlabAvailable = isProviderAvailable("gitlab");
+	const isBitbucketAvailable = isProviderAvailable("bitbucket");
+	const isGiteaAvailable = isProviderAvailable("gitea");
+	const hasAnyProviderEnabled =
+		isGithubAvailable || isGitlabAvailable || isBitbucketAvailable || isGiteaAvailable;
 
 	const getGitlabUrl = (
 		clientId: string,
@@ -89,20 +107,64 @@ export const ShowGitProviders = () => {
 						) : (
 							<>
 								{data?.length === 0 ? (
-									<div className="flex flex-col items-center gap-3 min-h-[25vh] justify-center">
-										<GitBranch className="size-8 self-center text-muted-foreground" />
-										<span className="text-base text-muted-foreground text-center">
-											No Git Providers configured
-										</span>
-										{permissions?.gitProviders.create && (
-											<div>
-												<div className="flex items-center bg-sidebar p-1 w-full rounded-lg">
-													<div className="flex flex-wrap items-center gap-4 p-3.5 rounded-lg bg-background border w-full [&>button]:grow">
-														<AddGithubProvider />
-														<AddGitlabProvider />
-														<AddBitbucketProvider />
-														<AddGiteaProvider />
-													</div>
+									<div className="flex flex-col items-center gap-4 min-h-[25vh] justify-center text-center max-w-lg mx-auto py-8">
+										<GitBranch className="size-10 self-center text-muted-foreground" />
+										
+										{!hasAnyProviderEnabled && availability && availability.length > 0 ? (
+											<div className="space-y-1">
+												<h4 className="text-base font-semibold">Git Providers Unavailable</h4>
+												<p className="text-sm text-muted-foreground">
+													Git provider integrations have been disabled by the HatDot platform administrator.
+												</p>
+											</div>
+										) : isGithubAvailable && installInfo?.url ? (
+											<div className="space-y-3">
+												<div className="space-y-1">
+													<h4 className="text-base font-semibold">Connect GitHub Account</h4>
+													<p className="text-sm text-muted-foreground">
+														Connect your GitHub account or organization through the official HatDot GitHub App to select repositories and automate deployments.
+													</p>
+												</div>
+												<Button asChild size="default" className="mt-2">
+													<Link href={installInfo.url} target="_blank">
+														<GithubIcon className="size-4 mr-2" />
+														Install HatDot GitHub App
+													</Link>
+												</Button>
+											</div>
+										) : isGithubAvailable && !installInfo?.url ? (
+											<div className="space-y-2">
+												<h4 className="text-base font-semibold">GitHub Platform App Not Configured</h4>
+												<p className="text-sm text-muted-foreground">
+													GitHub integration is enabled, but the platform GitHub App credentials or App Slug have not been configured by the administrator.
+												</p>
+												{isOrgAdmin && (
+													<Button variant="outline" asChild size="sm">
+														<Link href="/dashboard/settings/integrations">
+															Configure in Platform Integrations
+														</Link>
+													</Button>
+												)}
+											</div>
+										) : (
+											<div className="space-y-1">
+												<h4 className="text-base font-semibold">No Connected Providers</h4>
+												<p className="text-sm text-muted-foreground">
+													No Git provider accounts have been connected yet.
+												</p>
+											</div>
+										)}
+
+										{permissions?.gitProviders.create && isOrgAdmin && (
+											<div className="w-full pt-4 border-t mt-2">
+												<span className="text-xs text-muted-foreground block mb-2">
+													Custom Organization Provider Setup:
+												</span>
+												<div className="flex flex-wrap items-center justify-center gap-3">
+													{isGithubAvailable && <AddGithubProvider />}
+													{isGitlabAvailable && <AddGitlabProvider />}
+													{isBitbucketAvailable && <AddBitbucketProvider />}
+													{isGiteaAvailable && <AddGiteaProvider />}
 												</div>
 											</div>
 										)}
@@ -110,16 +172,26 @@ export const ShowGitProviders = () => {
 								) : (
 									<div className="flex flex-col gap-4 min-h-[25vh]">
 										<div className="flex flex-col gap-2 rounded-lg ">
-											<span className="text-base font-medium">
-												Available Providers
-											</span>
-											{permissions?.gitProviders.create && (
+											<div className="flex items-center justify-between">
+												<span className="text-base font-medium">
+													Connected Providers
+												</span>
+												{isGithubAvailable && installInfo?.url && (
+													<Button asChild size="sm" variant="outline">
+														<Link href={installInfo.url} target="_blank">
+															<GithubIcon className="size-4 mr-2" />
+															Connect Another Account
+														</Link>
+													</Button>
+												)}
+											</div>
+											{permissions?.gitProviders.create && isOrgAdmin && (
 												<div className="flex items-center bg-sidebar p-1 w-full rounded-lg">
 													<div className="flex flex-wrap items-center gap-4 p-3.5 rounded-lg bg-background border w-full [&>button]:grow">
-														<AddGithubProvider />
-														<AddGitlabProvider />
-														<AddBitbucketProvider />
-														<AddGiteaProvider />
+														{isGithubAvailable && <AddGithubProvider />}
+														{isGitlabAvailable && <AddGitlabProvider />}
+														{isBitbucketAvailable && <AddBitbucketProvider />}
+														{isGiteaAvailable && <AddGiteaProvider />}
 													</div>
 												</div>
 											)}
@@ -247,7 +319,10 @@ export const ShowGitProviders = () => {
 																			Action Required
 																		</Badge>
 																		<Link
-																			href={`${gitProvider?.github?.githubAppName}/installations/new?state=gh_setup:${gitProvider?.github?.githubId}`}
+																			href={
+																				installInfo?.url ||
+																				`${gitProvider?.github?.githubAppName}/installations/new?state=gh_setup:${gitProvider?.github?.githubId}`
+																			}
 																			className={buttonVariants({
 																				size: "icon",
 																				variant: "ghost",

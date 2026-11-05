@@ -201,10 +201,13 @@ export default async function handler(
 		// Check if centralized platform GitHub App is configured
 		const platformGh = await getPlatformGithubIntegration();
 		if (platformGh) {
+			const appSlug = platformGh.appSlug || platformGh.organization || "HatDot";
 			await createGithub(
 				{
 					name: "GitHub",
-					githubAppName: platformGh.organization || "GitHub App",
+					githubAppName: platformGh.baseUrl
+						? `${platformGh.baseUrl.replace(/\/+$/, "")}/apps/${appSlug.replace(/^https?:\/\/[^/]+\/apps\//, "")}`
+						: `https://github.com/apps/${appSlug}`,
 					githubAppId: platformGh.appId,
 					githubClientId: platformGh.clientId,
 					githubClientSecret: platformGh.clientSecret,

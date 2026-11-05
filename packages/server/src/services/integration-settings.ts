@@ -133,6 +133,7 @@ export const getPlatformGithubIntegration = async () => {
 	if (!config.appId || !secrets.privateKey) return null;
 	return {
 		appId: Number(config.appId),
+		appSlug: config.appSlug ? String(config.appSlug) : undefined,
 		clientId: config.clientId ? String(config.clientId) : undefined,
 		clientSecret: secrets.clientSecret || undefined,
 		webhookSecret: secrets.webhookSecret || undefined,
@@ -140,6 +141,27 @@ export const getPlatformGithubIntegration = async () => {
 		baseUrl: config.baseUrl ? String(config.baseUrl) : "https://github.com",
 		organization: config.organization ? String(config.organization) : undefined,
 	};
+};
+
+/**
+ * Returns the official HatDot GitHub App installation URL for customers.
+ * Format: https://github.com/apps/{configured-slug}/installations/new?state={csrf}
+ * If platform app is not configured or disabled, returns null.
+ */
+export const getPlatformGithubInstallationUrl = async (stateParam?: string) => {
+	const platformGh = await getPlatformGithubIntegration();
+	if (!platformGh) return null;
+
+	const baseUrl = platformGh.baseUrl.replace(/\/+$/, "");
+	const slug = platformGh.appSlug || platformGh.organization;
+	if (!slug) return null;
+
+	const cleanSlug = slug.replace(/^https?:\/\/[^/]+\/apps\//, "").replace(/\/+$/, "");
+	let url = `${baseUrl}/apps/${cleanSlug}/installations/new`;
+	if (stateParam) {
+		url += `?state=${encodeURIComponent(stateParam)}`;
+	}
+	return url;
 };
 
 export const getCustomerIntegrations = async (): Promise<

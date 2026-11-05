@@ -8,6 +8,7 @@ import {
 	getAccessibleGitProviderIds,
 	getGiteaBranches,
 	getGiteaRepositories,
+	getIntegrationState,
 	haveGiteaRequirements,
 	testGiteaConnection,
 	updateGitea,
@@ -78,6 +79,11 @@ export const giteaRouter = createTRPCRouter({
 		}),
 
 	giteaProviders: protectedProcedure.query(async ({ ctx }) => {
+		const state = await getIntegrationState("gitea");
+		if (state === "disabled") {
+			return [];
+		}
+
 		const accessibleIds = await getAccessibleGitProviderIds(ctx.session);
 
 		let result = await db.query.gitea.findMany({

@@ -1,6 +1,7 @@
 import {
 	findGitProviderById,
 	getAccessibleGitProviderIds,
+	getIntegrationState,
 	removeGitProvider,
 	updateGitProvider,
 } from "@dokploy/server";
@@ -29,6 +30,23 @@ export const gitProviderRouter = createTRPCRouter({
 			return [];
 		}
 
+		// Filter providers by administrator-enabled status
+		const [githubState, gitlabState, bitbucketState, giteaState] =
+			await Promise.all([
+				getIntegrationState("github"),
+				getIntegrationState("gitlab"),
+				getIntegrationState("bitbucket"),
+				getIntegrationState("gitea"),
+			]);
+
+		const isEnabled = (type: string) => {
+			if (type === "github") return githubState !== "disabled";
+			if (type === "gitlab") return gitlabState !== "disabled";
+			if (type === "bitbucket") return bitbucketState !== "disabled";
+			if (type === "gitea") return giteaState !== "disabled";
+			return false;
+		};
+
 		const results = await db.query.gitProvider.findMany({
 			with: {
 				gitlab: true,
@@ -40,7 +58,9 @@ export const gitProviderRouter = createTRPCRouter({
 			where: inArray(gitProvider.gitProviderId, [...accessibleIds]),
 		});
 
-		return results.map((r) => ({
+		return results
+			.filter((r) => isEnabled(r.providerType))
+			.map((r) => ({
 			...r,
 			isOwner: r.userId === ctx.session.userId,
 			github: r.github

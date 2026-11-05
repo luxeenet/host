@@ -42,12 +42,19 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 	const { data: giteaProviders, isPending: isLoadingGitea } =
 		api.gitea.giteaProviders.useQuery();
 	const { data: availability } = api.integration.availability.useQuery();
+	const { data: installInfo } = api.github.getInstallationUrl.useQuery(undefined, {
+		retry: false,
+	});
 
 	const isProviderEnabled = (provider: TabState) => {
 		if (provider === "raw") return true;
-		if (!availability) return true;
+		if (provider === "git") {
+			const item = availability?.find((a) => a.id === "git");
+			return item ? item.available : true;
+		}
+		if (!availability) return false;
 		const item = availability.find((a) => a.id === provider);
-		return item ? item.available : true;
+		return item ? item.available : false;
 	};
 
 	const getProviderGuidance = (provider: TabState) => {
@@ -169,61 +176,51 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 							variant="line"
 							className="flex gap-4 justify-start bg-transparent"
 						>
-							<TabsTrigger
-								value="github"
-								disabled={!isProviderEnabled("github") && compose?.sourceType !== "github"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<GithubIcon className="size-4 text-current fill-current" />
-								GitHub
-								{!isProviderEnabled("github") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="gitlab"
-								disabled={!isProviderEnabled("gitlab") && compose?.sourceType !== "gitlab"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<GitlabIcon className="size-4 text-current fill-current" />
-								GitLab
-								{!isProviderEnabled("gitlab") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="bitbucket"
-								disabled={!isProviderEnabled("bitbucket") && compose?.sourceType !== "bitbucket"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<BitbucketIcon className="size-4 text-current fill-current" />
-								Bitbucket
-								{!isProviderEnabled("bitbucket") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="gitea"
-								disabled={!isProviderEnabled("gitea") && compose?.sourceType !== "gitea"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<GiteaIcon className="size-4 text-current fill-current" />
-								Gitea
-								{!isProviderEnabled("gitea") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger
-								value="git"
-								disabled={!isProviderEnabled("git") && compose?.sourceType !== "git"}
-								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
-							>
-								<GitIcon />
-								Git
-								{!isProviderEnabled("git") && (
-									<span className="text-[10px] text-muted-foreground ml-1">(Disabled)</span>
-								)}
-							</TabsTrigger>
+							{(isProviderEnabled("github") || compose?.sourceType === "github") && (
+								<TabsTrigger
+									value="github"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<GithubIcon className="size-4 text-current fill-current" />
+									GitHub
+								</TabsTrigger>
+							)}
+							{(isProviderEnabled("gitlab") || compose?.sourceType === "gitlab") && (
+								<TabsTrigger
+									value="gitlab"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<GitlabIcon className="size-4 text-current fill-current" />
+									GitLab
+								</TabsTrigger>
+							)}
+							{(isProviderEnabled("bitbucket") || compose?.sourceType === "bitbucket") && (
+								<TabsTrigger
+									value="bitbucket"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<BitbucketIcon className="size-4 text-current fill-current" />
+									Bitbucket
+								</TabsTrigger>
+							)}
+							{(isProviderEnabled("gitea") || compose?.sourceType === "gitea") && (
+								<TabsTrigger
+									value="gitea"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<GiteaIcon className="size-4 text-current fill-current" />
+									Gitea
+								</TabsTrigger>
+							)}
+							{isProviderEnabled("git") && (
+								<TabsTrigger
+									value="git"
+									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
+								>
+									<GitIcon />
+									Git
+								</TabsTrigger>
+							)}
 							<TabsTrigger
 								value="raw"
 								className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
@@ -249,16 +246,24 @@ export const ShowProviderFormCompose = ({ composeId }: Props) => {
 								<div className="space-y-1 max-w-md">
 									<h4 className="text-sm font-semibold">GitHub Not Connected</h4>
 									<p className="text-xs text-muted-foreground">
-										Connect your GitHub account to select Compose repositories.
+										Connect your GitHub account through the HatDot GitHub App to select Compose repositories.
 									</p>
 								</div>
 								<div className="flex items-center gap-3">
-									<AddGithubProvider />
-									<Button variant="outline" asChild size="sm">
-										<Link href="/dashboard/settings/git-providers">
-											Manage Providers
-										</Link>
-									</Button>
+									{installInfo?.url ? (
+										<Button asChild size="sm">
+											<Link href={installInfo.url} target="_blank">
+												<GithubIcon className="size-4 mr-2" />
+												Connect GitHub
+											</Link>
+										</Button>
+									) : (
+										<Button variant="outline" asChild size="sm">
+											<Link href="/dashboard/settings/git-providers">
+												Connect GitHub Provider
+											</Link>
+										</Button>
+									)}
 								</div>
 							</div>
 						)}

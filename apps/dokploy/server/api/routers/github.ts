@@ -2,10 +2,14 @@ import {
 	assertIntegrationAvailable,
 	assertGitProviderAccess,
 	canViewGitProviderSecrets,
+	createOAuthState,
 	findGithubById,
 	getAccessibleGitProviderIds,
 	getGithubBranches,
 	getGithubRepositories,
+	getIntegrationState,
+	getPlatformGithubIntegration,
+	getPlatformGithubInstallationUrl,
 	haveGithubRequirements,
 	updateGithub,
 	updateGitProvider,
@@ -61,6 +65,11 @@ export const githubRouter = createTRPCRouter({
 			return await getGithubBranches(input);
 		}),
 	githubProviders: protectedProcedure.query(async ({ ctx }) => {
+		const state = await getIntegrationState("github");
+		if (state === "disabled") {
+			return [];
+		}
+
 		const accessibleIds = await getAccessibleGitProviderIds(ctx.session);
 
 		let result = await db.query.github.findMany({
@@ -107,6 +116,40 @@ export const githubRouter = createTRPCRouter({
 				});
 			}
 		}),
+	getInstallationUrl: protectedProcedure.query(async ({ ctx }) => {
+		await assertIntegrationAvailable("github");
+		const platformGh = await getPlatformGithubIntegration();
+		if (!platformGh) {
+			throw new TRPCError({
+				code: "PRECONDITION_FAILED",
+				message:
+					"The HatDot GitHub App has not been configured by an administrator yet.",
+			});
+		}
+
+		// State param: secure CSRF state token bound to user & active organization
+		const stateResult = createOAuthState({
+			provider: "github",
+			providerId: String(platformGh.appId),
+			userId: ctx.session.userId,
+			organizationId: ctx.session.activeOrganizationId,
+		});
+
+		const url = await getPlatformGithubInstallationUrl(stateResult.state);
+		if (!url) {
+			throw new TRPCError({
+				code: "PRECONDITION_FAILED",
+				message:
+					"The HatDot GitHub App slug is missing. Please configure the App Slug in Platform Integrations.",
+			});
+		}
+
+		return {
+			url,
+			appName: platformGh.appSlug || platformGh.organization || "HatDot",
+			appId: platformGh.appId,
+		};
+	}),
 	update: withPermission("gitProviders", "create")
 		.input(apiUpdateGithub)
 		.mutation(async ({ input, ctx }) => {

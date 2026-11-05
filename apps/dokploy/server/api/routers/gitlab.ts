@@ -8,6 +8,7 @@ import {
 	getAccessibleGitProviderIds,
 	getGitlabBranches,
 	getGitlabRepositories,
+	getIntegrationState,
 	haveGitlabRequirements,
 	testGitlabConnection,
 	updateGitlab,
@@ -75,6 +76,11 @@ export const gitlabRouter = createTRPCRouter({
 			return gitlab;
 		}),
 	gitlabProviders: protectedProcedure.query(async ({ ctx }) => {
+		const state = await getIntegrationState("gitlab");
+		if (state === "disabled") {
+			return [];
+		}
+
 		const accessibleIds = await getAccessibleGitProviderIds(ctx.session);
 
 		let result = await db.query.gitlab.findMany({
@@ -86,7 +92,7 @@ export const gitlabRouter = createTRPCRouter({
 		result = result.filter((provider) => {
 			return (
 				provider.gitProvider.organizationId ===
-					ctx.session.activeOrganizationId &&
+				ctx.session.activeOrganizationId &&
 				accessibleIds.has(provider.gitProvider.gitProviderId)
 			);
 		});

@@ -7,6 +7,7 @@ import {
 	getAccessibleGitProviderIds,
 	getBitbucketBranches,
 	getBitbucketRepositories,
+	getIntegrationState,
 	testBitbucketConnection,
 	updateBitbucket,
 } from "@dokploy/server";
@@ -72,6 +73,11 @@ export const bitbucketRouter = createTRPCRouter({
 			return bitbucket;
 		}),
 	bitbucketProviders: protectedProcedure.query(async ({ ctx }) => {
+		const state = await getIntegrationState("bitbucket");
+		if (state === "disabled") {
+			return [];
+		}
+
 		const accessibleIds = await getAccessibleGitProviderIds(ctx.session);
 
 		let result = await db.query.bitbucket.findMany({

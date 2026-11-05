@@ -70,9 +70,17 @@ vi.mock("@dokploy/server", async (importOriginal) => {
 	};
 });
 
-vi.mock("@dokploy/server/db", () => ({
-	db: {
-		query: {
+vi.mock("@dokploy/server/db", () => {
+	const chain = {
+		from: () => chain,
+		where: () => chain,
+		limit: () => chain,
+		then: (resolve: (v: any) => void) => resolve([]),
+	};
+	return {
+		db: {
+			select: vi.fn(() => chain),
+			query: {
 			github: mockDbQuery.github,
 			applications: mockDbQuery.applications,
 			compose: mockDbQuery.compose,
@@ -148,7 +156,8 @@ vi.mock("@dokploy/server/db", () => ({
 			}),
 		})),
 	},
-}));
+	};
+});
 
 vi.mock("@octokit/webhooks", () => ({
 	Webhooks: vi.fn().mockImplementation(function Webhooks() {

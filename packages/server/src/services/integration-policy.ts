@@ -100,6 +100,12 @@ export const INTEGRATION_DEFINITIONS: Record<
 				type: "text",
 				help: "Informational: the GitHub organization that owns the platform app.",
 			},
+			{
+				key: "appSlug",
+				label: "GitHub App Slug / Name",
+				type: "text",
+				help: "The GitHub App URL slug (e.g. hatdot or hatdot-app). Used to construct the official installation URL: https://github.com/apps/{slug}/installations/new",
+			},
 			{ key: "appId", label: "GitHub App ID", type: "text" },
 			{ key: "clientId", label: "Client ID", type: "text" },
 			{ key: "clientSecret", label: "Client secret", type: "secret" },

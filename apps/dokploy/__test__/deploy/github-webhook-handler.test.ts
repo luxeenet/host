@@ -77,6 +77,9 @@ vi.mock("@dokploy/server", () => ({
 	checkAndRecordGithubDelivery: vi.fn().mockResolvedValue({ isDuplicate: false }),
 	isGithubDeliveryDuplicate: vi.fn().mockResolvedValue({ isDuplicate: false }),
 	markGithubDeliveryProcessed: vi.fn().mockResolvedValue(undefined),
+	claimGithubDelivery: vi.fn().mockResolvedValue({ canProcess: true }),
+	markGithubDeliveryQueued: vi.fn().mockResolvedValue(undefined),
+	markGithubDeliveryFailed: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@octokit/webhooks", () => ({

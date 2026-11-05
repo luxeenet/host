@@ -1,6 +1,7 @@
 import { buffer } from "node:stream/consumers";
 import {
 	checkUserRepositoryPermissions,
+	claimGithubDelivery,
 	createPreviewDeployment,
 	createSecurityBlockedComment,
 	findGithubById,
@@ -8,7 +9,9 @@ import {
 	findPreviewDeploymentsByPullRequestId,
 	isGithubDeliveryDuplicate,
 	IS_CLOUD,
+	markGithubDeliveryFailed,
 	markGithubDeliveryProcessed,
+	markGithubDeliveryQueued,
 	removePreviewDeployment,
 	shouldDeploy,
 } from "@dokploy/server";
@@ -99,20 +102,24 @@ export default async function handler(
 		return;
 	}
 
-	// Delivery deduplication check using x-github-delivery UUID
+	// Delivery deduplication check and atomic claim using x-github-delivery UUID
 	const deliveryHeader = req.headers["x-github-delivery"];
-	const { isDuplicate, deliveryId } =
-		await isGithubDeliveryDuplicate(deliveryHeader);
-	if (isDuplicate) {
+	const claim = await claimGithubDelivery(deliveryHeader);
+	if (!claim.canProcess) {
 		res.status(200).json({
-			message: "Delivery already processed",
-			deliveryId,
+			message:
+				claim.reason === "CURRENTLY_PROCESSING"
+					? "Delivery currently being processed"
+					: "Delivery already processed",
+			deliveryId: claim.deliveryId,
+			reason: claim.reason,
 		});
 		return;
 	}
+	const deliveryId = claim.deliveryId;
 
 	if (req.headers["x-github-event"] === "ping") {
-		if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
+		if (deliveryId) await markGithubDeliveryQueued(deliveryId);
 		res.status(200).json({ message: "Ping received, webhook is active" });
 		return;
 	}
@@ -187,10 +194,14 @@ export default async function handler(
 					});
 					continue;
 				}
+				const deterministicJobId = deliveryId
+					? `deploy:gh:${deliveryId}:app:${app.applicationId}`
+					: undefined;
 				await myQueue.add(
 					"deployments",
 					{ ...jobData },
 					{
+						jobId: deterministicJobId,
 						removeOnComplete: true,
 						removeOnFail: true,
 					},
@@ -227,10 +238,14 @@ export default async function handler(
 					continue;
 				}
 
+				const deterministicJobId = deliveryId
+					? `deploy:gh:${deliveryId}:compose:${composeApp.composeId}`
+					: undefined;
 				await myQueue.add(
 					"deployments",
 					{ ...jobData },
 					{
+						jobId: deterministicJobId,
 						removeOnComplete: true,
 						removeOnFail: true,
 					},
@@ -240,19 +255,20 @@ export default async function handler(
 			const totalApps = apps.length + composeApps.length;
 
 			if (totalApps === 0) {
-				if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
+				if (deliveryId) await markGithubDeliveryQueued(deliveryId);
 				res
 					.status(200)
 					.json({ message: "No apps configured to deploy on tag" });
 				return;
 			}
 
-			if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
+			if (deliveryId) await markGithubDeliveryQueued(deliveryId);
 			res.status(200).json({
 				message: `Deployed ${totalApps} apps based on tag ${tagName}`,
 			});
 			return;
 		} catch (error) {
+			if (deliveryId) await markGithubDeliveryFailed(deliveryId, error);
 			logWebhookError("Error deploying applications on tag:", error);
 			res.status(400).json({ message: "Error deploying applications on tag" });
 			return;
@@ -311,10 +327,14 @@ export default async function handler(
 					});
 					continue;
 				}
+				const deterministicJobId = deliveryId
+					? `deploy:gh:${deliveryId}:app:${app.applicationId}`
+					: undefined;
 				await myQueue.add(
 					"deployments",
 					{ ...jobData },
 					{
+						jobId: deterministicJobId,
 						removeOnComplete: true,
 						removeOnFail: true,
 					},
@@ -359,10 +379,14 @@ export default async function handler(
 					continue;
 				}
 
+				const deterministicJobId = deliveryId
+					? `deploy:gh:${deliveryId}:compose:${composeApp.composeId}`
+					: undefined;
 				await myQueue.add(
 					"deployments",
 					{ ...jobData },
 					{
+						jobId: deterministicJobId,
 						removeOnComplete: true,
 						removeOnFail: true,
 					},
@@ -373,16 +397,18 @@ export default async function handler(
 			const emptyApps = totalApps === 0;
 
 			if (emptyApps) {
-				if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
+				if (deliveryId) await markGithubDeliveryQueued(deliveryId);
 				res.status(200).json({ message: "No apps to deploy" });
 				return;
 			}
-			if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
+			if (deliveryId) await markGithubDeliveryQueued(deliveryId);
 			res.status(200).json({ message: `Deployed ${totalApps} apps` });
 			return;
 		} catch (error) {
+			if (deliveryId) await markGithubDeliveryFailed(deliveryId, error);
 			logWebhookError("Error deploying Application:", error);
 			res.status(400).json({ message: "Error deploying Application" });
+			return;
 		}
 	} else if (req.headers["x-github-event"] === "pull_request") {
 		const prId = githubBody?.pull_request?.id;
@@ -577,17 +603,21 @@ export default async function handler(
 						});
 						continue;
 					}
+					const deterministicJobId = deliveryId
+						? `deploy:gh:${deliveryId}:preview:${app.applicationId}:${previewDeploymentId}`
+						: undefined;
 					await myQueue.add(
 						"deployments",
 						{ ...jobData },
 						{
+							jobId: deterministicJobId,
 							removeOnComplete: true,
 							removeOnFail: true,
 						},
 					);
 				}
 			}
-			if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
+			if (deliveryId) await markGithubDeliveryQueued(deliveryId);
 			return res.status(200).json({ message: "Apps Deployed" });
 		}
 	}

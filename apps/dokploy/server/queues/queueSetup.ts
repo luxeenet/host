@@ -47,7 +47,7 @@ const createInMemoryQueue = (): DeploymentQueue => {
 	queue.process(processDeploymentJob);
 
 	return {
-		add: (_name, data) => queue.add(data),
+		add: (_name, data, opts) => queue.add(data, opts),
 		getJobs: (states) => queue.getJobs(states),
 		close: () => queue.close(),
 		on: () => {},

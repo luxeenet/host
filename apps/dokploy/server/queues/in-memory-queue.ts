@@ -123,9 +123,22 @@ export class InMemoryQueue {
 		return Promise.resolve();
 	}
 
-	async add(data: DeploymentJob): Promise<{ id: string }> {
-		const id = `job-${++this.seq}`;
+	async add(
+		data: DeploymentJob,
+		opts?: { jobId?: string; [key: string]: unknown },
+	): Promise<{ id: string }> {
+		const id = opts?.jobId || `job-${++this.seq}`;
 		const partitionKey = getPartition(data);
+		const partition = this.getPartitionState(partitionKey);
+
+		// If a job with this deterministic id already exists in waiting or active, return existing job without duplicating
+		const existing = [...partition.waiting, ...partition.active].find(
+			(job) => job.id === id,
+		);
+		if (existing) {
+			return { id: existing.id };
+		}
+
 		const job: InternalJob = {
 			id,
 			name: "deployments",
@@ -135,7 +148,7 @@ export class InMemoryQueue {
 			partition: partitionKey,
 			group: getGroup(data),
 		};
-		this.getPartitionState(partitionKey).waiting.push(job);
+		partition.waiting.push(job);
 		this.schedule();
 		return { id };
 	}

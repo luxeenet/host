@@ -74,6 +74,9 @@ vi.mock("@dokploy/server", () => ({
 	findPreviewDeploymentsByPullRequestId: vi.fn(),
 	getBitbucketHeaders: vi.fn(() => ({})),
 	removePreviewDeployment: vi.fn(),
+	checkAndRecordGithubDelivery: vi.fn().mockResolvedValue({ isDuplicate: false }),
+	isGithubDeliveryDuplicate: vi.fn().mockResolvedValue({ isDuplicate: false }),
+	markGithubDeliveryProcessed: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@octokit/webhooks", () => ({

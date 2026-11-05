@@ -72,10 +72,19 @@ export const deriveGithubApiUrl = (githubUrl?: string | null): string => {
 };
 
 export const authGithub = (githubProvider: Github): Octokit => {
-	if (!haveGithubRequirements(githubProvider)) {
+	if (!githubProvider?.githubInstallationId) {
 		throw new TRPCError({
-			code: "NOT_FOUND",
-			message: "Github Account not configured correctly",
+			code: "BAD_REQUEST",
+			message:
+				"GitHub App is not installed yet. Please install the GitHub App on your GitHub account or organization.",
+		});
+	}
+
+	if (!githubProvider?.githubAppId || !githubProvider?.githubPrivateKey) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message:
+				"GitHub App credentials are incomplete. App ID and Private Key are required.",
 		});
 	}
 
@@ -95,13 +104,28 @@ export const authGithub = (githubProvider: Github): Octokit => {
 export const getGithubToken = async (
 	octokit: ReturnType<typeof authGithub>,
 ) => {
-	const installation = (await octokit.auth({
-		type: "installation",
-	})) as {
-		token: string;
-	};
+	try {
+		const installation = (await octokit.auth({
+			type: "installation",
+		})) as {
+			token: string;
+		};
 
-	return installation.token;
+		return installation.token;
+	} catch (err: any) {
+		const message = err?.message || String(err);
+		if (message.includes("Integration not found") || message.includes("404")) {
+			throw new Error(
+				"GitHub App installation not found. The app may have been uninstalled from GitHub.",
+			);
+		}
+		if (message.includes("Bad credentials") || message.includes("401")) {
+			throw new Error(
+				"GitHub App authentication failed: Bad credentials or invalid private key.",
+			);
+		}
+		throw new Error(`GitHub App authentication failed: ${message}`);
+	}
 };
 
 /**
@@ -223,8 +247,17 @@ export const cloneGithubRepository = async ({
 	const githubProvider = await findGithubById(githubId);
 	const basePath = isCompose ? COMPOSE_PATH : APPLICATIONS_PATH;
 	const outputPath = outputPathOverride ?? join(basePath, appName, "code");
-	const octokit = authGithub(githubProvider);
-	const token = await getGithubToken(octokit);
+
+	let token: string;
+	try {
+		const octokit = authGithub(githubProvider);
+		token = await getGithubToken(octokit);
+	} catch (err: any) {
+		const safeMsg = err instanceof Error ? err.message : "GitHub authentication failed";
+		command += `echo ${quote([`Error: ❌ ${safeMsg}`])}; exit 1;`;
+		return command;
+	}
+
 	const cloneBase = new URL(normalizeGithubUrl(githubProvider.githubUrl));
 	const repoclone = `${cloneBase.host}/${owner}/${repository}.git`;
 	command += `rm -rf ${outputPath};`;

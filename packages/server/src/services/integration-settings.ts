@@ -125,6 +125,23 @@ export const getIntegrationState = async (
 	return computeIntegrationState(id, toRowLike(row, secrets));
 };
 
+export const getPlatformGithubIntegration = async () => {
+	const row = await loadRow("github");
+	if (!row || !row.enabled) return null;
+	const config = configOf(row);
+	const { secrets } = readSecrets(row);
+	if (!config.appId || !secrets.privateKey) return null;
+	return {
+		appId: Number(config.appId),
+		clientId: config.clientId ? String(config.clientId) : undefined,
+		clientSecret: secrets.clientSecret || undefined,
+		webhookSecret: secrets.webhookSecret || undefined,
+		privateKey: secrets.privateKey,
+		baseUrl: config.baseUrl ? String(config.baseUrl) : "https://github.com",
+		organization: config.organization ? String(config.organization) : undefined,
+	};
+};
+
 export const getCustomerIntegrations = async (): Promise<
 	CustomerIntegrationView[]
 > => {

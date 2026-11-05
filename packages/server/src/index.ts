@@ -167,7 +167,7 @@ export * from "./utils/providers/docker";
 export * from "./utils/providers/git";
 export * from "./utils/providers/gitea";
 export * from "./utils/providers/github";
-export * from "./utils/providers/github";
+export * from "./utils/providers/github-delivery-dedup";
 export * from "./utils/providers/gitlab";
 export * from "./utils/providers/raw";
 export * from "./utils/schedules/index";

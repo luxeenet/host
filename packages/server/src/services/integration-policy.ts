@@ -118,6 +118,7 @@ export const INTEGRATION_DEFINITIONS: Record<
 			"Repository contents: Read-only",
 			"Metadata: Read-only",
 			"Pull requests: Read & write (only for preview deployments)",
+			"Administration: Read-only (required for PR collaborator permission checks)",
 		],
 	},
 	gitlab: {

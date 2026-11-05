@@ -1,3 +1,4 @@
+import { buffer } from "node:stream/consumers";
 import {
 	checkUserRepositoryPermissions,
 	createPreviewDeployment,
@@ -5,7 +6,9 @@ import {
 	findGithubById,
 	findPreviewDeploymentByApplicationId,
 	findPreviewDeploymentsByPullRequestId,
+	isGithubDeliveryDuplicate,
 	IS_CLOUD,
+	markGithubDeliveryProcessed,
 	removePreviewDeployment,
 	shouldDeploy,
 } from "@dokploy/server";
@@ -23,6 +26,12 @@ import {
 	logWebhookError,
 } from "./[refreshToken]";
 
+export const config = {
+	api: {
+		bodyParser: false,
+	},
+};
+
 const getGithubRepositoryOwner = (githubBody: any) =>
 	githubBody?.repository?.owner?.name ?? githubBody?.repository?.owner?.login;
 
@@ -36,7 +45,27 @@ export default async function handler(
 		return;
 	}
 
-	const githubBody = req.body;
+	let rawBody: string;
+	let githubBody: any;
+
+	if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+		githubBody = req.body;
+		rawBody = JSON.stringify(githubBody);
+	} else {
+		try {
+			const buf = Buffer.isBuffer(req.body)
+				? req.body
+				: typeof req.body === "string"
+					? Buffer.from(req.body, "utf8")
+					: await buffer(req);
+			rawBody = buf.toString("utf8");
+			githubBody = JSON.parse(rawBody);
+		} catch {
+			res.status(400).json({ message: "Invalid payload" });
+			return;
+		}
+	}
+	req.body = githubBody;
 
 	if (!githubBody?.installation?.id) {
 		res.status(400).json({ message: "Github Installation not found" });
@@ -61,7 +90,7 @@ export default async function handler(
 	});
 
 	const verified = await webhooks.verify(
-		JSON.stringify(githubBody),
+		rawBody,
 		signature as string,
 	);
 
@@ -70,7 +99,20 @@ export default async function handler(
 		return;
 	}
 
+	// Delivery deduplication check using x-github-delivery UUID
+	const deliveryHeader = req.headers["x-github-delivery"];
+	const { isDuplicate, deliveryId } =
+		await isGithubDeliveryDuplicate(deliveryHeader);
+	if (isDuplicate) {
+		res.status(200).json({
+			message: "Delivery already processed",
+			deliveryId,
+		});
+		return;
+	}
+
 	if (req.headers["x-github-event"] === "ping") {
+		if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
 		res.status(200).json({ message: "Ping received, webhook is active" });
 		return;
 	}
@@ -198,12 +240,14 @@ export default async function handler(
 			const totalApps = apps.length + composeApps.length;
 
 			if (totalApps === 0) {
+				if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
 				res
 					.status(200)
 					.json({ message: "No apps configured to deploy on tag" });
 				return;
 			}
 
+			if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
 			res.status(200).json({
 				message: `Deployed ${totalApps} apps based on tag ${tagName}`,
 			});
@@ -329,10 +373,13 @@ export default async function handler(
 			const emptyApps = totalApps === 0;
 
 			if (emptyApps) {
+				if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
 				res.status(200).json({ message: "No apps to deploy" });
 				return;
 			}
+			if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
 			res.status(200).json({ message: `Deployed ${totalApps} apps` });
+			return;
 		} catch (error) {
 			logWebhookError("Error deploying Application:", error);
 			res.status(400).json({ message: "Error deploying Application" });
@@ -356,6 +403,7 @@ export default async function handler(
 					}
 				}
 			}
+			if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
 			res.status(200).json({ message: "Preview Deployment Closed" });
 			return;
 		}
@@ -539,6 +587,7 @@ export default async function handler(
 					);
 				}
 			}
+			if (deliveryId) await markGithubDeliveryProcessed(deliveryId);
 			return res.status(200).json({ message: "Apps Deployed" });
 		}
 	}

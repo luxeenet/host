@@ -406,6 +406,64 @@ export const DOTNET_CATALOG: Record<string, RuntimeVersionInfo> = {
 };
 
 /**
+ * Rust SDK Catalog
+ */
+export const RUST_CATALOG: Record<string, RuntimeVersionInfo> = {
+	"1.75": {
+		major: "1.75",
+		isEol: false,
+		nixPackage: "rustc",
+		isAvailable: true,
+	},
+	"1.80": {
+		major: "1.80",
+		isEol: false,
+		nixPackage: "rustc",
+		isAvailable: true,
+	},
+	latest: {
+		major: "latest",
+		isEol: false,
+		nixPackage: "rustc",
+		isAvailable: true,
+	},
+};
+
+/**
+ * Elixir SDK Catalog
+ */
+export const ELIXIR_CATALOG: Record<string, RuntimeVersionInfo> = {
+	"1.15": {
+		major: "1.15",
+		isEol: true,
+		eolDate: "2024-06-01",
+		eolReason: "Elixir 1.15 reached End-Of-Life in 2024.",
+		nixPackage: "elixir_1_15",
+		archiveCommit: NIXPKGS_ARCHIVES.LEGACY_24_05.commit,
+		archiveLabel: NIXPKGS_ARCHIVES.LEGACY_24_05.label,
+		isAvailable: true,
+	},
+	"1.16": {
+		major: "1.16",
+		isEol: false,
+		nixPackage: "elixir_1_16",
+		isAvailable: true,
+	},
+	"1.17": {
+		major: "1.17",
+		isEol: false,
+		nixPackage: "elixir_1_17",
+		isAvailable: true,
+	},
+	latest: {
+		major: "latest",
+		isEol: false,
+		nixPackage: "elixir",
+		isAvailable: true,
+	},
+};
+
+/**
  * Checks organizational policy to see if legacy / EOL runtimes are permitted.
  * Configured via environment variable:
  * - ALLOW_LEGACY_RUNTIMES (default: true)

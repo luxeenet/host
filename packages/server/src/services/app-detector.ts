@@ -1,9 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
+import yaml from "yaml";
 import {
 	extractPortFromCommand,
 	extractPortFromSourceCode,
 	resolveDotnetRuntime,
+	resolveElixirRuntime,
 	resolveGoRuntime,
 	resolveJavaRuntime,
 	resolveNodeRuntime,
@@ -13,6 +15,7 @@ import {
 	resolveRubyRuntime,
 	resolveRustRuntime,
 } from "../utils/builders/runtime-resolver";
+import { HatDotConfigSchema } from "../utils/builders/hatdot-config";
 import { findApplicationById } from "./application";
 
 export { extractPortFromSourceCode };
@@ -59,6 +62,7 @@ export interface MonorepoComponent {
 export interface DetectionResult {
 	framework: string;
 	language: string;
+	runtime?: string;
 	buildType: BuildTypeRecommendation;
 	suggestedPort: number;
 	buildCommand?: string;
@@ -80,7 +84,9 @@ export interface DetectionResult {
 		| "gradle"
 		| "cargo"
 		| "go"
-		| "dotnet";
+		| "dotnet"
+		| "nuget"
+		| "mix";
 	runtimeVersion?: string;
 	isStaticSpa?: boolean;
 	confidence: "high" | "medium" | "low";
@@ -174,6 +180,16 @@ export const isRecognizedProjectManifest = (fileName: string): boolean => {
 			"gemfile",
 			"index.html",
 			"index.php",
+			"hatdot.yaml",
+			"hatdot.yml",
+			".hatdot.yaml",
+			".hatdot.yml",
+			"mix.exs",
+			"mix.lock",
+			"pnpm-workspace.yaml",
+			"turbo.json",
+			"nx.json",
+			"lerna.json",
 		].includes(lower) ||
 		lower.endsWith(".csproj") ||
 		lower.endsWith(".sln")
@@ -703,7 +719,7 @@ export const inspectDjangoProject = (files: FileEntry[]): DetectionResult => {
  * Deterministically inspect a virtual or physical list of files to detect framework,
  * builder, start/build commands, runtime versions, and default container ports.
  */
-export const detectFrameworkFromFiles = (
+const detectFrameworkFromFilesCore = (
 	files: FileEntry[],
 ): DetectionResult => {
 	const rootFileMap = new Map<string, FileEntry>();
@@ -735,6 +751,51 @@ export const detectFrameworkFromFiles = (
 		const lower = name.toLowerCase();
 		return rootFileMap.get(lower) || allFileMap.get(lower);
 	};
+
+	// 0. Check for HatDot declarative project configuration (hatdot.yaml / hatdot.yml)
+	const hatdotFile =
+		getRootFile("hatdot.yaml") ||
+		getRootFile("hatdot.yml") ||
+		getRootFile(".hatdot.yaml") ||
+		getRootFile(".hatdot.yml") ||
+		getFile("hatdot.yaml") ||
+		getFile("hatdot.yml");
+
+	if (hatdotFile?.content) {
+		try {
+			const parsedRaw = yaml.parse(hatdotFile.content);
+			const validation = HatDotConfigSchema.safeParse(parsedRaw);
+			if (validation.success) {
+				const cfg = validation.data;
+				const builder =
+					cfg.build.builder ||
+					(cfg.build.dockerfilePath ? "dockerfile" : "railpack");
+				const language =
+					cfg.build.language ||
+					(builder === "dockerfile" ? "Docker" : "Custom");
+				const framework = cfg.project.name || "HatDot Application";
+				const port = cfg.run.port || (builder === "static" ? 80 : 3000);
+
+				return {
+					framework,
+					language,
+					buildType: builder as BuildTypeRecommendation,
+					suggestedPort: port,
+					buildCommand: cfg.build.buildCommand,
+					startCommand: cfg.run.command,
+					installCommand: cfg.build.installCommand,
+					publishDirectory: cfg.build.publishDirectory,
+					dockerfilePath: cfg.build.dockerfilePath,
+					packageManager: cfg.build.packageManager,
+					runtimeVersion: cfg.build.runtime,
+					projectRoot: cfg.project.root !== "." ? cfg.project.root : undefined,
+					bindHost: cfg.run.bindHost,
+					confidence: "high",
+					reason: `Configured via ${hatdotFile.name || "hatdot.yaml"}`,
+				};
+			}
+		} catch {}
+	}
 
 	// 1. Check for Docker Compose
 	const composeFile =
@@ -927,8 +988,32 @@ export const detectFrameworkFromFiles = (
 	const allPkgFile = getFile("package.json");
 	const effectivePkgFile = rootPkgFile || (!hasPythonManifest ? allPkgFile : undefined);
 
+	let rootPkgHasNodeServer = false;
+	if (rootPkgFile?.content) {
+		try {
+			const parsedRoot = JSON.parse(rootPkgFile.content);
+			const allDeps = {
+				...(parsedRoot.dependencies || {}),
+				...(parsedRoot.devDependencies || {}),
+			};
+			rootPkgHasNodeServer = Boolean(
+				allDeps.next ||
+				allDeps.nuxt ||
+				allDeps["@nestjs/core"] ||
+				allDeps.express ||
+				allDeps.fastify ||
+				allDeps.koa ||
+				allDeps.hono ||
+				allDeps.remix ||
+				allDeps["@remix-run/node"] ||
+				allDeps["@sveltejs/kit"] ||
+				allDeps.astro
+			);
+		} catch {}
+	}
+
 	// If this is a Django backend project without a root production Node.js server, inspect Django immediately
-	if (isDjangoApp && !rootPkgFile) {
+	if (isDjangoApp && !rootPkgHasNodeServer) {
 		return inspectDjangoProject(files);
 	}
 
@@ -967,7 +1052,7 @@ export const detectFrameworkFromFiles = (
 					: "npm run";
 
 	// 5. Node.js / JavaScript / TypeScript projects (package.json)
-	if (pkgFile?.content && (!hasPythonManifest || rootPkgFile)) {
+	if (pkgFile?.content && (!hasPythonManifest || rootPkgHasNodeServer)) {
 		try {
 			const pkg = JSON.parse(pkgFile.content);
 			const allDeps = {
@@ -1708,7 +1793,8 @@ export const detectFrameworkFromFiles = (
 	// 11. PHP Projects
 	const composer = getFile("composer.json");
 	const indexPhp = getFile("index.php");
-	if (composer?.content || indexPhp) {
+	const wpConfig = getFile("wp-config.php") || getFile("wp-load.php");
+	if (composer?.content || indexPhp || wpConfig) {
 		const phpRuntime = resolvePhpRuntime({
 			phpVersionContent: getFile(".php-version")?.content,
 			composerJsonContent: composer?.content,
@@ -1716,13 +1802,29 @@ export const detectFrameworkFromFiles = (
 
 		const isLaravel = composer?.content?.toLowerCase().includes("laravel");
 		const isSymfony = composer?.content?.toLowerCase().includes("symfony");
+		const isWordpress =
+			Boolean(
+				getFile("wp-config.php") ||
+					getFile("wp-load.php") ||
+					getFile("wp-login.php"),
+			) || Boolean(composer?.content?.toLowerCase().includes("wordpress"));
+		const isDrupal =
+			Boolean(
+				getFile("core/lib/drupal.php") || getFile("core/modules"),
+			) || Boolean(composer?.content?.toLowerCase().includes("drupal/core"));
+
+		const frameworkName = isLaravel
+			? "Laravel"
+			: isSymfony
+				? "Symfony"
+				: isWordpress
+					? "WordPress"
+					: isDrupal
+						? "Drupal"
+						: "PHP Application";
 
 		return {
-			framework: isLaravel
-				? "Laravel"
-				: isSymfony
-					? "Symfony"
-					: "PHP Application",
+			framework: frameworkName,
 			language: "PHP",
 			buildType: "nixpacks",
 			suggestedPort: isLaravel ? 8000 : 80,
@@ -1736,7 +1838,11 @@ export const detectFrameworkFromFiles = (
 				? "Detected Laravel framework in composer.json"
 				: isSymfony
 					? "Detected Symfony framework in composer.json"
-					: "Detected PHP application",
+					: isWordpress
+						? "Detected WordPress core files and configuration"
+						: isDrupal
+							? "Detected Drupal CMS core configuration"
+							: "Detected PHP application",
 		};
 	}
 
@@ -1763,6 +1869,35 @@ export const detectFrameworkFromFiles = (
 			reason: isRails
 				? "Detected Ruby on Rails in Gemfile"
 				: "Detected Ruby Gemfile",
+		};
+	}
+
+	// 13. Elixir / Phoenix Projects
+	const mixExs = getFile("mix.exs");
+	const mixLock = getFile("mix.lock");
+	if (mixExs || mixLock) {
+		const isPhoenix = Boolean(
+			mixExs?.content && /:phoenix\b/i.test(mixExs.content),
+		);
+		const elixirRuntime = resolveElixirRuntime({
+			mixExsContent: mixExs?.content,
+		});
+
+		return {
+			framework: isPhoenix ? "Phoenix" : "Elixir Application",
+			language: "Elixir",
+			buildType: "nixpacks",
+			suggestedPort: 4000,
+			buildCommand: isPhoenix
+				? "mix deps.get && mix compile && mix assets.deploy"
+				: "mix deps.get && mix compile",
+			startCommand: isPhoenix ? "mix phx.server" : "mix run --no-halt",
+			runtimeVersion: `Elixir ${elixirRuntime.resolvedVersion}`,
+			packageManager: "mix",
+			confidence: "high",
+			reason: isPhoenix
+				? "Detected Phoenix web framework in mix.exs"
+				: "Detected Elixir project (mix.exs)",
 		};
 	}
 
@@ -1821,6 +1956,27 @@ export const detectFrameworkFromFiles = (
 		confidence: "low",
 		reason: "Default configuration recommended (Nixpacks auto-detection)",
 	};
+};
+
+export const detectFrameworkFromFiles = (
+	files: FileEntry[],
+): DetectionResult => {
+	const res = detectFrameworkFromFilesCore(files);
+	if (!res.runtime) {
+		const lang = (res.language || "").toLowerCase();
+		if (lang.includes("python")) res.runtime = "python";
+		else if (lang.includes("javascript") || lang.includes("typescript") || lang.includes("node")) res.runtime = "nodejs";
+		else if (lang.includes("php")) res.runtime = "php";
+		else if (lang.includes("ruby")) res.runtime = "ruby";
+		else if (lang.includes("go")) res.runtime = "go";
+		else if (lang.includes("rust")) res.runtime = "rust";
+		else if (lang.includes("java") || lang.includes("kotlin")) res.runtime = "java";
+		else if (lang.includes("dotnet") || lang.includes("c#") || lang.includes(".net")) res.runtime = "dotnet";
+		else if (lang.includes("elixir")) res.runtime = "elixir";
+		else if (lang.includes("static") || res.buildType === "static" || res.framework.toLowerCase().includes("static")) res.runtime = "static";
+		else res.runtime = lang || "unknown";
+	}
+	return res;
 };
 
 /**

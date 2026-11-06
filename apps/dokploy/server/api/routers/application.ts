@@ -1,5 +1,6 @@
 import { assertIntegrationAvailable } from "@dokploy/server/services/integration-settings";
 import {
+	checkDeploymentReadiness,
 	clearOldDeployments,
 	createApplication,
 	createDomain,
@@ -13,6 +14,7 @@ import {
 	generateTraefikMeDomain,
 	getAccessibleServerIds,
 	getApplicationStats,
+	getBuilderAnalytics,
 	getContainerLogs,
 	getWebServerSettings,
 	inspectApplication,
@@ -1555,5 +1557,15 @@ export const applicationRouter = createTRPCRouter({
 		.query(async ({ input, ctx }) => {
 			await checkServiceAccess(ctx, input.applicationId, "read");
 			return await verifyApplicationLiveUrl(input.applicationId);
+		}),
+	getReadinessCheck: protectedProcedure
+		.input(apiFindOneApplication)
+		.query(async ({ input, ctx }) => {
+			await checkServiceAccess(ctx, input.applicationId, "read");
+			return await checkDeploymentReadiness(input.applicationId);
+		}),
+	getBuilderAnalytics: protectedProcedure
+		.query(async ({ ctx }) => {
+			return await getBuilderAnalytics(ctx.session.activeOrganizationId);
 		}),
 });

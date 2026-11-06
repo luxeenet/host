@@ -77,6 +77,10 @@ import {
 	updateDeploymentStatus,
 } from "./deployment";
 import {
+	analyzeBuildFailure,
+	formatFailureDiagnosisReport,
+} from "./failure-recovery";
+import {
 	type Domain,
 	findDomainsByApplicationId,
 	getConfiguredPlatformDomain,
@@ -531,6 +535,7 @@ export const deployApplication = async ({
 	};
 
 	const buildLink = `${await getDokployUrl()}/dashboard/project/${application.environment.projectId}/environment/${application.environmentId}/services/application/${application.applicationId}?tab=deployments`;
+	let currentPlan: any = null;
 	const deployment = await createDeployment({
 		applicationId: applicationId,
 		title: titleLog,
@@ -575,6 +580,7 @@ export const deployApplication = async ({
 			buildAppDirectory: fs.existsSync(buildAppDir) ? buildAppDir : undefined,
 			platformDomain,
 		});
+		currentPlan = plan;
 		saveDeploymentPlanSync(application.appName, plan, serverId);
 
 		if (fs.existsSync(buildAppDir)) {
@@ -625,6 +631,7 @@ Deploying Docker Swarm service for ${application.appName}...
 				buildAppDirectory: buildAppDir,
 				platformDomain,
 			});
+			currentPlan = postBuildPlan;
 			saveDeploymentPlanSync(application.appName, postBuildPlan, serverId);
 		}
 		await mechanizeDockerContainer(application);
@@ -895,6 +902,23 @@ Remediation:
 		} else {
 			await execAsync(command);
 		}
+
+		let failureDiagnosisMessage = error instanceof Error ? error.message : "Error building";
+		try {
+			let failureLog = "";
+			if (!serverId && fs.existsSync(deployment.logPath)) {
+				failureLog = fs.readFileSync(deployment.logPath, "utf-8");
+			} else {
+				failureLog = error instanceof Error ? `${error.message}\n${error.stack || ""}` : String(error);
+			}
+			const diagnosis = analyzeBuildFailure(failureLog, currentPlan);
+			const diagnosticReport = formatFailureDiagnosisReport(diagnosis);
+			await appendDeploymentLog(deployment.logPath, diagnosticReport, serverId);
+			failureDiagnosisMessage = `[${diagnosis.code}] ${diagnosis.errorMessage}`;
+		} catch (diagErr) {
+			console.error("Failed to append structured failure diagnosis to deployment log:", diagErr);
+		}
+
 		await updateDeploymentStatus(deployment.deploymentId, "error");
 		await updateApplicationStatus(applicationId, "error");
 
@@ -902,8 +926,7 @@ Remediation:
 			projectName: application.environment.project.name,
 			applicationName: application.name,
 			applicationType: "application",
-			// @ts-expect-error
-			errorMessage: error?.message || "Error building",
+			errorMessage: failureDiagnosisMessage,
 			buildLink,
 			organizationId: application.environment.project.organizationId,
 		});
@@ -941,6 +964,7 @@ export const rebuildApplication = async ({
 	await assertApplicationRuntimeResources(application);
 	const serverId = application.buildServerId || application.serverId;
 	const buildLink = `${await getDokployUrl()}/dashboard/project/${application.environment.projectId}/environment/${application.environmentId}/services/application/${application.applicationId}?tab=deployments`;
+	let currentPlan: any = null;
 
 	const deployment = await createDeployment({
 		applicationId: applicationId,
@@ -962,6 +986,7 @@ export const rebuildApplication = async ({
 			buildAppDirectory: fs.existsSync(buildAppDir) ? buildAppDir : undefined,
 			platformDomain,
 		});
+		currentPlan = plan;
 		saveDeploymentPlanSync(application.appName, plan, serverId);
 
 		if (fs.existsSync(buildAppDir)) {
@@ -1003,6 +1028,7 @@ Deploying Docker Swarm service for ${application.appName}...
 				buildAppDirectory: buildAppDir,
 				platformDomain,
 			});
+			currentPlan = postBuildPlan;
 			saveDeploymentPlanSync(application.appName, postBuildPlan, serverId);
 		}
 		await mechanizeDockerContainer(application);
@@ -1273,6 +1299,21 @@ Remediation:
 		} else {
 			await execAsync(command);
 		}
+
+		try {
+			let failureLog = "";
+			if (!serverId && fs.existsSync(deployment.logPath)) {
+				failureLog = fs.readFileSync(deployment.logPath, "utf-8");
+			} else {
+				failureLog = error instanceof Error ? `${error.message}\n${error.stack || ""}` : String(error);
+			}
+			const diagnosis = analyzeBuildFailure(failureLog, currentPlan);
+			const diagnosticReport = formatFailureDiagnosisReport(diagnosis);
+			await appendDeploymentLog(deployment.logPath, diagnosticReport, serverId);
+		} catch (diagErr) {
+			console.error("Failed to append structured failure diagnosis to rebuild log:", diagErr);
+		}
+
 		await updateDeploymentStatus(deployment.deploymentId, "error");
 		await updateApplicationStatus(applicationId, "error");
 		throw error;

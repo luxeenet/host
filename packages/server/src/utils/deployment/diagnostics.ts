@@ -6,11 +6,25 @@
 export type DiagnosticCode =
 	| "PORT_MISMATCH"
 	| "HOST_VALIDATION_REJECTION"
+	| "HOST_VALIDATION_BLOCKED"
 	| "WRONG_START_COMMAND"
+	| "START_COMMAND_MISSING"
 	| "MISSING_BUILD_OUTPUT"
+	| "OUTPUT_DIRECTORY_MISSING"
 	| "DEPENDENCY_FAILED"
+	| "PACKAGE_MANAGER_MISMATCH"
+	| "RUNTIME_NOT_DETECTED"
 	| "UNSUPPORTED_RUNTIME"
 	| "APPLICATION_CRASH"
+	| "CONTAINER_CRASH_LOOP"
+	| "HEALTHCHECK_TIMEOUT"
+	| "BUILD_SYNTAX_ERROR"
+	| "MISSING_ENVIRONMENT_VARIABLE"
+	| "DATABASE_CONNECTION_REFUSED"
+	| "DATABASE_MIGRATION_FAILED"
+	| "FILESYSTEM_PERMISSIONS"
+	| "STATIC_ROUTING_ERROR"
+	| "DOCKERFILE_INVALID"
 	| "WRONG_APPLICATION_ROOT"
 	| "DNS_MISCONFIGURATION"
 	| "TLS_ISSUANCE_FAILED"
@@ -24,7 +38,6 @@ export type DiagnosticCode =
 	| "NATIVE_BINDING_RESOLUTION_FAILED"
 	| "INCOMPATIBLE_NATIVE_BINDING_VERSION"
 	| "MISSING_REQUIRED_SERVICE"
-	| "DATABASE_MIGRATION_FAILED"
 	| "FRAMEWORK_CONFIGURATION_ERROR"
 	| "UNKNOWN_BUILD_ERROR";
 
@@ -218,6 +231,84 @@ export const DIAGNOSTIC_CATALOG: Record<DiagnosticCode, DiagnosticInfo> = {
 			"The detected framework could not find its configuration module, WSGI/ASGI entry point, or settings.",
 		remediation:
 			"Verify settings module path and WSGI/ASGI entry point in your application configuration.",
+	},
+	RUNTIME_NOT_DETECTED: {
+		code: "RUNTIME_NOT_DETECTED",
+		title: "Runtime Not Detected",
+		explanation: "Could not automatically determine the runtime or language of this project.",
+		remediation: "Add a manifest file (package.json, requirements.txt, go.mod) or specify the runtime in hatdot.yaml.",
+	},
+	PACKAGE_MANAGER_MISMATCH: {
+		code: "PACKAGE_MANAGER_MISMATCH",
+		title: "Package Manager Mismatch",
+		explanation: "Conflicting lockfiles or lockfile out of date with declared package dependencies.",
+		remediation: "Commit the latest lockfile matching your package manager, or specify packageManager in hatdot.yaml.",
+	},
+	BUILD_SYNTAX_ERROR: {
+		code: "BUILD_SYNTAX_ERROR",
+		title: "Build / Compilation Syntax Error",
+		explanation: "Compilation or build command failed due to syntax errors or builder directive issues.",
+		remediation: "Review the build log output for specific compiler/linter errors and fix in source code.",
+	},
+	OUTPUT_DIRECTORY_MISSING: {
+		code: "OUTPUT_DIRECTORY_MISSING",
+		title: "Build Output Directory Missing",
+		explanation: "The expected build artifacts or output directory was not produced by the build command.",
+		remediation: "Verify your build script output matches the configured output directory in hatdot.yaml.",
+	},
+	START_COMMAND_MISSING: {
+		code: "START_COMMAND_MISSING",
+		title: "Start Command Undefined",
+		explanation: "No start command or server entry point was declared or detected.",
+		remediation: "Define startCommand in hatdot.yaml or add a start script in package.json.",
+	},
+	HOST_VALIDATION_BLOCKED: {
+		code: "HOST_VALIDATION_BLOCKED",
+		title: "Host Header Validation Blocked",
+		explanation: "Framework host validation rejected the assigned HatDot domain name.",
+		remediation: "Add the assigned domain to your framework configuration (e.g. preview.allowedHosts in vite.config.js, or ALLOWED_HOSTS in Django).",
+	},
+	HEALTHCHECK_TIMEOUT: {
+		code: "HEALTHCHECK_TIMEOUT",
+		title: "Health Check Probe Timeout",
+		explanation: "Application did not respond with HTTP 200 within the configured health check timeout.",
+		remediation: "Ensure your application binds to 0.0.0.0, responds to HTTP probes, or increase health check timeout.",
+	},
+	MISSING_ENVIRONMENT_VARIABLE: {
+		code: "MISSING_ENVIRONMENT_VARIABLE",
+		title: "Missing Required Environment Variable",
+		explanation: "Application threw an error or stopped due to an unset required environment variable.",
+		remediation: "Add the required environment variable or secret in the Application Environment tab.",
+	},
+	DATABASE_CONNECTION_REFUSED: {
+		code: "DATABASE_CONNECTION_REFUSED",
+		title: "Database Connection Refused",
+		explanation: "Could not connect to the database host or port specified in connection settings.",
+		remediation: "Verify the database service is running, attached to the same network, and credentials are valid.",
+	},
+	FILESYSTEM_PERMISSIONS: {
+		code: "FILESYSTEM_PERMISSIONS",
+		title: "Filesystem Permission Denied",
+		explanation: "Application process attempted to write to a directory without appropriate write permissions.",
+		remediation: "Write transient files to /tmp or configure directory permissions in your container setup.",
+	},
+	STATIC_ROUTING_ERROR: {
+		code: "STATIC_ROUTING_ERROR",
+		title: "Static Routing / SPA Fallback Error",
+		explanation: "Static Single Page Application route returned 404 on direct navigation.",
+		remediation: "Configure try_files fallback to /index.html in your static web server configuration.",
+	},
+	DOCKERFILE_INVALID: {
+		code: "DOCKERFILE_INVALID",
+		title: "Invalid Dockerfile Syntax",
+		explanation: "The Dockerfile contains invalid syntax or an unreachable base image.",
+		remediation: "Verify Dockerfile syntax and base images using docker build locally.",
+	},
+	CONTAINER_CRASH_LOOP: {
+		code: "CONTAINER_CRASH_LOOP",
+		title: "Container Runtime Crash Loop",
+		explanation: "The application container process exited immediately upon starting or crashed repeatedly.",
+		remediation: "Review application runtime logs for uncaught exceptions, fatal errors, or missing dependencies.",
 	},
 	UNKNOWN_BUILD_ERROR: {
 		code: "UNKNOWN_BUILD_ERROR",

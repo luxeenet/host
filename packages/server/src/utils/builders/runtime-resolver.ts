@@ -4,6 +4,7 @@ import { parse as parseToml } from "toml";
 import { z } from "zod";
 import {
 	DOTNET_CATALOG,
+	ELIXIR_CATALOG,
 	GO_CATALOG,
 	isLegacyRuntimePermitted,
 	JAVA_CATALOG,
@@ -12,6 +13,7 @@ import {
 	PHP_CATALOG,
 	PYTHON_CATALOG,
 	RUBY_CATALOG,
+	RUST_CATALOG,
 } from "./runtime-catalog";
 
 export { NIXPKGS_ARCHIVES, type RuntimeVersionInfo } from "./runtime-catalog";
@@ -46,7 +48,9 @@ export type SupportedPackageManager =
 	| "gradle"
 	| "cargo"
 	| "go"
-	| "dotnet";
+	| "dotnet"
+	| "nuget"
+	| "mix";
 
 export interface PackageManagerResolution {
 	packageManager: SupportedPackageManager;
@@ -816,6 +820,49 @@ export const resolveRustRuntime = (params: {
 		isEol: false,
 		isPermitted: true,
 		isAvailable: true,
+	};
+};
+
+/**
+ * Resolve Elixir runtime version.
+ */
+export const resolveElixirRuntime = (params: {
+	explicitVersion?: string;
+	toolVersionsContent?: string;
+	mixExsContent?: string;
+}) => {
+	let rawVersion: string | undefined;
+	if (params.explicitVersion?.trim()) {
+		rawVersion = params.explicitVersion.trim();
+	}
+	if (!rawVersion && params.toolVersionsContent) {
+		const match = params.toolVersionsContent.match(/^\s*elixir\s+([0-9.]+)/m);
+		if (match?.[1]) rawVersion = match[1];
+	}
+	if (!rawVersion && params.mixExsContent) {
+		const match = params.mixExsContent.match(/elixir:\s*["']~>\s*([0-9.]+)/);
+		if (match?.[1]) rawVersion = match[1];
+	}
+
+	const clean = rawVersion ? rawVersion.replace(/^[v~>=<\s]+/, "") : "1.17";
+	const majorMinor = clean.split(".").slice(0, 2).join(".");
+	const entry = ELIXIR_CATALOG[majorMinor] || ELIXIR_CATALOG.latest || {
+		major: "1.17",
+		isEol: false,
+		nixPackage: "elixir",
+		isAvailable: true,
+	};
+
+	return {
+		requestedVersion: rawVersion,
+		resolvedVersion: entry.major,
+		nixPackage: entry.nixPackage,
+		nixpkgsArchive: entry.archiveCommit,
+		archiveLabel: entry.archiveLabel,
+		isEol: entry.isEol,
+		eolReason: entry.eolReason,
+		isPermitted: !entry.isEol || isLegacyRuntimePermitted(),
+		isAvailable: entry.isAvailable,
 	};
 };
 

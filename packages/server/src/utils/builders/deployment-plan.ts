@@ -21,6 +21,7 @@ import {
 	type HostValidationPlan,
 	type ApplicationWithDomains,
 } from "./host-validation";
+import { loadHatDotConfig } from "./hatdot-config";
 
 export type DeploymentStrategy =
 	| "static-artifact"
@@ -146,6 +147,8 @@ export interface DeploymentPlan {
 	collectStaticCommand?: string;
 	wsgiEntryPoint?: string;
 	djangoSettingsModule?: string;
+	systemPackages?: string[];
+	hatdotConfigApplied?: boolean;
 
 	decisions: PlanDecision[];
 	conflicts: PlanConflict[];
@@ -217,6 +220,10 @@ export const resolveDeploymentPlan = (
 				let content: string | undefined;
 				if (
 					name === "package.json" ||
+					name === "hatdot.yaml" ||
+					name === "hatdot.yml" ||
+					name === ".hatdot.yaml" ||
+					name === ".hatdot.yml" ||
 					name === "nixpacks.toml" ||
 					name === "requirements.txt" ||
 					name === "runtime.txt" ||
@@ -334,6 +341,30 @@ export const resolveDeploymentPlan = (
 		collectStaticCommand = det.collectStaticCommand;
 		wsgiEntryPoint = det.wsgiEntryPoint;
 		djangoSettingsModule = det.djangoSettingsModule;
+	}
+
+	// Discover and incorporate declarative hatdot.yaml if present
+	const hatdotRes = buildAppDirectory ? loadHatDotConfig(buildAppDirectory) : { found: false };
+	const hatdotConfig = hatdotRes.config;
+	let hatdotConfigApplied = false;
+
+	if (hatdotConfig) {
+		hatdotConfigApplied = true;
+		if (hatdotConfig.project.name) framework = hatdotConfig.project.name;
+		if (hatdotConfig.build.language) language = hatdotConfig.build.language;
+		if (hatdotConfig.build.packageManager) pm = hatdotConfig.build.packageManager;
+		if (hatdotConfig.build.runtime) runtimeInfo.version = hatdotConfig.build.runtime;
+		if (hatdotConfig.build.buildCommand) detectedBuild = hatdotConfig.build.buildCommand;
+		if (hatdotConfig.build.installCommand) detectedInstall = hatdotConfig.build.installCommand;
+		if (hatdotConfig.run.command) detectedStart = hatdotConfig.run.command;
+		if (hatdotConfig.run.port) detectedPort = hatdotConfig.run.port;
+
+		decisions.push({
+			stage: "hatdot_config",
+			decision: "Applied declarative hatdot.yaml project configuration",
+			reason: "Declarative project manifest took authority for build, runtime, and run commands.",
+			evidence: `Builder: ${hatdotConfig.build.builder || "auto"}, Port: ${detectedPort}`,
+		});
 	}
 
 	// 3. Package Manager & Runtime Resolution
@@ -798,7 +829,7 @@ export const resolveDeploymentPlan = (
 		inputsFingerprint: computeInputsFingerprint(app),
 		framework,
 		language,
-		builder: app.buildType || "nixpacks",
+		builder: hatdotConfig?.build.builder || app.buildType || "nixpacks",
 		deploymentStrategy: strategy,
 		rootDirectory: app.buildPath || "/",
 		publishDirectory: app.publishDirectory || undefined,
@@ -827,9 +858,13 @@ export const resolveDeploymentPlan = (
 		isHttpWorkload,
 		hostValidation,
 		healthStrategy: {
-			path: healthPath,
+			path:
+				hatdotConfig?.deploy?.healthcheck?.path ||
+				hatdotConfig?.run.healthcheckPath ||
+				healthPath,
 			expectedStatuses,
-			timeoutSeconds: 30,
+			timeoutSeconds:
+				hatdotConfig?.deploy?.healthcheck?.timeout || 30,
 		},
 		routing: {
 			primaryHost,
@@ -845,6 +880,8 @@ export const resolveDeploymentPlan = (
 		collectStaticCommand,
 		wsgiEntryPoint,
 		djangoSettingsModule,
+		systemPackages: hatdotConfig?.build.systemPackages || [],
+		hatdotConfigApplied,
 		decisions,
 		conflicts,
 		diagnostics,

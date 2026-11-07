@@ -175,11 +175,20 @@ export default async function handler(
 					eq(applications.owner, owner),
 					eq(applications.githubId, githubResult.githubId),
 				),
+				with: {
+					environment: {
+						with: {
+							project: true,
+						},
+					},
+				},
 			});
 
 			for (const app of apps) {
 				const jobData: DeploymentJob = {
 					applicationId: app.applicationId as string,
+					organizationId: app.environment?.project?.organizationId,
+					projectId: app.environment?.projectId,
 					titleLog: deploymentTitle,
 					descriptionLog: `Hash: ${deploymentHash}`,
 					type: "deploy",
@@ -218,11 +227,20 @@ export default async function handler(
 					eq(compose.owner, owner),
 					eq(compose.githubId, githubResult.githubId),
 				),
+				with: {
+					environment: {
+						with: {
+							project: true,
+						},
+					},
+				},
 			});
 
 			for (const composeApp of composeApps) {
 				const jobData: DeploymentJob = {
 					composeId: composeApp.composeId as string,
+					organizationId: composeApp.environment?.project?.organizationId,
+					projectId: composeApp.environment?.projectId,
 					titleLog: deploymentTitle,
 					type: "deploy",
 					applicationType: "compose",
@@ -299,11 +317,20 @@ export default async function handler(
 					eq(applications.owner, owner),
 					eq(applications.githubId, githubResult.githubId),
 				),
+				with: {
+					environment: {
+						with: {
+							project: true,
+						},
+					},
+				},
 			});
 
 			for (const app of apps) {
 				const jobData: DeploymentJob = {
 					applicationId: app.applicationId as string,
+					organizationId: app.environment?.project?.organizationId,
+					projectId: app.environment?.projectId,
 					titleLog: deploymentTitle,
 					descriptionLog: `Hash: ${deploymentHash}`,
 					type: "deploy",
@@ -351,11 +378,20 @@ export default async function handler(
 					eq(compose.owner, owner),
 					eq(compose.githubId, githubResult.githubId),
 				),
+				with: {
+					environment: {
+						with: {
+							project: true,
+						},
+					},
+				},
 			});
 
 			for (const composeApp of composeApps) {
 				const jobData: DeploymentJob = {
 					composeId: composeApp.composeId as string,
+					organizationId: composeApp.environment?.project?.organizationId,
+					projectId: composeApp.environment?.projectId,
 					titleLog: deploymentTitle,
 					type: "deploy",
 					applicationType: "compose",
@@ -476,6 +512,11 @@ export default async function handler(
 				),
 				with: {
 					previewDeployments: true,
+					environment: {
+						with: {
+							project: true,
+						},
+					},
 				},
 			});
 
@@ -587,6 +628,8 @@ export default async function handler(
 
 				const jobData: DeploymentJob = {
 					applicationId: app.applicationId as string,
+					organizationId: app.environment?.project?.organizationId,
+					projectId: app.environment?.projectId,
 					titleLog: "Preview Deployment",
 					descriptionLog: `Hash: ${deploymentHash}`,
 					type: "deploy",

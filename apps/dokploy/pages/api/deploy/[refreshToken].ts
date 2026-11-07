@@ -262,6 +262,8 @@ export default async function handler(
 		try {
 			const jobData: DeploymentJob = {
 				applicationId: application.applicationId as string,
+				organizationId: application.environment?.project?.organizationId,
+				projectId: application.environment?.projectId,
 				titleLog: deploymentTitle,
 				...(deploymentHash && { descriptionLog: `Hash: ${deploymentHash}` }),
 				type: "deploy",

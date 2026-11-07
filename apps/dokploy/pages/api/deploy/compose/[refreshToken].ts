@@ -185,6 +185,8 @@ export default async function handler(
 		try {
 			const jobData: DeploymentJob = {
 				composeId: composeResult.composeId as string,
+				organizationId: composeResult.environment?.project?.organizationId,
+				projectId: composeResult.environment?.projectId,
 				titleLog: deploymentTitle,
 				type: "deploy",
 				applicationType: "compose",

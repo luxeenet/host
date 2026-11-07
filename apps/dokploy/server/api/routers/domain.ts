@@ -161,6 +161,8 @@ export const domainRouter = createTRPCRouter({
 						} else {
 							const jobData: DeploymentJob = {
 								applicationId: input.applicationId,
+								organizationId: ctx.session.activeOrganizationId || app.environment?.project?.organizationId,
+								projectId: app.environment?.projectId,
 								titleLog: `Domain replacement: ${createdDomain.host}`,
 								descriptionLog: `Automated redeployment replacing primary domain with ${createdDomain.host}`,
 								type: "deploy",
@@ -569,6 +571,8 @@ export const domainRouter = createTRPCRouter({
 				if (isApplicationDeployed(app) && app.applicationStatus !== "running") {
 					const jobData: DeploymentJob = {
 						applicationId: domain.applicationId,
+						organizationId: ctx.session.activeOrganizationId || app.environment?.project?.organizationId,
+						projectId: app.environment?.projectId,
 						titleLog: `Primary domain update: ${domain.host}`,
 						descriptionLog: `Automated redeployment for primary domain change to ${domain.host}`,
 						type: "deploy",

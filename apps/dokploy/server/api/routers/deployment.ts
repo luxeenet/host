@@ -117,8 +117,36 @@ export const deploymentRouter = createTRPCRouter({
 			rows = jobRows;
 		}
 
+		// Enforce strict tenant boundary: Customer A must never see Customer B's jobs or metadata
+		const isPlatformAdmin = Boolean(
+			(ctx.user as any)?.isPlatformAdmin || ctx.user?.role === "owner",
+		);
+
+		const tenantRows: typeof rows = [];
+		for (const row of rows) {
+			const data = (row.data ?? {}) as Record<string, unknown>;
+			let jobOrgId = (data.organizationId as string | undefined) ?? null;
+
+			if (!jobOrgId) {
+				// Fallback lookup from database if organizationId was not injected in legacy job
+				try {
+					if (data.applicationId) {
+						const app = await findApplicationById(data.applicationId as string);
+						jobOrgId = app?.environment?.project?.organizationId ?? null;
+					} else if (data.composeId) {
+						const comp = await findComposeById(data.composeId as string);
+						jobOrgId = comp?.environment?.project?.organizationId ?? null;
+					}
+				} catch {}
+			}
+
+			if (jobOrgId === orgId || (!jobOrgId && isPlatformAdmin)) {
+				tenantRows.push(row);
+			}
+		}
+
 		return Promise.all(
-			rows.map(async (row) => ({
+			tenantRows.map(async (row) => ({
 				...row,
 				servicePath: await resolveServicePath(
 					orgId,

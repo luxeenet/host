@@ -80,6 +80,8 @@ export const previewDeploymentRouter = createTRPCRouter({
 			);
 			const jobData: DeploymentJob = {
 				applicationId: previewDeployment.applicationId,
+				organizationId: ctx.session.activeOrganizationId || application.environment?.project?.organizationId,
+				projectId: application.environment?.projectId,
 				titleLog: input.title || "Rebuild Preview Deployment",
 				descriptionLog: input.description || "",
 				type: "redeploy",

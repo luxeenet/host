@@ -294,6 +294,8 @@ export const applicationRouter = createTRPCRouter({
 
 			const jobData: DeploymentJob = {
 				applicationId: newApplication.applicationId,
+				organizationId: ctx.session.activeOrganizationId,
+				projectId: (newApplication as any).environment?.projectId,
 				titleLog: "Onboarding quickstart deployment",
 				descriptionLog: "",
 				type: "deploy",
@@ -539,6 +541,8 @@ export const applicationRouter = createTRPCRouter({
 			);
 			const jobData: DeploymentJob = {
 				applicationId: input.applicationId,
+				organizationId: ctx.session.activeOrganizationId || application.environment?.project?.organizationId,
+				projectId: application.environment?.projectId,
 				titleLog: input.title || "Rebuild deployment",
 				descriptionLog: input.description || "",
 				type: "redeploy",
@@ -966,6 +970,8 @@ export const applicationRouter = createTRPCRouter({
 			);
 			const jobData: DeploymentJob = {
 				applicationId: input.applicationId,
+				organizationId: ctx.session.activeOrganizationId || application.environment?.project?.organizationId,
+				projectId: application.environment?.projectId,
 				titleLog: input.title || "Manual deployment",
 				descriptionLog: input.description || "",
 				type: "deploy",
@@ -1032,7 +1038,7 @@ export const applicationRouter = createTRPCRouter({
 				deployment: ["cancel"],
 			});
 			const application = await findApplicationById(input.applicationId);
-			await killDockerBuild("application", application.serverId);
+			await killDockerBuild("application", application.serverId, application.appName);
 			await audit(ctx, {
 				action: "stop",
 				resourceType: "application",
@@ -1106,6 +1112,8 @@ export const applicationRouter = createTRPCRouter({
 			});
 			const jobData: DeploymentJob = {
 				applicationId: app.applicationId,
+				organizationId: ctx.session.activeOrganizationId || app.environment?.project?.organizationId,
+				projectId: app.environment?.projectId,
 				titleLog: "Manual deployment",
 				descriptionLog: "",
 				type: "deploy",

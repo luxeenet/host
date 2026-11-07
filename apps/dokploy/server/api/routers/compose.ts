@@ -343,7 +343,7 @@ export const composeRouter = createTRPCRouter({
 				deployment: ["cancel"],
 			});
 			const compose = await findComposeById(input.composeId);
-			await killDockerBuild("compose", compose.serverId);
+			await killDockerBuild("compose", compose.serverId, compose.appName);
 		}),
 
 	loadServices: protectedProcedure
@@ -456,6 +456,8 @@ export const composeRouter = createTRPCRouter({
 
 			const jobData: DeploymentJob = {
 				composeId: input.composeId,
+				organizationId: ctx.session.activeOrganizationId || compose.environment?.project?.organizationId,
+				projectId: compose.environment?.projectId,
 				titleLog: input.title || "Manual deployment",
 				type: "deploy",
 				applicationType: "compose",
@@ -506,6 +508,8 @@ export const composeRouter = createTRPCRouter({
 			const compose = await findComposeById(input.composeId);
 			const jobData: DeploymentJob = {
 				composeId: input.composeId,
+				organizationId: ctx.session.activeOrganizationId || compose.environment?.project?.organizationId,
+				projectId: compose.environment?.projectId,
 				titleLog: input.title || "Rebuild deployment",
 				type: "redeploy",
 				applicationType: "compose",

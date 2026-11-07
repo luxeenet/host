@@ -8,7 +8,7 @@ import { LOCAL_PARTITION } from "./in-memory-queue";
  * Resolve the effective builds concurrency for a queue partition.
  *
  * - `LOCAL_PARTITION` -> concurrency stored on the web server settings (the
- *   local Dokploy web server).
+ *   local Dokploy/HatDot web server).
  * - any other partition -> concurrency stored on the matching `server` row.
  */
 export const resolveBuildsConcurrency = async (
@@ -31,6 +31,30 @@ export const resolveBuildsConcurrency = async (
 			error,
 		);
 		return 1;
+	}
+};
+
+/**
+ * Resolve the maximum concurrent builds allowed for a single tenant within a partition.
+ * Guarantees that no single tenant can starve the platform by consuming all worker slots.
+ */
+export const resolveTenantBuildsConcurrency = async (
+	partition: string,
+	_tenantId: string,
+): Promise<number> => {
+	try {
+		const envTenantVal = process.env.HATDOT_TENANT_CONCURRENCY
+			? parseInt(process.env.HATDOT_TENANT_CONCURRENCY, 10)
+			: NaN;
+		if (!isNaN(envTenantVal) && envTenantVal >= 1) {
+			return normalize(envTenantVal);
+		}
+
+		const globalLimit = await resolveBuildsConcurrency(partition);
+		// Each tenant is granted up to half the global concurrency or at least 2 concurrent builds
+		return Math.max(1, Math.min(2, Math.floor(globalLimit / 2)));
+	} catch {
+		return 2;
 	}
 };
 

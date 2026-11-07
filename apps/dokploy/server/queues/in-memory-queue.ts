@@ -52,6 +52,10 @@ export const getGroup = (data: DeploymentJob): string => {
 	return `application:${data.applicationId}`;
 };
 
+/** Resolve the tenant / organization a job belongs to. */
+export const getTenant = (data: DeploymentJob): string =>
+	data.organizationId || "__default__";
+
 interface InternalJob {
 	id: string;
 	name: string;
@@ -63,6 +67,7 @@ interface InternalJob {
 	state: JobState;
 	partition: string;
 	group: string;
+	tenant: string;
 }
 
 interface Partition {
@@ -70,6 +75,8 @@ interface Partition {
 	/** Groups currently running in this partition. */
 	activeGroups: Set<string>;
 	active: InternalJob[];
+	draining?: boolean;
+	needsDrain?: boolean;
 }
 
 export interface InMemoryQueueOptions {
@@ -79,6 +86,16 @@ export interface InMemoryQueueOptions {
 	 * picked up without restarting the queue. Must return a value >= 1.
 	 */
 	resolveConcurrency: (partition: string) => Promise<number> | number;
+	/**
+	 * Returns the max number of concurrent jobs allowed for a single tenant
+	 * within a partition. Defaults to global concurrency if unconfigured.
+	 */
+	resolveTenantConcurrency?: (
+		partition: string,
+		tenantId: string,
+	) => Promise<number> | number;
+	/** Optional hard ceiling per tenant across all scheduling ticks. */
+	maxConcurrentPerTenant?: number;
 	/** Monotonic clock; injectable for tests. Defaults to Date.now. */
 	now?: () => number;
 }
@@ -89,10 +106,14 @@ export class InMemoryQueue {
 	private running = false;
 	private seq = 0;
 	private readonly resolveConcurrency: InMemoryQueueOptions["resolveConcurrency"];
+	private readonly resolveTenantConcurrency?: InMemoryQueueOptions["resolveTenantConcurrency"];
+	private readonly maxConcurrentPerTenant?: number;
 	private readonly now: () => number;
 
 	constructor(options: InMemoryQueueOptions) {
 		this.resolveConcurrency = options.resolveConcurrency;
+		this.resolveTenantConcurrency = options.resolveTenantConcurrency;
+		this.maxConcurrentPerTenant = options.maxConcurrentPerTenant;
 		this.now = options.now ?? (() => Date.now());
 	}
 
@@ -147,6 +168,7 @@ export class InMemoryQueue {
 			state: "waiting",
 			partition: partitionKey,
 			group: getGroup(data),
+			tenant: getTenant(data),
 		};
 		partition.waiting.push(job);
 		this.schedule();
@@ -234,24 +256,90 @@ export class InMemoryQueue {
 	private async drainPartition(key: string) {
 		const partition = this.partitions.get(key);
 		if (!partition || !this.processor) return;
+		if (partition.draining) {
+			partition.needsDrain = true;
+			return;
+		}
 
-		const concurrency = Math.max(1, await this.resolveConcurrency(key));
+		partition.draining = true;
+		try {
+			const concurrency = Math.max(1, await this.resolveConcurrency(key));
+			const tenantLimits = new Map<string, number>();
 
-		while (partition.active.length < concurrency) {
-			// First waiting job whose group is not already running.
-			const index = partition.waiting.findIndex(
-				(job) => !partition.activeGroups.has(job.group),
-			);
-			if (index === -1) break;
+			while (partition.active.length < concurrency) {
+				// Count active jobs per tenant in this partition
+				const activePerTenant = new Map<string, number>();
+				for (const activeJob of partition.active) {
+					activePerTenant.set(
+						activeJob.tenant,
+						(activePerTenant.get(activeJob.tenant) || 0) + 1,
+					);
+				}
 
-			const job = partition.waiting.splice(index, 1)[0];
-			if (!job) break;
-			job.state = "active";
-			job.processedOn = this.now();
-			partition.activeGroups.add(job.group);
-			partition.active.push(job);
+				// Find all eligible waiting jobs:
+				// 1. Group (service) is not currently running in this partition (service serialization)
+				// 2. Tenant has not exceeded its concurrency limit
+				let bestIndex = -1;
+				let lowestActiveLoad = Infinity;
 
-			void this.runJob(job);
+				for (let i = 0; i < partition.waiting.length; i++) {
+					const candidate = partition.waiting[i]!;
+					if (partition.activeGroups.has(candidate.group)) {
+						continue;
+					}
+
+					const tenantActiveCount = activePerTenant.get(candidate.tenant) || 0;
+					let maxTenantConcurrency = tenantLimits.get(candidate.tenant);
+					if (maxTenantConcurrency === undefined) {
+						if (this.resolveTenantConcurrency) {
+							maxTenantConcurrency = Math.max(
+								1,
+								await this.resolveTenantConcurrency(key, candidate.tenant),
+							);
+						} else if (typeof this.maxConcurrentPerTenant === "number") {
+							maxTenantConcurrency = Math.max(1, this.maxConcurrentPerTenant);
+						} else {
+							maxTenantConcurrency = concurrency;
+						}
+						tenantLimits.set(candidate.tenant, maxTenantConcurrency);
+					}
+
+					if (tenantActiveCount >= maxTenantConcurrency) {
+						continue;
+					}
+
+					// Fair scheduling: pick candidate whose tenant has fewest active jobs
+					if (tenantActiveCount < lowestActiveLoad) {
+						lowestActiveLoad = tenantActiveCount;
+						bestIndex = i;
+						// Minimum possible load is 0 - earliest candidate with 0 active is optimal
+						if (lowestActiveLoad === 0) {
+							break;
+						}
+					}
+				}
+
+				if (bestIndex === -1) {
+					// No eligible jobs available for scheduling at this tick
+					break;
+				}
+
+				const job = partition.waiting.splice(bestIndex, 1)[0];
+				if (!job) break;
+
+				job.state = "active";
+				job.processedOn = this.now();
+				partition.activeGroups.add(job.group);
+				partition.active.push(job);
+
+				void this.runJob(job);
+			}
+		} finally {
+			partition.draining = false;
+			if (partition.needsDrain) {
+				partition.needsDrain = false;
+				void this.drainPartition(key);
+			}
 		}
 	}
 

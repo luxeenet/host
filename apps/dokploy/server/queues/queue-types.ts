@@ -1,6 +1,9 @@
 type DeployJob =
 	| {
 			applicationId: string;
+			organizationId?: string;
+			projectId?: string;
+			deploymentId?: string;
 			titleLog: string;
 			descriptionLog: string;
 			server?: boolean;
@@ -14,6 +17,9 @@ type DeployJob =
 	  }
 	| {
 			composeId: string;
+			organizationId?: string;
+			projectId?: string;
+			deploymentId?: string;
 			titleLog: string;
 			descriptionLog: string;
 			server?: boolean;
@@ -28,6 +34,9 @@ type DeployJob =
 	  }
 	| {
 			applicationId: string;
+			organizationId?: string;
+			projectId?: string;
+			deploymentId?: string;
 			titleLog: string;
 			descriptionLog: string;
 			server?: boolean;

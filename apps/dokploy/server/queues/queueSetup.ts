@@ -1,11 +1,12 @@
+import os from "node:os";
 import { IS_CLOUD } from "@dokploy/server";
 import {
 	execAsync,
 	execAsyncRemote,
 } from "@dokploy/server/utils/process/execAsync";
-import { resolveBuildsConcurrency } from "./concurrency";
+import { resolveBuildsConcurrency, resolveTenantBuildsConcurrency } from "./concurrency";
 import { processDeploymentJob } from "./deployments-queue";
-import { type InMemoryJob, InMemoryQueue } from "./in-memory-queue";
+import { type InMemoryJob, InMemoryQueue, LOCAL_PARTITION } from "./in-memory-queue";
 import type { DeploymentJob } from "./queue-types";
 
 /**
@@ -42,7 +43,33 @@ const createNoopQueue = (): DeploymentQueue => ({
 
 const createInMemoryQueue = (): DeploymentQueue => {
 	const queue = new InMemoryQueue({
-		resolveConcurrency: resolveBuildsConcurrency,
+		resolveConcurrency: async (partition) => {
+			const resolved = await resolveBuildsConcurrency(partition);
+			if (partition === LOCAL_PARTITION) {
+				const envVal = process.env.HATDOT_MAX_CONCURRENT_BUILDS
+					? parseInt(process.env.HATDOT_MAX_CONCURRENT_BUILDS, 10)
+					: NaN;
+				if (!isNaN(envVal) && envVal >= 1) {
+					return envVal;
+				}
+				if (resolved > 1) {
+					return resolved;
+				}
+				const cpuCount = typeof os !== "undefined" && os.cpus ? os.cpus().length : 4;
+				return Math.max(4, cpuCount);
+			}
+			return resolved;
+		},
+		resolveTenantConcurrency: async (partition, tenantId) => {
+			const envTenant = process.env.HATDOT_TENANT_CONCURRENCY
+				? parseInt(process.env.HATDOT_TENANT_CONCURRENCY, 10)
+				: NaN;
+			if (!isNaN(envTenant) && envTenant >= 1) {
+				return envTenant;
+			}
+			const globalLim = await resolveBuildsConcurrency(partition);
+			return Math.max(1, Math.min(2, Math.floor(Math.max(4, globalLim) / 2)));
+		},
 	});
 	queue.process(processDeploymentJob);
 
@@ -123,27 +150,32 @@ export const cleanAllDeploymentQueue = async () => {
 export const killDockerBuild = async (
 	type: "application" | "compose",
 	serverId: string | null,
+	appName?: string,
 ) => {
 	try {
-		if (type === "application") {
-			const command = `pkill -2 -f "docker build"`;
+		if (!appName) {
+			console.warn(
+				"[killDockerBuild] Aborting kill: appName must be provided to avoid killing concurrent customer builds.",
+			);
+			return;
+		}
 
-			if (serverId) {
-				await execAsyncRemote(serverId, command);
-			} else {
-				await execAsync(command);
-			}
-		} else if (type === "compose") {
-			const command = `pkill -2 -f "docker compose"`;
+		// Sanitize appName to alphanumeric, hyphens, and underscores to prevent shell injection
+		const safeAppName = appName.replace(/[^a-zA-Z0-9_-]/g, "");
+		if (!safeAppName) return;
 
-			if (serverId) {
-				await execAsyncRemote(serverId, command);
-			} else {
-				await execAsync(command);
-			}
+		// Targeted kill: send SIGINT/SIGTERM only to processes matching the specific application/compose name
+		// This terminates docker build, nixpacks, or compose processes for THIS service only,
+		// without touching any other customer's concurrent builds.
+		const command = `pkill -15 -f "${safeAppName}" || pkill -2 -f "${safeAppName}"`;
+
+		if (serverId) {
+			await execAsyncRemote(serverId, command);
+		} else {
+			await execAsync(command);
 		}
 	} catch (error) {
-		console.error(error);
+		console.error("[killDockerBuild] Error terminating build:", error);
 	}
 };
 

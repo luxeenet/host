@@ -253,6 +253,56 @@ export class InMemoryQueue {
 		}
 	}
 
+	private async findNextEligibleJobIndex(
+		key: string,
+		partition: Partition,
+		concurrency: number,
+		tenantLimits: Map<string, number>,
+		activePerTenant: Map<string, number>,
+	): Promise<number> {
+		let selectedIndex = -1;
+		let lowestActiveLoad = Infinity;
+
+		for (let i = 0; i < partition.waiting.length; i++) {
+			const candidate = partition.waiting[i]!;
+			if (partition.activeGroups.has(candidate.group)) {
+				continue;
+			}
+
+			const tenantActiveCount = activePerTenant.get(candidate.tenant) || 0;
+			let maxTenantConcurrency = tenantLimits.get(candidate.tenant);
+			if (maxTenantConcurrency === undefined) {
+				if (this.resolveTenantConcurrency) {
+					maxTenantConcurrency = Math.max(
+						1,
+						await this.resolveTenantConcurrency(key, candidate.tenant),
+					);
+				} else if (typeof this.maxConcurrentPerTenant === "number") {
+					maxTenantConcurrency = Math.max(1, this.maxConcurrentPerTenant);
+				} else {
+					maxTenantConcurrency = concurrency;
+				}
+				tenantLimits.set(candidate.tenant, maxTenantConcurrency);
+			}
+
+			if (tenantActiveCount >= maxTenantConcurrency) {
+				continue;
+			}
+
+			// Fair scheduling: pick candidate whose tenant has fewest active jobs
+			if (tenantActiveCount < lowestActiveLoad) {
+				lowestActiveLoad = tenantActiveCount;
+				selectedIndex = i;
+				// Minimum possible load is 0 - earliest candidate with 0 active is optimal
+				if (lowestActiveLoad === 0) {
+					break;
+				}
+			}
+		}
+
+		return selectedIndex;
+	}
+
 	private async drainPartition(key: string) {
 		const partition = this.partitions.get(key);
 		if (!partition || !this.processor) return;
@@ -276,55 +326,21 @@ export class InMemoryQueue {
 					);
 				}
 
-				// Find all eligible waiting jobs:
-				// 1. Group (service) is not currently running in this partition (service serialization)
-				// 2. Tenant has not exceeded its concurrency limit
-				let bestIndex = -1;
-				let lowestActiveLoad = Infinity;
+				// Find next eligible waiting job using fair scheduling
+				const nextJobIndex = await this.findNextEligibleJobIndex(
+					key,
+					partition,
+					concurrency,
+					tenantLimits,
+					activePerTenant,
+				);
 
-				for (let i = 0; i < partition.waiting.length; i++) {
-					const candidate = partition.waiting[i]!;
-					if (partition.activeGroups.has(candidate.group)) {
-						continue;
-					}
-
-					const tenantActiveCount = activePerTenant.get(candidate.tenant) || 0;
-					let maxTenantConcurrency = tenantLimits.get(candidate.tenant);
-					if (maxTenantConcurrency === undefined) {
-						if (this.resolveTenantConcurrency) {
-							maxTenantConcurrency = Math.max(
-								1,
-								await this.resolveTenantConcurrency(key, candidate.tenant),
-							);
-						} else if (typeof this.maxConcurrentPerTenant === "number") {
-							maxTenantConcurrency = Math.max(1, this.maxConcurrentPerTenant);
-						} else {
-							maxTenantConcurrency = concurrency;
-						}
-						tenantLimits.set(candidate.tenant, maxTenantConcurrency);
-					}
-
-					if (tenantActiveCount >= maxTenantConcurrency) {
-						continue;
-					}
-
-					// Fair scheduling: pick candidate whose tenant has fewest active jobs
-					if (tenantActiveCount < lowestActiveLoad) {
-						lowestActiveLoad = tenantActiveCount;
-						bestIndex = i;
-						// Minimum possible load is 0 - earliest candidate with 0 active is optimal
-						if (lowestActiveLoad === 0) {
-							break;
-						}
-					}
-				}
-
-				if (bestIndex === -1) {
+				if (nextJobIndex === -1) {
 					// No eligible jobs available for scheduling at this tick
 					break;
 				}
 
-				const job = partition.waiting.splice(bestIndex, 1)[0];
+				const job = partition.waiting.splice(nextJobIndex, 1)[0];
 				if (!job) break;
 
 				job.state = "active";

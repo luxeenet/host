@@ -61,6 +61,11 @@ export const DockerTerminalModal = ({
 		},
 	);
 
+	const { data: userAuth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(userAuth as any)?.user?.isPlatformAdmin || (userAuth as any)?.isPlatformAdmin,
+	);
+
 	const [containerId, setContainerId] = useState<string | undefined>();
 	const [mainDialogOpen, setMainDialogOpen] = useState(false);
 	const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -96,9 +101,9 @@ export const DockerTerminalModal = ({
 				onEscapeKeyDown={(event) => event.preventDefault()}
 			>
 				<DialogHeader>
-					<DialogTitle>Docker Terminal</DialogTitle>
+					<DialogTitle>Application Terminal</DialogTitle>
 					<DialogDescription>
-						Easy way to access to docker container
+						Connected to: <span className="font-semibold text-foreground">{appName}</span>
 					</DialogDescription>
 				</DialogHeader>
 				<Select onValueChange={setContainerId} value={containerId}>
@@ -109,23 +114,25 @@ export const DockerTerminalModal = ({
 								<Loader2 className="animate-spin size-4" />
 							</div>
 						) : (
-							<SelectValue placeholder="Select a container" />
+							<SelectValue placeholder="Select Application Instance" />
 						)}
 					</SelectTrigger>
 					<SelectContent>
 						<SelectGroup>
-							{data?.map((container) => (
+							{data?.map((container, index) => (
 								<SelectItem
 									key={container.containerId}
 									value={container.containerId}
 								>
-									{container.name} ({container.containerId}){" "}
+									{isPlatformAdmin
+										? `${container.name} (${container.containerId.slice(0, 12)})`
+										: `Instance ${index + 1}`}{" "}
 									<Badge variant={badgeStateColor(container.state)}>
 										{container.state}
 									</Badge>
 								</SelectItem>
 							))}
-							<SelectLabel>Containers ({data?.length})</SelectLabel>
+							<SelectLabel>Application Instances ({data?.length})</SelectLabel>
 						</SelectGroup>
 					</SelectContent>
 				</Select>
@@ -139,10 +146,10 @@ export const DockerTerminalModal = ({
 					<DialogContent onEscapeKeyDown={(event) => event.preventDefault()}>
 						<DialogHeader>
 							<DialogTitle>
-								Are you sure you want to close the terminal?
+								Are you sure you want to close this terminal session?
 							</DialogTitle>
 							<DialogDescription>
-								By clicking the confirm button, the terminal will be closed.
+								By clicking confirm, the active terminal session to this application will be closed.
 							</DialogDescription>
 						</DialogHeader>
 						<DialogFooter>

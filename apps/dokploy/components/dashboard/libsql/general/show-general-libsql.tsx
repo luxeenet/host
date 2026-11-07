@@ -244,7 +244,7 @@ export const ShowGeneralLibsql = ({ libsqlId }: Props) => {
 								</TooltipTrigger>
 								<TooltipPrimitive.Portal>
 									<TooltipContent sideOffset={5} className="z-60">
-										<p>Open a terminal to the LibSQL container</p>
+										<p>Open a terminal to the LibSQL instance</p>
 									</TooltipContent>
 								</TooltipPrimitive.Portal>
 							</Tooltip>

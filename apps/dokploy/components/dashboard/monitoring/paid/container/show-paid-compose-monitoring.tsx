@@ -74,7 +74,7 @@ export const ComposePaidMonitoring = ({
 					<CardDescription>Watch the usage of your compose</CardDescription>
 				</CardHeader>
 				<CardContent className="flex flex-col gap-4">
-					<Label>Select a container to watch the monitoring</Label>
+					<Label>Select a service to view monitoring</Label>
 					<div className="flex flex-row gap-4">
 						<Select
 							onValueChange={(value) => {
@@ -93,7 +93,7 @@ export const ComposePaidMonitoring = ({
 										<Loader2 className="animate-spin size-4" />
 									</div>
 								) : (
-									<SelectValue placeholder="Select a container" />
+									<SelectValue placeholder="Select a service" />
 								)}
 							</SelectTrigger>
 							<SelectContent>
@@ -103,13 +103,13 @@ export const ComposePaidMonitoring = ({
 											key={container.containerId}
 											value={container.name}
 										>
-											{container.name} ({container.containerId}){" "}
+											{container.name}{" "}
 											<Badge variant={badgeStateColor(container.state)}>
 												{container.state}
 											</Badge>
 										</SelectItem>
 									))}
-									<SelectLabel>Containers ({data?.length})</SelectLabel>
+									<SelectLabel>Services ({data?.length})</SelectLabel>
 								</SelectGroup>
 							</SelectContent>
 						</Select>
@@ -117,9 +117,9 @@ export const ComposePaidMonitoring = ({
 							isLoading={isRestarting}
 							onClick={async () => {
 								if (!containerId) return;
-								toast.success(`Restarting container ${containerAppName}`);
+								toast.success(`Restarting ${containerAppName}`);
 								await restart({ containerId }).then(() => {
-									toast.success("Container restarted");
+									toast.success("Service restarted");
 								});
 							}}
 						>

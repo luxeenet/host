@@ -614,7 +614,7 @@ export class PlanEntitlementService {
 			return {
 				allowed: false,
 				reason:
-					"Terminal access is not included in your current plan. Please upgrade to access container terminals.",
+					"Terminal access is not included in your current plan. Please upgrade to access application terminals.",
 			};
 		}
 

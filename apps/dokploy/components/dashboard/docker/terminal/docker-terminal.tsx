@@ -13,6 +13,7 @@ interface Props {
 	containerId?: string;
 	serverId?: string;
 	serviceId?: string;
+	appName?: string;
 }
 
 // Sentinel the container-picker modal renders with before a real container
@@ -24,6 +25,7 @@ export const DockerTerminal: React.FC<Props> = ({
 	containerId,
 	serverId,
 	serviceId,
+	appName,
 }) => {
 	const termRef = useRef(null);
 	const [activeWay, setActiveWay] = React.useState<string | undefined>("bash");
@@ -70,7 +72,7 @@ export const DockerTerminal: React.FC<Props> = ({
 			addonFit.fit();
 
 			const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-			const wsUrl = `${protocol}//${window.location.host}/docker-container-terminal?containerId=${containerId}&activeWay=${activeWay}&cols=${term.cols}&rows=${term.rows}${serverId ? `&serverId=${serverId}` : ""}${serviceId ? `&serviceId=${serviceId}` : ""}`;
+			const wsUrl = `${protocol}//${window.location.host}/docker-container-terminal?containerId=${containerId}&activeWay=${activeWay}&cols=${term.cols}&rows=${term.rows}${serverId ? `&serverId=${serverId}` : ""}${serviceId ? `&serviceId=${serviceId}` : ""}${appName ? `&appName=${encodeURIComponent(appName)}` : ""}`;
 
 			ws = new WebSocket(wsUrl);
 			const addonAttach = new AttachAddon(ws);

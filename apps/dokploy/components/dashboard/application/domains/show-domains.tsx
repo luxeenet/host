@@ -626,7 +626,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 																</Badge>
 															</TooltipTrigger>
 															<TooltipContent>
-																<p>Container port exposed</p>
+																<p>Internal service port</p>
 															</TooltipContent>
 														</Tooltip>
 													</TooltipProvider>

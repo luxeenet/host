@@ -55,6 +55,11 @@ interface Props {
 }
 
 export const ShowDockerLogs = ({ appName, serverId, serviceId }: Props) => {
+	const { data: userAuth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(userAuth as any)?.user?.isPlatformAdmin || (userAuth as any)?.isPlatformAdmin,
+	);
+
 	const [containerId, setContainerId] = useState<string | undefined>();
 	const [option, setOption] = useState<"swarm" | "native">("native");
 
@@ -95,50 +100,54 @@ export const ShowDockerLogs = ({ appName, serverId, serviceId }: Props) => {
 	return (
 		<Card className="bg-background">
 			<CardHeader>
-				<CardTitle className="text-xl">Logs</CardTitle>
+				<CardTitle className="text-xl">Application Logs</CardTitle>
 				<CardDescription>
-					Watch the logs of the application in real time
+					Watch live streaming runtime logs for {appName}
 				</CardDescription>
 			</CardHeader>
 
 			<CardContent className="flex flex-col gap-4">
 				<div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-					<Label>Select a container to view logs</Label>
-					<div className="flex flex-row gap-2 items-center">
-						<span className="text-sm text-muted-foreground">
-							{option === "native" ? "Native" : "Swarm"}
-						</span>
-						<Switch
-							checked={option === "native"}
-							onCheckedChange={(checked) => {
-								setContainerId(undefined);
-								setOption(checked ? "native" : "swarm");
-							}}
-						/>
-					</div>
+					<Label>Select Application Instance</Label>
+					{isPlatformAdmin && (
+						<div className="flex flex-row gap-2 items-center">
+							<span className="text-sm text-muted-foreground">
+								{option === "native" ? "Native Engine" : "Swarm Cluster"}
+							</span>
+							<Switch
+								checked={option === "native"}
+								onCheckedChange={(checked) => {
+									setContainerId(undefined);
+									setOption(checked ? "native" : "swarm");
+								}}
+							/>
+						</div>
+					)}
 				</div>
 
 				<Select onValueChange={setContainerId} value={containerId}>
 					<SelectTrigger>
 						{isLoading ? (
 							<div className="flex flex-row gap-2 items-center justify-center text-sm text-muted-foreground">
-								<span>Loading...</span>
+								<span>Loading instances...</span>
 								<Loader2 className="animate-spin size-4" />
 							</div>
 						) : (
-							<SelectValue placeholder="Select a container" />
+							<SelectValue placeholder="Select Application Instance" />
 						)}
 					</SelectTrigger>
 					<SelectContent>
 						<SelectGroup>
 							{option === "native" ? (
 								<div>
-									{containers?.map((container) => (
+									{containers?.map((container, index) => (
 										<SelectItem
 											key={container.containerId}
 											value={container.containerId}
 										>
-											{container.name} ({container.containerId}){" "}
+											{isPlatformAdmin
+												? `${container.name} (${container.containerId.slice(0, 12)})`
+												: `Instance ${index + 1}`}{" "}
 											<Badge variant={badgeStateColor(container.state)}>
 												{container.state}
 											</Badge>
@@ -148,13 +157,14 @@ export const ShowDockerLogs = ({ appName, serverId, serviceId }: Props) => {
 								</div>
 							) : (
 								<>
-									{services?.map((container) => (
+									{services?.map((container, index) => (
 										<SelectItem
 											key={container.containerId}
 											value={container.containerId}
 										>
-											{container.name} ({container.containerId}@{container.node}
-											)
+											{isPlatformAdmin
+												? `${container.name} (${container.containerId.slice(0, 12)}@${container.node})`
+												: `Instance ${index + 1}`}{" "}
 											<Badge variant={badgeStateColor(container.state)}>
 												{container.state}
 											</Badge>
@@ -166,7 +176,7 @@ export const ShowDockerLogs = ({ appName, serverId, serviceId }: Props) => {
 								</>
 							)}
 
-							<SelectLabel>Containers ({containersLength})</SelectLabel>
+							<SelectLabel>Active Instances ({containersLength})</SelectLabel>
 						</SelectGroup>
 					</SelectContent>
 				</Select>

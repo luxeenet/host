@@ -263,7 +263,7 @@ export const HealthCheckForm = ({ id, type }: HealthCheckFormProps) => {
 						<FormItem>
 							<FormLabel>Retries</FormLabel>
 							<FormDescription>
-								Number of consecutive failures needed to consider container
+								Number of consecutive failures needed to consider application instance
 								unhealthy
 							</FormDescription>
 							<FormControl>

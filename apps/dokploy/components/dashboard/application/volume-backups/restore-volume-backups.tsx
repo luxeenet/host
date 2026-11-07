@@ -167,7 +167,7 @@ export const RestoreVolumeBackups = ({
 						Select a destination and search for volume backup files
 					</DialogDescription>
 					<AlertBlock>
-						Make sure the volume name is not being used by another container.
+						Make sure the volume name is not being used by another application.
 					</AlertBlock>
 				</DialogHeader>
 

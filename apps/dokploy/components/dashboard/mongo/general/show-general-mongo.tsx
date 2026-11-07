@@ -244,7 +244,7 @@ export const ShowGeneralMongo = ({ mongoId }: Props) => {
 								</TooltipTrigger>
 								<TooltipPrimitive.Portal>
 									<TooltipContent sideOffset={5} className="z-60">
-										<p>Open a terminal to the MongoDB container</p>
+										<p>Open a terminal to the MongoDB instance</p>
 									</TooltipContent>
 								</TooltipPrimitive.Portal>
 							</Tooltip>

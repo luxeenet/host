@@ -631,7 +631,7 @@ export const HandleSchedules = ({ id, scheduleId, scheduleType }: Props) => {
 												<Input placeholder="npm run backup" {...field} />
 											</FormControl>
 											<FormDescription>
-												The command to execute in your container
+												The command to execute in your application
 											</FormDescription>
 											<FormMessage />
 										</FormItem>

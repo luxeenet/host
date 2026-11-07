@@ -454,7 +454,7 @@ export const ShowResources = ({ id, type }: Props) => {
 												</TooltipTrigger>
 												<TooltipContent className="max-w-xs">
 													<p>
-														Set resource limits for the container. Each ulimit has
+														Set system resource limits for the application instance. Each ulimit has
 														a soft limit (warning threshold) and hard limit
 														(maximum allowed). Use -1 for unlimited.
 													</p>

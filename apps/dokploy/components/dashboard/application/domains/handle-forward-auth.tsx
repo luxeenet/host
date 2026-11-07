@@ -101,7 +101,7 @@ export const HandleForwardAuth = ({ domainId, applicationId }: Props) => {
 						<span className="font-medium">Requirements</span>
 						<ol className="list-decimal pl-4 text-sm">
 							<li>
-								The authentication proxy container must be deployed and running
+								The authentication proxy service must be deployed and running
 								on this app's server. Configure it under{" "}
 								<span className="font-medium">
 									Settings → SSO → Application Authentication

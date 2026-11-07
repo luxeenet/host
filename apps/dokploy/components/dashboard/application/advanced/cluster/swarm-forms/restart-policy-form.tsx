@@ -135,7 +135,7 @@ export const RestartPolicyForm = ({ id, type }: RestartPolicyFormProps) => {
 					render={({ field }) => (
 						<FormItem>
 							<FormLabel>Condition</FormLabel>
-							<FormDescription>When to restart the container</FormDescription>
+							<FormDescription>When to restart the application instance</FormDescription>
 							<Select onValueChange={field.onChange} value={field.value}>
 								<FormControl>
 									<SelectTrigger>

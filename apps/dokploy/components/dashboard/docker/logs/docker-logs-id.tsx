@@ -439,8 +439,8 @@ export const DockerLogsId: React.FC<Props> = ({
 							</div>
 						) : (
 							<div className="flex justify-center items-center h-full text-center text-sm text-muted-foreground px-8">
-								Select a container above to view its logs. If none are listed,
-								make sure the service is deployed and running.
+								Select an application instance above to view its logs. If none are listed,
+								make sure the application is deployed and running.
 							</div>
 						)}
 					</div>

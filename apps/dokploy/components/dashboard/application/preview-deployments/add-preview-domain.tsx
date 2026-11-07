@@ -235,7 +235,7 @@ export const AddPreviewDomain = ({
 									render={({ field }) => {
 										return (
 											<FormItem>
-												<FormLabel>Container Port</FormLabel>
+												<FormLabel>Application Port</FormLabel>
 												<FormControl>
 													<NumberInput placeholder={"3000"} {...field} />
 												</FormControl>

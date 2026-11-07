@@ -610,10 +610,10 @@ export const HandleVolumeBackups = ({
 											checked={field.value}
 											onCheckedChange={field.onChange}
 										/>
-										Turn Off Container During Backup
+										Pause Application During Backup
 									</FormLabel>
 									<FormDescription className="text-amber-600 dark:text-amber-400">
-										⚠️ The container will be temporarily stopped during backup to
+										⚠️ The application will be temporarily stopped during backup to
 										prevent file corruption. This ensures data integrity but may
 										cause temporary service interruption.
 									</FormDescription>

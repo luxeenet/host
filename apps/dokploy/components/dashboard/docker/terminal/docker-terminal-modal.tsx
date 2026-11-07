@@ -24,6 +24,7 @@ interface Props {
 	serverId?: string;
 	children?: React.ReactNode;
 	serviceId?: string;
+	appName?: string;
 }
 
 export const DockerTerminalModal = ({
@@ -31,6 +32,7 @@ export const DockerTerminalModal = ({
 	containerId,
 	serverId,
 	serviceId,
+	appName,
 }: Props) => {
 	const [mainDialogOpen, setMainDialogOpen] = useState(false);
 	const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -66,9 +68,9 @@ export const DockerTerminalModal = ({
 				onEscapeKeyDown={(event) => event.preventDefault()}
 			>
 				<DialogHeader>
-					<DialogTitle>Docker Terminal</DialogTitle>
+					<DialogTitle>Application Terminal</DialogTitle>
 					<DialogDescription>
-						Easy way to access to docker container
+						Secure terminal access to your application runtime environment
 					</DialogDescription>
 				</DialogHeader>
 
@@ -77,15 +79,16 @@ export const DockerTerminalModal = ({
 					containerId={containerId}
 					serverId={serverId || ""}
 					serviceId={serviceId}
+					appName={appName}
 				/>
 				<Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
 					<DialogContent onEscapeKeyDown={(event) => event.preventDefault()}>
 						<DialogHeader>
 							<DialogTitle>
-								Are you sure you want to close the terminal?
+								Are you sure you want to close this terminal session?
 							</DialogTitle>
 							<DialogDescription>
-								By clicking the confirm button, the terminal will be closed.
+								By clicking confirm, the active terminal session to this application will be closed.
 							</DialogDescription>
 						</DialogHeader>
 						<DialogFooter>

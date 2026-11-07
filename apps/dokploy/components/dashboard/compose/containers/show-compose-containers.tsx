@@ -64,6 +64,11 @@ export const ShowComposeContainers = ({
 	serverId,
 	serviceId,
 }: Props) => {
+	const { data: userAuth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(userAuth as any)?.user?.isPlatformAdmin || (userAuth as any)?.isPlatformAdmin,
+	);
+
 	const { data, isPending, refetch } =
 		api.docker.getContainersByAppNameMatch.useQuery(
 			{
@@ -80,9 +85,9 @@ export const ShowComposeContainers = ({
 		<Card className="bg-background">
 			<CardHeader className="flex flex-row items-center justify-between">
 				<div>
-					<CardTitle className="text-xl">Containers</CardTitle>
+					<CardTitle className="text-xl">Services & Instances</CardTitle>
 					<CardDescription>
-						Inspect each container in this compose and run basic lifecycle
+						Inspect each service instance in this application stack and run basic lifecycle
 						actions.
 					</CardDescription>
 				</div>
@@ -103,7 +108,7 @@ export const ShowComposeContainers = ({
 				) : !data || data.length === 0 ? (
 					<div className="flex items-center justify-center h-[20vh]">
 						<span className="text-muted-foreground">
-							No containers found. Deploy the compose to see containers here.
+							No running services found. Deploy the application to see active services here.
 						</span>
 					</div>
 				) : (
@@ -111,11 +116,11 @@ export const ShowComposeContainers = ({
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Name</TableHead>
+									<TableHead>Service / Instance</TableHead>
 									<TableHead>State</TableHead>
 									<TableHead>Status</TableHead>
 									{appType === "stack" && <TableHead>Node</TableHead>}
-									<TableHead>Container ID</TableHead>
+									{isPlatformAdmin && <TableHead>Instance ID</TableHead>}
 									<TableHead className="text-right" />
 								</TableRow>
 							</TableHeader>
@@ -127,6 +132,7 @@ export const ShowComposeContainers = ({
 										appType={appType}
 										serverId={serverId}
 										serviceId={serviceId}
+										isPlatformAdmin={isPlatformAdmin}
 										onActionComplete={() => refetch()}
 									/>
 								))}
@@ -150,6 +156,7 @@ interface ContainerRowProps {
 	appType: "stack" | "docker-compose";
 	serverId?: string;
 	serviceId?: string;
+	isPlatformAdmin?: boolean;
 	onActionComplete: () => void;
 }
 
@@ -158,6 +165,7 @@ const ContainerRow = ({
 	appType,
 	serverId,
 	serviceId,
+	isPlatformAdmin,
 	onActionComplete,
 }: ContainerRowProps) => {
 	const [logsOpen, setLogsOpen] = useState(false);
@@ -178,11 +186,11 @@ const ContainerRow = ({
 				containerId: container.containerId,
 				serverId,
 			});
-			toast.success(`Container ${action} successfully`);
+			toast.success(`Service ${action} completed successfully`);
 			onActionComplete();
 		} catch (error) {
 			toast.error(
-				`Failed to ${action} container: ${error instanceof Error ? error.message : "Unknown error"}`,
+				`Failed to ${action} service: ${error instanceof Error ? error.message : "Unknown error"}`,
 			);
 		} finally {
 			setActionLoading(null);
@@ -213,9 +221,11 @@ const ContainerRow = ({
 			</TableCell>
 			<TableCell>{container.status}</TableCell>
 			{appType === "stack" && <TableCell>{container.node || "-"}</TableCell>}
-			<TableCell className="font-mono text-sm text-muted-foreground">
-				{container.containerId || "-"}
-			</TableCell>
+			{isPlatformAdmin && (
+				<TableCell className="font-mono text-sm text-muted-foreground">
+					{container.containerId || "-"}
+				</TableCell>
+			)}
 			<TableCell className="text-right">
 				{!container.containerId ? null : (
 					<Dialog open={logsOpen} onOpenChange={setLogsOpen}>
@@ -239,24 +249,29 @@ const ContainerRow = ({
 										View Logs
 									</DropdownMenuItem>
 								</DialogTrigger>
-								<ShowContainerConfig
-									containerId={container.containerId}
-									serverId={serverId || ""}
-								/>
-								<ShowContainerMounts
-									containerId={container.containerId}
-									serverId={serverId || ""}
-								/>
-								<ShowContainerNetworks
-									containerId={container.containerId}
-									serverId={serverId || ""}
-								/>
+								{isPlatformAdmin && (
+									<>
+										<ShowContainerConfig
+											containerId={container.containerId}
+											serverId={serverId || ""}
+										/>
+										<ShowContainerMounts
+											containerId={container.containerId}
+											serverId={serverId || ""}
+										/>
+										<ShowContainerNetworks
+											containerId={container.containerId}
+											serverId={serverId || ""}
+										/>
+									</>
+								)}
 								<DockerTerminalModal
 									containerId={container.containerId}
 									serverId={serverId || ""}
 									serviceId={serviceId}
+									appName={container.name}
 								>
-									Terminal
+									Application Terminal
 								</DockerTerminalModal>
 								<DropdownMenuSeparator />
 								<DropdownMenuItem
@@ -291,7 +306,7 @@ const ContainerRow = ({
 						</DropdownMenu>
 						<DialogContent className="sm:max-w-7xl">
 							<DialogHeader>
-								<DialogTitle>View Logs</DialogTitle>
+								<DialogTitle>Application Logs</DialogTitle>
 								<DialogDescription>Logs for {container.name}</DialogDescription>
 							</DialogHeader>
 							<div className="flex flex-col gap-4 pt-2.5">

@@ -59,7 +59,7 @@ export const RunContainerCommand = ({ applicationId }: Props) => {
 			}
 		} catch (err: any) {
 			toast.error(
-				err?.message || "Failed to execute command inside application container",
+				err?.message || "Failed to execute command inside application environment",
 			);
 		}
 	};
@@ -70,16 +70,16 @@ export const RunContainerCommand = ({ applicationId }: Props) => {
 				<div>
 					<div className="flex items-center gap-2">
 						<Terminal className="size-5 text-primary" />
-						<CardTitle className="text-xl">Execute Container Command</CardTitle>
+						<CardTitle className="text-xl">Execute Application Command</CardTitle>
 					</div>
 					<CardDescription className="pt-1">
 						Run migrations, diagnostic tools, or administrative commands
-						directly inside this application&apos;s active container.
+						directly inside this application&apos;s active runtime environment.
 					</CardDescription>
 				</div>
 				<div className="flex items-center gap-2">
 					<Badge variant="outline" className="text-xs font-normal">
-						Container Isolated
+						Application Isolated
 					</Badge>
 					<Badge variant="outline" className="text-xs font-normal">
 						30s Timeout

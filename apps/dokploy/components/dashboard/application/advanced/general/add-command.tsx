@@ -95,10 +95,9 @@ export const AddCommand = ({ applicationId }: Props) => {
 		<Card className="bg-background">
 			<CardHeader className="flex flex-row justify-between">
 				<div>
-					<CardTitle className="text-xl">Run Command</CardTitle>
+					<CardTitle className="text-xl">Startup Command</CardTitle>
 					<CardDescription>
-						Run a custom command in the container after the application
-						initialized
+						Configure a custom command executed when the application initializes
 					</CardDescription>
 				</div>
 			</CardHeader>

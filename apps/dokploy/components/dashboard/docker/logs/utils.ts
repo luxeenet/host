@@ -198,7 +198,10 @@ export const getLogType = (message: string): LogStyle => {
 		/\btransient\s+http\s+502\b/i.test(lowerMessage) ||
 		/\bwaiting\s+for\s+(?:service|container|upstream)\s+warmup\b/i.test(
 			lowerMessage,
-		)
+		) ||
+		/\bspawn\s+xdg-open\s+enoent\b/i.test(lowerMessage) ||
+		/\bxdg-open:\s*(?:not\s*found|no\s*such\s*file)/i.test(lowerMessage) ||
+		/\bfailed\s+to\s+open\s+browser\b/i.test(lowerMessage)
 	) {
 		return LOG_STYLES.warning;
 	}

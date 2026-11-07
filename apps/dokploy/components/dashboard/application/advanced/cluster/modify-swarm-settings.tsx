@@ -43,14 +43,14 @@ const menuItems: MenuItem[] = [
 		label: "Health Check",
 		description: "Configure health check settings",
 		docDescription:
-			"Configure HEALTHCHECK to test a container's health. Determines if a container is healthy by running a command inside the container. Test, Interval, Timeout, StartPeriod, and Retries control health monitoring.",
+			"Configure HEALTHCHECK to test application instance health. Determines if an instance is healthy by running a probe command inside the runtime. Test, Interval, Timeout, StartPeriod, and Retries control health monitoring.",
 	},
 	{
 		id: "restart-policy",
 		label: "Restart Policy",
 		description: "Configure restart policy",
 		docDescription:
-			"Configure the restart policy for containers in the service. Condition (none, on-failure, any), Delay (nanoseconds between restarts), MaxAttempts, and Window control restart behavior.",
+			"Configure the restart policy for instances in the service. Condition (none, on-failure, any), Delay (nanoseconds between restarts), MaxAttempts, and Window control restart behavior.",
 	},
 	{
 		id: "placement",
@@ -99,7 +99,7 @@ const menuItems: MenuItem[] = [
 		label: "Stop Grace Period",
 		description: "Configure stop grace period",
 		docDescription:
-			"Time to wait before forcefully killing a container. Specified in nanoseconds (e.g., 10000000000 = 10 seconds). Allows containers to shutdown gracefully.",
+			"Time to wait before forcefully terminating an instance. Specified in nanoseconds (e.g., 10000000000 = 10 seconds). Allows applications to shutdown gracefully.",
 	},
 	{
 		id: "endpoint-spec",

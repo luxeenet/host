@@ -853,7 +853,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 										name="internalPath"
 										render={({ field }) => (
 											<FormItem>
-												<FormLabel>Internal Container Path</FormLabel>
+												<FormLabel>Internal Application Path</FormLabel>
 												<FormDescription className="text-xs">
 													Path forwarded to your application (defaults to "/")
 												</FormDescription>
@@ -874,7 +874,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 												<div className="space-y-0.5">
 													<FormLabel className="text-sm">Strip Path</FormLabel>
 													<FormDescription className="text-xs">
-														Strip URL path before sending request to container
+														Strip URL path before sending request to application
 													</FormDescription>
 												</div>
 												<FormControl>

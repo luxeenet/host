@@ -58,6 +58,7 @@ interface ContainerMetric {
 	Container: string;
 	ID: string;
 	Name: string;
+	State?: string;
 }
 
 interface Props {
@@ -133,7 +134,7 @@ export const ContainerPaidMonitoring = ({ appName, baseUrl, token }: Props) => {
 		<>
 			<div className="flex items-center justify-between flex-wrap	 gap-2">
 				<h2 className="text-2xl font-bold tracking-tight">
-					Container Monitoring
+					Application Monitoring
 				</h2>
 				<div className="flex items-center gap-4 flex-wrap">
 					<div>
@@ -229,19 +230,19 @@ export const ContainerPaidMonitoring = ({ appName, baseUrl, token }: Props) => {
 				</Card>
 			</div>
 
-			{/* Container Information */}
+			{/* Application Information */}
 			<Card className="p-6 bg-transparent">
-				<h3 className="text-lg font-medium mb-4">Container Information</h3>
+				<h3 className="text-lg font-medium mb-4">Application Information</h3>
 				<div className="grid gap-4 md:grid-cols-2">
 					<div>
 						<h4 className="text-sm font-medium text-muted-foreground">
-							Container ID
+							Application
 						</h4>
-						<p className="mt-1">{metrics.ID}</p>
+						<p className="mt-1 font-medium">{appName}</p>
 					</div>
 					<div>
-						<h4 className="text-sm font-medium text-muted-foreground">Name</h4>
-						<p className="mt-1 truncate">{metrics.Name}</p>
+						<h4 className="text-sm font-medium text-muted-foreground">Status</h4>
+						<p className="mt-1 truncate">{metrics.State || "Active"}</p>
 					</div>
 				</div>
 			</Card>

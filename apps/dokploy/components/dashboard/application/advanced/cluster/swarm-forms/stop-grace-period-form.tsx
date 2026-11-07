@@ -116,7 +116,7 @@ export const StopGracePeriodForm = ({ id, type }: StopGracePeriodFormProps) => {
 						<FormItem>
 							<FormLabel>Stop Grace Period (nanoseconds)</FormLabel>
 							<FormDescription>
-								Time to wait before forcefully killing the container
+								Time to wait before forcefully terminating the application instance
 								<br />
 								Examples: 30000000000 (30s), 120000000000 (2m)
 							</FormDescription>

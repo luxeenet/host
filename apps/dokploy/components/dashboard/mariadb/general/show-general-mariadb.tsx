@@ -244,7 +244,7 @@ export const ShowGeneralMariadb = ({ mariadbId }: Props) => {
 								</TooltipTrigger>
 								<TooltipPrimitive.Portal>
 									<TooltipContent sideOffset={5} className="z-60">
-										<p>Open a terminal to the MariaDB container</p>
+										<p>Open a terminal to the MariaDB instance</p>
 									</TooltipContent>
 								</TooltipPrimitive.Portal>
 							</Tooltip>

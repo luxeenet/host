@@ -297,7 +297,7 @@ PORT=3000
 									name="mountPath"
 									render={({ field }) => (
 										<FormItem>
-											<FormLabel>Mount Path (In the container)</FormLabel>
+											<FormLabel>Mount Path (In application)</FormLabel>
 											<FormControl>
 												<Input placeholder="Mount Path" {...field} />
 											</FormControl>

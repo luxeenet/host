@@ -58,6 +58,20 @@ export const domainRouter = createTRPCRouter({
 					await checkServicePermissionAndAccess(ctx, input.applicationId, {
 						domain: ["create"],
 					});
+
+					// Intelligent default port resolution if port is omitted or left as default 3000
+					try {
+						const app = await findApplicationById(input.applicationId);
+						if (app && (!input.port || input.port === 3000)) {
+							if (app.buildType === "static") {
+								input.port = 80;
+							} else if (app.ports && app.ports.length > 0 && app.ports[0]?.targetPort) {
+								input.port = app.ports[0].targetPort;
+							} else if ((app as any).suggestedPort && (app as any).suggestedPort > 0) {
+								input.port = (app as any).suggestedPort;
+							}
+						}
+					} catch {}
 				}
 
 				// Prevent duplicate domain attachment on rapid clicks
@@ -299,8 +313,8 @@ export const domainRouter = createTRPCRouter({
 				return {
 					...synced,
 					message: lifecycle.isHttpsReady
-						? `Cloudflare Edge HTTPS is active for ${synced.host}`
-						: `Cloudflare Edge SSL status: ${lifecycle.stageName}. ${lifecycle.customerActionRequired}`,
+						? `Edge HTTPS is active for ${synced.host}`
+						: `Edge SSL status: ${lifecycle.stageName}. ${lifecycle.customerActionRequired}`,
 				};
 			}
 			const expectedTarget = await resolveCnameTargetForService({ applicationId: currentDomain.applicationId, composeId: currentDomain.composeId, serverId });
@@ -750,12 +764,85 @@ export const domainRouter = createTRPCRouter({
 				action: "update",
 				resourceType: "domain",
 				resourceId: updated.domainId,
-				resourceName: `${updated.host} (Cloudflare status refreshed: ${lifecycle.stageName})`,
+				resourceName: `${updated.host} (Domain status refreshed: ${lifecycle.stageName})`,
 			});
+
+			const isPlatformAdmin = Boolean(
+				(ctx.session as any)?.user?.isPlatformAdmin ||
+				(ctx.user as any)?.isPlatformAdmin ||
+				ctx.user?.role === "owner",
+			);
+
+			const safeLifecycle = isPlatformAdmin
+				? lifecycle
+				: {
+						...lifecycle,
+						customerActionRequired: lifecycle.customerActionRequired?.replace(/cloudflare/gi, "HatDot Edge"),
+						lastError: lifecycle.lastError
+							? lifecycle.lastError
+									.replace(/cloudflare/gi, "HatDot Edge")
+									.replace(/zone\s+[a-f0-9]{32}/gi, "edge zone")
+									.replace(/custom_hostname\.[a-z_]+/gi, "Domain configuration")
+							: null,
+				  };
 
 			return {
 				domain: updated,
-				lifecycle,
+				lifecycle: safeLifecycle,
+			};
+		}),
+
+	/** Clean alias for domain status recheck */
+	recheckStatus: protectedProcedure
+		.input(z.object({ domainId: z.string() }))
+		.mutation(async ({ input, ctx }) => {
+			const domain = await findDomainById(input.domainId);
+			const serviceId = domain.applicationId || domain.composeId;
+			if (serviceId) {
+				await checkServicePermissionAndAccess(ctx, serviceId, {
+					domain: ["read"],
+				});
+			} else if (domain.previewDeploymentId) {
+				const preview = await findPreviewDeploymentById(
+					domain.previewDeploymentId,
+				);
+				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
+					domain: ["read"],
+				});
+			}
+
+			const { recheckDomainCloudflareStatus, mapDomainCloudflareStatus, resolveCloudflareCnameTarget } =
+				await import("@dokploy/server");
+
+			const updated = await recheckDomainCloudflareStatus(input.domainId);
+			const cnameTarget = await resolveCloudflareCnameTarget({
+				applicationId: updated.applicationId,
+				composeId: updated.composeId,
+			});
+			const lifecycle = mapDomainCloudflareStatus(updated, cnameTarget);
+
+			const isPlatformAdmin = Boolean(
+				(ctx.session as any)?.user?.isPlatformAdmin ||
+				(ctx.user as any)?.isPlatformAdmin ||
+				ctx.user?.role === "owner",
+			);
+
+			const safeLifecycle = isPlatformAdmin
+				? lifecycle
+				: {
+						...lifecycle,
+						customerActionRequired: lifecycle.customerActionRequired?.replace(/cloudflare/gi, "HatDot Edge"),
+						lastError: lifecycle.lastError
+							? lifecycle.lastError
+									.replace(/cloudflare/gi, "HatDot Edge")
+									.replace(/zone\s+[a-f0-9]{32}/gi, "edge zone")
+									.replace(/custom_hostname\.[a-z_]+/gi, "Domain configuration")
+							: null,
+				  };
+
+			return {
+				domain: updated,
+				lifecycle: safeLifecycle,
 			};
 		}),
 
@@ -792,12 +879,85 @@ export const domainRouter = createTRPCRouter({
 				action: "update",
 				resourceType: "domain",
 				resourceId: updated.domainId,
-				resourceName: `${updated.host} (Cloudflare provisioning retried)`,
+				resourceName: `${updated.host} (SSL provisioning retried)`,
 			});
+
+			const isPlatformAdmin = Boolean(
+				(ctx.session as any)?.user?.isPlatformAdmin ||
+				(ctx.user as any)?.isPlatformAdmin ||
+				ctx.user?.role === "owner",
+			);
+
+			const safeLifecycle = isPlatformAdmin
+				? lifecycle
+				: {
+						...lifecycle,
+						customerActionRequired: lifecycle.customerActionRequired?.replace(/cloudflare/gi, "HatDot Edge"),
+						lastError: lifecycle.lastError
+							? lifecycle.lastError
+									.replace(/cloudflare/gi, "HatDot Edge")
+									.replace(/zone\s+[a-f0-9]{32}/gi, "edge zone")
+									.replace(/custom_hostname\.[a-z_]+/gi, "Domain configuration")
+							: null,
+				  };
 
 			return {
 				domain: updated,
-				lifecycle,
+				lifecycle: safeLifecycle,
+			};
+		}),
+
+	/** Clean alias for retry SSL provisioning */
+	retrySsl: protectedProcedure
+		.input(z.object({ domainId: z.string() }))
+		.mutation(async ({ input, ctx }) => {
+			const domain = await findDomainById(input.domainId);
+			const serviceId = domain.applicationId || domain.composeId;
+			if (serviceId) {
+				await checkServicePermissionAndAccess(ctx, serviceId, {
+					domain: ["create"],
+				});
+			} else if (domain.previewDeploymentId) {
+				const preview = await findPreviewDeploymentById(
+					domain.previewDeploymentId,
+				);
+				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
+					domain: ["create"],
+				});
+			}
+
+			const { retryDomainCloudflareProvisioning, mapDomainCloudflareStatus, resolveCloudflareCnameTarget } =
+				await import("@dokploy/server");
+
+			const updated = await retryDomainCloudflareProvisioning(input.domainId);
+			const cnameTarget = await resolveCloudflareCnameTarget({
+				applicationId: updated.applicationId,
+				composeId: updated.composeId,
+			});
+			const lifecycle = mapDomainCloudflareStatus(updated, cnameTarget);
+
+			const isPlatformAdmin = Boolean(
+				(ctx.session as any)?.user?.isPlatformAdmin ||
+				(ctx.user as any)?.isPlatformAdmin ||
+				ctx.user?.role === "owner",
+			);
+
+			const safeLifecycle = isPlatformAdmin
+				? lifecycle
+				: {
+						...lifecycle,
+						customerActionRequired: lifecycle.customerActionRequired?.replace(/cloudflare/gi, "HatDot Edge"),
+						lastError: lifecycle.lastError
+							? lifecycle.lastError
+									.replace(/cloudflare/gi, "HatDot Edge")
+									.replace(/zone\s+[a-f0-9]{32}/gi, "edge zone")
+									.replace(/custom_hostname\.[a-z_]+/gi, "Domain configuration")
+							: null,
+				  };
+
+			return {
+				domain: updated,
+				lifecycle: safeLifecycle,
 			};
 		}),
 });

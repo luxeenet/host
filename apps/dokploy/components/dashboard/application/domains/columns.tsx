@@ -198,7 +198,7 @@ export const createColumns = ({
 						{isCf ? (
 							<div className="flex items-center gap-1.5">
 								<Badge variant="outline" className="text-cyan-400 border-cyan-500/30">
-									Cloudflare Edge
+									HatDot Edge SSL
 								</Badge>
 								{cfStatus === "active" && cfSslStatus === "active" && domain.https ? (
 									<Badge variant="outline" className="text-emerald-500 border-emerald-500/30 bg-emerald-500/10">

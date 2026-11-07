@@ -283,13 +283,18 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 	);
 
 	useEffect(() => {
+		const resolvedDefaultPort =
+			(application as any)?.suggestedPort ||
+			(application as any)?.ports?.[0]?.targetPort ||
+			((application as any)?.buildType === "static" ? 80 : 3000);
+
 		if (data) {
 			form.reset({
 				...data,
 				path: data?.path || "/",
 				internalPath: data?.internalPath || "/",
 				stripPath: data?.stripPath || false,
-				port: data?.port || 3000,
+				port: data?.port || resolvedDefaultPort,
 				useCustomEntrypoint: !!data.customEntrypoint,
 				customEntrypoint: data.customEntrypoint || undefined,
 				certificateType: data?.certificateType || (data?.https ? "letsencrypt" : "none"),
@@ -306,7 +311,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 				path: "/",
 				internalPath: "/",
 				stripPath: false,
-				port: 3000,
+				port: resolvedDefaultPort,
 				useCustomEntrypoint: false,
 				customEntrypoint: undefined,
 				https: true,
@@ -316,7 +321,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 				middlewares: [],
 			});
 		}
-	}, [form, data, isPending, domainId]);
+	}, [form, data, isPending, domainId, application]);
 
 	useEffect(() => {
 		if (certificateType === "custom") {
@@ -524,7 +529,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 																: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30 flex items-center gap-1.5"
 												}
 											>
-												<Cloud className="size-3.5 text-cyan-400" />
+												<ShieldCheck className="size-3.5 text-indigo-400" />
 												{dnsInfo.cloudflareSaas.stageName}
 											</Badge>
 										) : dnsInfo.verified ? (
@@ -571,7 +576,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								{dnsInfo.cloudflareSaas?.isActive && dnsInfo.cloudflareSaas.records.length > 0 ? (
 									<div className="space-y-2">
 										<span className="font-semibold text-foreground text-xs block">
-											Configure these DNS records at your domain registrar (Cloudflare, GoDaddy, Namecheap):
+											Configure these DNS records at your domain registrar or DNS provider (e.g., GoDaddy, Namecheap, Route 53):
 										</span>
 										{dnsInfo.cloudflareSaas.records.map((rec, idx) => (
 											<div
@@ -641,8 +646,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								) : !dnsInfo.verified && (
 									<div className="p-3 bg-background rounded-md border text-xs flex flex-col gap-2">
 										<span className="font-semibold text-foreground">
-											Add this DNS record at your domain provider (Cloudflare,
-											GoDaddy, Namecheap, etc.):
+											Add this DNS record at your domain registrar or DNS provider:
 										</span>
 										<div className="grid grid-cols-3 gap-2 py-1 font-mono text-xs">
 											<div>
@@ -691,31 +695,6 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 							</div>
 						)}
 
-						{/* Port Selection */}
-						<FormField
-							control={form.control}
-							name="port"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel className="text-sm font-semibold">
-										Application Port
-									</FormLabel>
-									<FormDescription className="text-xs">
-										The internal port your application listens on (e.g. 3000 for
-										Next.js/Node, 80 for Nginx, 8000 for Python).
-									</FormDescription>
-									<FormControl>
-										<NumberInput
-											placeholder="3000"
-											{...field}
-											className="font-mono text-sm"
-										/>
-									</FormControl>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-
 						{/* Automatic HTTPS Switch */}
 						{!isTraefikMeDomain && (
 							<FormField
@@ -725,20 +704,16 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 									<FormItem className="flex flex-row items-center justify-between p-3.5 border rounded-lg bg-card">
 										<div className="space-y-0.5">
 											<div className="flex items-center gap-1.5">
-												{isCloudflareSaas ? (
-													<Cloud className="size-4 text-cyan-400" />
-												) : (
-													<ShieldCheck className="size-4 text-emerald-500" />
-												)}
+												<ShieldCheck className="size-4 text-emerald-500" />
 												<FormLabel className="text-sm font-semibold cursor-pointer">
 													{isCloudflareSaas
-														? "Cloudflare Edge SSL"
+														? "HatDot Edge SSL"
 														: "Automatic HTTPS & SSL"}
 												</FormLabel>
 											</div>
 											<FormDescription className="text-xs">
 												{false ? "" : isCloudflareSaas
-												? "SSL certificate is automatically provisioned and managed at the Cloudflare edge once DNS records are verified."
+												? "SSL certificate is automatically provisioned and managed at the HatDot edge once DNS records are verified."
 													: "SSL certificate will be issued automatically with Let's Encrypt once DNS points to this server."}
 											</FormDescription>
 										</div>
@@ -782,6 +757,29 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 
 							{showAdvanced && (
 								<div className="mt-4 flex flex-col gap-4 pl-1 border-l-2 border-primary/20">
+									{/* Application Port Override */}
+									<FormField
+										control={form.control}
+										name="port"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel className="text-sm font-semibold">
+													Application Port
+												</FormLabel>
+												<FormDescription className="text-xs">
+													The internal port your application listens on. HatDot automatically detects and routes to your port from code and configuration — override here only if needed.
+												</FormDescription>
+												<FormControl>
+													<NumberInput
+														placeholder="3000"
+														{...field}
+														className="font-mono text-sm"
+													/>
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
 									{/* Compose Service Selection */}
 									{domainType === "compose" && (
 										<FormField

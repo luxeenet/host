@@ -49,20 +49,20 @@ export default function CustomDomainsPage() {
 	const handleRecheckCf = async (domainId: string, host: string) => {
 		try {
 			const res = await recheckCloudflare({ domainId });
-			toast.success(`Cloudflare status updated: ${res.lifecycle.stageName}`);
+			toast.success(`Domain status updated: ${res.lifecycle.stageName}`);
 			await refetchDomains();
 		} catch (err: any) {
-			toast.error(err?.message || "Failed to refresh Cloudflare status");
+			toast.error(err?.message || "Failed to refresh domain status");
 		}
 	};
 
 	const handleRetryCf = async (domainId: string, host: string) => {
 		try {
 			const res = await retryCloudflare({ domainId });
-			toast.success(`Cloudflare provisioning retried: ${res.lifecycle.stageName}`);
+			toast.success(`SSL provisioning retried: ${res.lifecycle.stageName}`);
 			await refetchDomains();
 		} catch (err: any) {
-			toast.error(err?.message || "Failed to retry Cloudflare provisioning");
+			toast.error(err?.message || "Failed to retry SSL provisioning");
 		}
 	};
 
@@ -71,8 +71,8 @@ export default function CustomDomainsPage() {
 		if (dom.cfStatus === "active" && dom.cfSslStatus === "active") {
 			return (
 				<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-					<Cloud className="w-3 h-3 text-cyan-400" />
-					Edge Active (HTTPS)
+					<Lock className="w-3 h-3 text-emerald-400" />
+					Secure and active
 				</span>
 			);
 		}
@@ -80,25 +80,25 @@ export default function CustomDomainsPage() {
 			return (
 				<span
 					className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-red-500/20 text-red-400 border border-red-500/30"
-					title={dom.cfLastError || "Cloudflare error"}
+					title={dom.cfLastError || "Configuration error"}
 				>
 					<AlertCircle className="w-3 h-3 text-red-400" />
-					Config Error
+					Configuration Issue
 				</span>
 			);
 		}
 		if (dom.cfStatus === "active" && dom.cfSslStatus !== "active") {
 			return (
 				<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/30">
-					<Cloud className="w-3 h-3 text-amber-400" />
-					Issuing SSL
+					<Loader2 className="w-3 h-3 text-amber-400 animate-spin" />
+					SSL Provisioning
 				</span>
 			);
 		}
 		return (
 			<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-				<Cloud className="w-3 h-3 text-cyan-400" />
-				Verifying Ownership
+				<RefreshCw className="w-3 h-3 text-cyan-400 animate-spin" />
+				Verifying DNS
 			</span>
 		);
 	};
@@ -221,9 +221,7 @@ export default function CustomDomainsPage() {
 		<>
 			<Head>
 				<title>
-					{routingTargetData?.isCloudflareSaas
-						? `Custom Domains & Cloudflare Edge SSL - ${brand.APP_NAME}`
-						: `Custom Domains & Auto-SSL - ${brand.APP_NAME}`}
+					{`Custom Domains & Edge SSL - ${brand.APP_NAME}`}
 				</title>
 			</Head>
 			<div className="space-y-8">
@@ -231,14 +229,10 @@ export default function CustomDomainsPage() {
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 					<div>
 						<h1 className="text-2xl font-bold text-white tracking-tight">
-							{routingTargetData?.isCloudflareSaas
-								? "Custom Domains & Cloudflare Edge SSL"
-								: "Custom Domains & Auto-SSL"}
+							Custom Domains & Edge SSL
 						</h1>
 						<p className="text-slate-400 text-sm mt-1">
-							{routingTargetData?.isCloudflareSaas
-								? "Attach your custom domains with automated Cloudflare for SaaS edge SSL, DDoS protection, and global routing."
-								: "Attach your own custom domains with automated Let's Encrypt SSL certificates."}
+							Attach your custom domains with automated HatDot edge SSL, DDoS protection, and global high-speed routing.
 						</p>
 					</div>
 
@@ -283,7 +277,7 @@ export default function CustomDomainsPage() {
 						<div>
 							<h3 className="text-sm font-bold text-white">Connect Your Domain</h3>
 							<p className="text-xs text-slate-400">
-								Create this DNS record with your domain provider (Cloudflare, GoDaddy, Namecheap) to route requests to HatDot.
+								Create this DNS record with your domain registrar or DNS provider (such as GoDaddy, Namecheap, Route 53) to route requests to HatDot.
 							</p>
 						</div>
 					</div>
@@ -319,16 +313,16 @@ export default function CustomDomainsPage() {
 								Apex / Root Domains (@)
 							</span>
 							<p>
-								Root domains require a DNS provider with CNAME Flattening or ALIAS/ANAME support (e.g. Cloudflare, Route53, Namecheap). Alternatively, use a <code className="text-indigo-300">www</code> CNAME.
+								Root domains require a DNS provider with CNAME Flattening or ALIAS/ANAME support (e.g. Route 53, Namecheap, DNSimple). Alternatively, use a <code className="text-indigo-300">www</code> CNAME.
 							</p>
 						</div>
 						<div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-0.5">
 							<span className="text-slate-300 font-semibold block flex items-center gap-1.5">
-								<Cloud className="w-3.5 h-3.5 text-cyan-400" />
-								Cloudflare Proxy Setting
+								<ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+								Edge SSL & Routing
 							</span>
 							<p>
-								Set DNS-only (Grey Cloud) during initial verification and SSL certificate issuance. Once active, Proxied (Orange Cloud) can be enabled with Full (strict) SSL.
+								HatDot automatically validates your DNS, issues an edge SSL certificate, and secures incoming traffic with zero manual setup.
 							</p>
 						</div>
 					</div>
@@ -415,7 +409,7 @@ export default function CustomDomainsPage() {
 						<h3 className="text-base font-semibold text-white">Your Attached Custom Domains</h3>
 						<p className="text-xs text-slate-400">
 							{routingTargetData?.isCloudflareSaas
-								? "Domains are routed and secured at Cloudflare's edge with automatic TLS once DNS records are verified."
+								? "Domains are routed and secured at HatDot's edge with automatic TLS once DNS records are verified."
 								: "All domains automatically provision Let's Encrypt TLS certificates once DNS points to the server."}
 						</p>
 					</div>
@@ -527,9 +521,9 @@ export default function CustomDomainsPage() {
 												disabled={isRetryingCf}
 												onClick={() => handleRetryCf(dom.domainId, dom.host)}
 												className="border-cyan-800/60 text-cyan-400 hover:bg-cyan-950/20 text-xs gap-1.5 h-8"
-												title="Upgrade legacy Let's Encrypt domain to Cloudflare Edge SSL"
+												title="Upgrade to HatDot Managed Edge SSL"
 											>
-												<Cloud className={`w-3.5 h-3.5 ${isRetryingCf ? "animate-spin" : ""}`} /> Upgrade to Edge SSL
+												<ShieldCheck className={`w-3.5 h-3.5 ${isRetryingCf ? "animate-spin" : ""}`} /> Upgrade to Edge SSL
 											</Button>
 										)}
 										{(dom.cfHostnameId || dom.cfStatus) && (
@@ -540,7 +534,7 @@ export default function CustomDomainsPage() {
 												onClick={() => handleRecheckCf(dom.domainId, dom.host)}
 												className="border-cyan-800/60 text-cyan-400 hover:bg-cyan-950/20 text-xs gap-1.5 h-8"
 											>
-												<Cloud className={`w-3.5 h-3.5 ${isRecheckingCf ? "animate-spin" : ""}`} /> Sync Status
+												<RefreshCw className={`w-3.5 h-3.5 ${isRecheckingCf ? "animate-spin" : ""}`} /> Sync Status
 											</Button>
 										)}
 										{!dom.https && !dom.cfHostnameId && !dom.cfStatus && (

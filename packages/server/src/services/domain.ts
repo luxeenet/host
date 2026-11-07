@@ -429,6 +429,8 @@ export const createDomain = async (
 						portToUse = app.ports[0].targetPort;
 					} else if (plan?.port?.value) {
 						portToUse = plan.port.value;
+					} else if ((app as any).suggestedPort && (app as any).suggestedPort > 0) {
+						portToUse = (app as any).suggestedPort;
 					}
 				}
 			}
@@ -1729,7 +1731,7 @@ export const getDnsInstructionsForDomain = async (
 					value: cnameTarget,
 					purpose: "Traffic Routing",
 					status: "required",
-					description: `Points ${cleanHost} to the platform Cloudflare for SaaS edge.`,
+					description: `Points ${cleanHost} to the platform edge routing.`,
 				},
 			],
 			customerActionRequired: `Add a CNAME record pointing to ${cnameTarget}.`,
@@ -1784,7 +1786,7 @@ export const getDnsInstructionsForDomain = async (
 				proxyRecommended: true,
 				sslMode: "Full (strict)",
 				initialSetupNote:
-					"Set DNS-only (Grey Cloud) during initial verification and Let's Encrypt certificate issuance. Once active, Proxied (Orange Cloud) can be enabled with Full (strict) SSL.",
+					"DNS records are automatically routed and secured by HatDot edge infrastructure once verified.",
 			},
 			apexGuidance: isSubdomain
 				? undefined

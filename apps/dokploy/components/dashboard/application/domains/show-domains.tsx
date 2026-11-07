@@ -173,10 +173,10 @@ export const ShowDomains = ({ id, type }: Props) => {
 	const handleRecheckCloudflare = async (domainId: string) => {
 		try {
 			const res = await recheckCloudflare({ domainId });
-			toast.success(res.lifecycle?.stageName ? `Cloudflare status: ${res.lifecycle.stageName}` : "Cloudflare status updated");
+			toast.success(res.lifecycle?.stageName ? `Domain status: ${res.lifecycle.stageName}` : "Domain status updated");
 			refetch();
 		} catch (err: any) {
-			toast.error(err?.message || "Failed to refresh Cloudflare status");
+			toast.error(err?.message || "Failed to refresh domain status");
 		}
 	};
 
@@ -640,12 +640,12 @@ export const ShowDomains = ({ id, type }: Props) => {
 																			variant="outline"
 																			className="text-cyan-400 border-cyan-500/30 flex items-center gap-1"
 																		>
-																			<Cloud className="size-3 text-cyan-400" />
-																			Cloudflare Edge
+																			<ShieldCheck className="size-3 text-cyan-400" />
+																			HatDot Edge SSL
 																		</Badge>
 																	</TooltipTrigger>
 																	<TooltipContent>
-																		<p>Cloudflare for SaaS Edge SSL & Routing</p>
+																		<p>HatDot Edge SSL & Managed Routing</p>
 																	</TooltipContent>
 																</Tooltip>
 															</TooltipProvider>
@@ -658,7 +658,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 																	className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1"
 																>
 																	<ShieldCheck className="size-3" />
-																	SSL Active
+																	Secure and active
 																</Badge>
 															) : (item as any).cfStatus === "error" ||
 															  (item as any).cfSslStatus === "error" ||
@@ -666,10 +666,10 @@ export const ShowDomains = ({ id, type }: Props) => {
 																<Badge
 																	variant="outline"
 																	className="bg-red-500/10 text-red-400 border-red-500/30 flex items-center gap-1"
-																	title={(item as any).cfLastError || "Cloudflare error"}
+																	title={(item as any).cfLastError || "Configuration issue"}
 																>
 																	<XCircle className="size-3" />
-																	SSL Error
+																	Configuration Issue
 																</Badge>
 															) : (item as any).cfStatus === "active" &&
 															  (item as any).cfSslStatus !== "active" ? (
@@ -678,15 +678,15 @@ export const ShowDomains = ({ id, type }: Props) => {
 																	className="bg-amber-500/10 text-amber-400 border-amber-500/30 flex items-center gap-1"
 																>
 																	<RefreshCw className="size-3 animate-spin" />
-																	Issuing SSL
+																	SSL Provisioning
 																</Badge>
 															) : (
 																<Badge
 																	variant="outline"
 																	className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 flex items-center gap-1"
 																>
-																	<Cloud className="size-3" />
-																	Verifying Ownership
+																	<RefreshCw className="size-3 animate-spin" />
+																	Verifying DNS
 																</Badge>
 															)}
 

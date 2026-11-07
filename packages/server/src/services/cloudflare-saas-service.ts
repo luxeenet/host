@@ -108,6 +108,14 @@ export interface CloudflareDomainLifecycleStatus {
 	routingStatus: "pending" | "active" | "error";
 	records: CloudflareDnsRecordInstruction[];
 	customerActionRequired: string;
+	customerStatus?:
+		| "Pending verification"
+		| "Verifying DNS"
+		| "DNS configuration required"
+		| "Domain connected"
+		| "SSL provisioning"
+		| "Secure and active"
+		| "Configuration issue";
 }
 
 // ---------------------------------------------------------------------------
@@ -519,6 +527,11 @@ export const mapDomainCloudflareStatus = (
 		);
 		const isRoutingActive = Boolean(domain.enabled);
 		const isWebsiteReady = Boolean(isLegacyHttpsActive && isRoutingActive);
+		const customerStatus = isLegacyHttpsActive
+			? ("Secure and active" as const)
+			: isRoutingActive
+				? ("Domain connected" as const)
+				: ("DNS configuration required" as const);
 		return {
 			isCloudflareSaas: false,
 			hostnameId: null,
@@ -536,6 +549,7 @@ export const mapDomainCloudflareStatus = (
 			isRoutingActive,
 			isWebsiteReady,
 			routingStatus: isRoutingActive ? "active" : "pending",
+			customerStatus,
 			records: [],
 			customerActionRequired: "Configure standard DNS records.",
 		};
@@ -635,7 +649,7 @@ export const mapDomainCloudflareStatus = (
 			purpose: "Domain Ownership Verification",
 			status: isHostnameActive ? "verified" : "required",
 			description:
-				"Cloudflare security check confirming authorization to route this domain.",
+				"Security check confirming authorization to route this domain on HatDot.",
 		});
 	}
 
@@ -675,6 +689,29 @@ export const mapDomainCloudflareStatus = (
 	const isHttpsReady = Boolean(isHostnameActive && isSslActive && domain.https);
 	const isWebsiteReady = Boolean(isHttpsReady && isRoutingActive);
 
+	let customerStatus:
+		| "Pending verification"
+		| "Verifying DNS"
+		| "DNS configuration required"
+		| "Domain connected"
+		| "SSL provisioning"
+		| "Secure and active"
+		| "Configuration issue" = "DNS configuration required";
+
+	if (hasErrors) {
+		customerStatus = "Configuration issue";
+	} else if (isHostnameActive && isSslActive && domain.https) {
+		customerStatus = "Secure and active";
+	} else if (isHostnameActive && !isSslActive) {
+		customerStatus = "SSL provisioning";
+	} else if (status === "pending_verification") {
+		customerStatus = "Verifying DNS";
+	} else if (isHostnameActive) {
+		customerStatus = "Domain connected";
+	} else {
+		customerStatus = "DNS configuration required";
+	}
+
 	return {
 		isCloudflareSaas,
 		hostnameId: domain.cfHostnameId,
@@ -690,6 +727,7 @@ export const mapDomainCloudflareStatus = (
 		isRoutingActive,
 		isWebsiteReady,
 		routingStatus: isRoutingActive ? "active" : "pending",
+		customerStatus,
 		records,
 		customerActionRequired,
 	};

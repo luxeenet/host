@@ -128,18 +128,18 @@ export const DnsHelperModal = ({ domain, serverIp, applicationId, composeId }: P
 					</div>
 					<DialogDescription className="text-xs">
 						{isCfActive
-							? "Cloudflare for SaaS manages edge SSL and traffic routing for your domain."
-							: "Configure DNS records at your domain registrar (Cloudflare, GoDaddy, Namecheap) pointing to HatDot."}
+							? "HatDot Edge SSL manages certificate issuance and traffic routing for your domain."
+							: "Configure DNS records at your domain registrar pointing to HatDot."}
 					</DialogDescription>
 				</DialogHeader>
 
 				<div className="flex flex-col gap-4 text-xs pt-1">
-					{/* Cloudflare for SaaS 4-Step Lifecycle Progression */}
+					{/* HatDot Edge 4-Step Lifecycle Progression */}
 					{isCfActive && cfSaas && (
 						<div className="rounded-lg border bg-muted/40 p-3 space-y-3">
 							<div className="flex items-center justify-between">
 								<span className="font-semibold text-xs flex items-center gap-1.5 text-foreground">
-									<Cloud className="size-4 text-cyan-400" />
+									<ShieldCheck className="size-4 text-emerald-400" />
 									Domain Lifecycle Status
 								</span>
 								<Badge
@@ -393,26 +393,22 @@ export const DnsHelperModal = ({ domain, serverIp, applicationId, composeId }: P
 						</div>
 					)}
 
-					{/* Cloudflare Guidance (for customers who manage DNS in Cloudflare) */}
-					{dnsInfo?.cloudflareGuidance && (
-						<div className="p-3 rounded-lg border bg-cyan-950/20 border-cyan-500/20 space-y-1">
-							<div className="flex items-center gap-1.5 font-semibold text-cyan-400 text-xs">
-								<Cloud className="size-3.5" />
-								Managing DNS in Cloudflare
-							</div>
-							<p className="text-[11px] text-cyan-200/80 leading-relaxed">
-								{isCfActive
-									? "Because HatDot uses Cloudflare for SaaS, you can set your CNAME record to Proxied (Orange Cloud) or DNS-Only (Grey Cloud). Edge certificates will be provisioned automatically."
-									: dnsInfo.cloudflareGuidance.initialSetupNote}
-							</p>
+					{/* DNS Propagation Guidance */}
+					<div className="p-3 rounded-lg border bg-indigo-950/20 border-indigo-500/20 space-y-1">
+						<div className="flex items-center gap-1.5 font-semibold text-indigo-400 text-xs">
+							<Globe className="size-3.5" />
+							DNS Propagation & Verification
 						</div>
-					)}
+						<p className="text-[11px] text-indigo-200/80 leading-relaxed">
+							Once you configure the DNS records at your registrar, HatDot automatically verifies domain ownership and provisions your SSL certificate. Propagation typically takes a few minutes.
+						</p>
+					</div>
 
 					{/* HTTPS & Verification Note */}
 					<div className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1">
 						<Lock className="size-3 text-emerald-400" />
 						{isCfActive
-							? "Cloudflare for SaaS automatically provisions and renews SSL certificates as soon as required DNS verification completes."
+							? "HatDot Edge SSL automatically provisions and renews SSL certificates as soon as required DNS verification completes."
 							: "HatDot will automatically verify the domain and configure HTTPS once DNS propagation completes."}
 					</div>
 				</div>

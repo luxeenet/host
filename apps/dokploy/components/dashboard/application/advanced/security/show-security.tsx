@@ -90,13 +90,10 @@ export const ShowSecurity = ({ applicationId }: Props) => {
 													})
 														.then(() => {
 															refetch();
-															utils.application.readTraefikConfig.invalidate({
-																applicationId,
-															});
 															toast.success("Security deleted successfully");
 														})
-														.catch(() => {
-															toast.error("Error deleting security");
+														.catch((err) => {
+															toast.error(err?.message || "Error deleting security");
 														});
 												}}
 											>

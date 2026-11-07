@@ -408,9 +408,6 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 					await utils.deployment.all.invalidate({
 						applicationId: id,
 					});
-					await utils.application.readTraefikConfig.invalidate({
-						applicationId: id,
-					});
 				} else if (formData.domainType === "compose") {
 					await utils.domain.byComposeId.invalidate({
 						composeId: id,

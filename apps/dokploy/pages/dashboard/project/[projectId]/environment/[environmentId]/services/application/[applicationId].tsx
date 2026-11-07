@@ -20,7 +20,7 @@ import { ShowRedirects } from "@/components/dashboard/application/advanced/redir
 import { ShowSecurity } from "@/components/dashboard/application/advanced/security/show-security";
 import { ShowBuildServer } from "@/components/dashboard/application/advanced/show-build-server";
 import { ShowResources } from "@/components/dashboard/application/advanced/show-resources";
-import { ShowTraefikConfig } from "@/components/dashboard/application/advanced/traefik/show-traefik-config";
+import { RunContainerCommand } from "@/components/dashboard/application/advanced/general/run-container-command";
 import { ShowVolumes } from "@/components/dashboard/application/advanced/volumes/show-volumes";
 import { ShowDeployments } from "@/components/dashboard/application/deployments/show-deployments";
 import { ShowDomains } from "@/components/dashboard/application/domains/show-domains";
@@ -63,14 +63,23 @@ import { api } from "@/utils/api";
 import { useWhitelabeling } from "@/utils/hooks/use-whitelabeling";
 
 type TabState =
+	| "general"
+	| "environment"
+	| "domains"
+	| "resources"
+	| "redirects"
+	| "security"
+	| "deployments"
+	| "preview-deployments"
+	| "storage"
+	| "volume-backups"
+	| "schedules"
+	| "logs"
+	| "patches"
+	| "monitoring"
+	| "advanced"
 	| "projects"
 	| "settings"
-	| "advanced"
-	| "deployments"
-	| "domains"
-	| "monitoring"
-	| "preview-deployments"
-	| "volume-backups"
 	| "icon";
 
 const Service = (
@@ -84,7 +93,12 @@ const Service = (
 
 	useEffect(() => {
 		if (router.query.tab) {
-			setTab(router.query.tab as TabState);
+			const requestedTab = router.query.tab as string;
+			if (requestedTab === "volume-backups") {
+				setTab("storage");
+			} else {
+				setTab(requestedTab as TabState);
+			}
 		}
 	}, [router.query.tab]);
 
@@ -273,14 +287,12 @@ const Service = (
 									<div className="flex flex-row items-center justify-between w-full overflow-auto">
 										<TabsList className="flex gap-8 max-md:gap-4 justify-start">
 											<TabsTrigger value="general">General</TabsTrigger>
-											{permissions?.envVars.read && (
-												<TabsTrigger value="environment">
-													Environment
-												</TabsTrigger>
-											)}
 											{permissions?.domain.read && (
-												<TabsTrigger value="domains">Domains</TabsTrigger>
+												<TabsTrigger value="domains">Domains & HTTPS</TabsTrigger>
 											)}
+											<TabsTrigger value="resources">Resources</TabsTrigger>
+											<TabsTrigger value="redirects">Redirects</TabsTrigger>
+											<TabsTrigger value="security">Security</TabsTrigger>
 											{permissions?.deployment.read && (
 												<TabsTrigger value="deployments">
 													Deployments
@@ -291,16 +303,21 @@ const Service = (
 													Preview Deployments
 												</TabsTrigger>
 											)}
-											{permissions?.schedule.read && (
-												<TabsTrigger value="schedules">Schedules</TabsTrigger>
+											{(permissions?.volumeBackup.read || isPlatformAdmin) && (
+												<TabsTrigger value="storage">
+													Storage & Backups
+												</TabsTrigger>
 											)}
-											{permissions?.volumeBackup.read && (
-												<TabsTrigger value="volume-backups">
-													Volume Backups
+											{permissions?.envVars.read && (
+												<TabsTrigger value="environment">
+													Environment
 												</TabsTrigger>
 											)}
 											{permissions?.logs.read && (
 												<TabsTrigger value="logs">Logs</TabsTrigger>
+											)}
+											{permissions?.schedule.read && (
+												<TabsTrigger value="schedules">Schedules</TabsTrigger>
 											)}
 											{data?.sourceType !== "docker" && (
 												<TabsTrigger value="patches">Patches</TabsTrigger>
@@ -312,7 +329,9 @@ const Service = (
 													</TabsTrigger>
 												)}
 											{permissions?.service.create && (
-												<TabsTrigger value="advanced">Advanced</TabsTrigger>
+												<TabsTrigger value="advanced">
+													Advanced Settings
+												</TabsTrigger>
 											)}
 										</TabsList>
 									</div>
@@ -413,17 +432,37 @@ const Service = (
 											</div>
 										</TabsContent>
 									)}
-									{permissions?.volumeBackup.read && (
+									<TabsContent value="resources" className="w-full pt-2.5">
+										<div className="flex flex-col gap-4">
+											<ShowResources id={applicationId} type="application" />
+										</div>
+									</TabsContent>
+									<TabsContent value="redirects" className="w-full pt-2.5">
+										<div className="flex flex-col gap-4">
+											<ShowRedirects applicationId={applicationId} />
+										</div>
+									</TabsContent>
+									<TabsContent value="security" className="w-full pt-2.5">
+										<div className="flex flex-col gap-4">
+											<ShowSecurity applicationId={applicationId} />
+										</div>
+									</TabsContent>
+									{(permissions?.volumeBackup.read || isPlatformAdmin) && (
 										<TabsContent
-											value="volume-backups"
+											value="storage"
 											className="w-full pt-2.5"
 										>
-											<div className="flex flex-col gap-4 ">
-												<ShowVolumeBackups
-													id={applicationId}
-													type="application"
-													serverId={data?.serverId || ""}
-												/>
+											<div className="flex flex-col gap-6">
+												{isPlatformAdmin && (
+													<ShowVolumes id={applicationId} type="application" />
+												)}
+												{permissions?.volumeBackup.read && (
+													<ShowVolumeBackups
+														id={applicationId}
+														type="application"
+														serverId={data?.serverId || ""}
+													/>
+												)}
 											</div>
 										</TabsContent>
 									)}
@@ -448,8 +487,10 @@ const Service = (
 									</TabsContent>
 									{permissions?.service.create && (
 										<TabsContent value="advanced">
-											<div className="flex flex-col gap-4 pt-2.5">
+											<div className="flex flex-col gap-6 pt-2.5">
+												<RunContainerCommand applicationId={applicationId} />
 												<AddCommand applicationId={applicationId} />
+												<ShowPorts applicationId={applicationId} />
 												{isPlatformAdmin && (
 													<ShowClusterSettings
 														id={applicationId}
@@ -459,17 +500,9 @@ const Service = (
 												{isPlatformAdmin && (
 													<ShowBuildServer applicationId={applicationId} />
 												)}
-												<ShowResources id={applicationId} type="application" />
-												{isPlatformAdmin && (
-													<ShowVolumes id={applicationId} type="application" />
-												)}
 												{isPlatformAdmin && (
 													<AssignNetworks id={applicationId} type="application" />
 												)}
-												<ShowRedirects applicationId={applicationId} />
-												<ShowSecurity applicationId={applicationId} />
-												<ShowPorts applicationId={applicationId} />
-												<ShowTraefikConfig applicationId={applicationId} />
 											</div>
 										</TabsContent>
 									)}

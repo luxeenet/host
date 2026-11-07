@@ -41,7 +41,10 @@ import {
 	verifyApplicationLiveUrl,
 	writeConfig,
 	writeConfigRemote,
+	execAsync,
+	execAsyncRemote,
 } from "@dokploy/server";
+import { quote } from "shell-quote";
 import { db } from "@dokploy/server/db";
 import { ArchiveValidationError } from "@dokploy/server/utils/builders/archive-validation";
 import { canEditDeployGitSource } from "@dokploy/server/services/git-provider";
@@ -58,6 +61,7 @@ import { z } from "zod";
 import { zfd } from "zod-form-data";
 import {
 	createTRPCRouter,
+	platformAdminProcedure,
 	protectedProcedure,
 	withPermission,
 } from "@/server/api/trpc";
@@ -377,6 +381,10 @@ export const applicationRouter = createTRPCRouter({
 
 			return {
 				...application,
+				security: application.security?.map((sec) => ({
+					...sec,
+					password: "••••••••",
+				})),
 				hasGitProviderAccess,
 				unauthorizedProvider,
 			};
@@ -1046,7 +1054,7 @@ export const applicationRouter = createTRPCRouter({
 				resourceName: application.appName,
 			});
 		}),
-	readTraefikConfig: protectedProcedure
+	readTraefikConfig: platformAdminProcedure
 		.input(apiFindOneApplication)
 		.query(async ({ input, ctx }) => {
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
@@ -1144,7 +1152,7 @@ export const applicationRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	updateTraefikConfig: protectedProcedure
+	updateTraefikConfig: platformAdminProcedure
 		.input(z.object({ applicationId: z.string(), traefikConfig: z.string() }))
 		.mutation(async ({ input, ctx }) => {
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
@@ -1167,6 +1175,155 @@ export const applicationRouter = createTRPCRouter({
 				resourceName: application.appName,
 			});
 			return true;
+		}),
+	runContainerCommand: protectedProcedure
+		.input(
+			z.object({
+				applicationId: z.string(),
+				command: z
+					.string()
+					.min(1, "Command cannot be empty")
+					.max(2048, "Command cannot exceed 2048 characters"),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.applicationId, {
+				service: ["create"],
+			});
+			const application = await findApplicationById(input.applicationId);
+
+			const appOrgId =
+				application.environment?.project?.organizationId ||
+				(application as any).organizationId;
+
+			if (appOrgId && appOrgId !== ctx.session.activeOrganizationId) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message:
+						"You are not authorized to run commands on this application",
+				});
+			}
+
+			// Locate running container strictly for this application
+			const findContainerCmd = `docker ps -q --filter "status=running" --filter "label=com.docker.swarm.service.name=${application.appName}" | head -n 1`;
+			let containerId = "";
+			try {
+				if (application.serverId) {
+					const { stdout } = await execAsyncRemote(
+						application.serverId,
+						findContainerCmd,
+					);
+					containerId = stdout.trim();
+				} else {
+					const { stdout } = await execAsync(findContainerCmd);
+					containerId = stdout.trim();
+				}
+			} catch {
+				const fallbackCmd = `docker ps -q --filter "status=running" --filter "name=${application.appName}" | head -n 1`;
+				try {
+					if (application.serverId) {
+						const { stdout } = await execAsyncRemote(
+							application.serverId,
+							fallbackCmd,
+						);
+						containerId = stdout.trim();
+					} else {
+						const { stdout } = await execAsync(fallbackCmd);
+						containerId = stdout.trim();
+					}
+				} catch {}
+			}
+
+			if (!containerId || !/^[a-zA-Z0-9_-]+$/.test(containerId)) {
+				throw new TRPCError({
+					code: "PRECONDITION_FAILED",
+					message:
+						"Application container is not currently running. Please deploy or start the application before running commands.",
+				});
+			}
+
+			const startTime = Date.now();
+			const execInsideCmd = `docker exec -i ${containerId} sh -c ${quote([input.command])}`;
+
+			let stdout = "";
+			let stderr = "";
+			let exitCode = 0;
+			const MAX_OUTPUT_BYTES = 100 * 1024;
+			const TIMEOUT_MS = 30000;
+
+			try {
+				if (application.serverId) {
+					const res = await Promise.race([
+						execAsyncRemote(application.serverId, execInsideCmd),
+						new Promise<never>((_, reject) =>
+							setTimeout(
+								() =>
+									reject(
+										new Error("Command execution timed out (30s limit)"),
+									),
+								TIMEOUT_MS,
+							),
+						),
+					]);
+					stdout = res.stdout || "";
+					stderr = res.stderr || "";
+				} else {
+					const res = await Promise.race([
+						execAsync(execInsideCmd),
+						new Promise<never>((_, reject) =>
+							setTimeout(
+								() =>
+									reject(
+										new Error("Command execution timed out (30s limit)"),
+									),
+								TIMEOUT_MS,
+							),
+						),
+					]);
+					stdout = res.stdout || "";
+					stderr = res.stderr || "";
+				}
+			} catch (error: any) {
+				exitCode = error.exitCode ?? error.code ?? 1;
+				stdout = error.stdout || "";
+				stderr = error.stderr || error.message || "Command failed";
+			}
+
+			let truncated = false;
+			if (stdout.length > MAX_OUTPUT_BYTES) {
+				stdout =
+					stdout.slice(0, MAX_OUTPUT_BYTES) +
+					"\n... [Output truncated - exceeded 100KB limit]";
+				truncated = true;
+			}
+			if (stderr.length > MAX_OUTPUT_BYTES) {
+				stderr =
+					stderr.slice(0, MAX_OUTPUT_BYTES) +
+					"\n... [Error output truncated - exceeded 100KB limit]";
+				truncated = true;
+			}
+
+			const executionTimeMs = Date.now() - startTime;
+
+			await audit(ctx, {
+				action: "run",
+				resourceType: "service",
+				resourceId: application.applicationId,
+				resourceName: application.appName,
+				metadata: {
+					command: input.command.slice(0, 100),
+					exitCode,
+					executionTimeMs,
+				},
+			});
+
+			return {
+				stdout,
+				stderr,
+				exitCode,
+				executionTimeMs,
+				truncated,
+			};
 		}),
 	readAppMonitoring: withPermission("monitoring", "read")
 		.input(apiFindMonitoringStats)

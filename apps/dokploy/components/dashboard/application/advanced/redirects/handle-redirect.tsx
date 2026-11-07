@@ -133,16 +133,14 @@ export const HandleRedirect = ({
 					applicationId,
 				});
 				refetch();
-				await utils.application.readTraefikConfig.invalidate({
-					applicationId,
-				});
 				onDialogToggle(false);
 			})
-			.catch(() => {
+			.catch((err) => {
 				toast.error(
-					redirectId
+					err?.message ||
+					(redirectId
 						? "Error updating the redirect"
-						: "Error creating the redirect",
+						: "Error creating the redirect"),
 				);
 			});
 	};

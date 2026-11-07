@@ -37,7 +37,10 @@ export const securityRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, security.applicationId, {
 				service: ["read"],
 			});
-			return security;
+			return {
+				...security,
+				password: "••••••••",
+			};
 		}),
 
 	delete: protectedProcedure
@@ -63,7 +66,11 @@ export const securityRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, security.applicationId, {
 				service: ["create"],
 			});
-			const result = await updateSecurityById(input.securityId, input);
+			const updateData = { ...input };
+			if (updateData.password === "••••••••" || !updateData.password?.trim()) {
+				delete (updateData as any).password;
+			}
+			const result = await updateSecurityById(input.securityId, updateData);
 			await audit(ctx, {
 				action: "update",
 				resourceType: "security",

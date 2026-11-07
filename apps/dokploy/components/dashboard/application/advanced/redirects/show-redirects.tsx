@@ -99,13 +99,10 @@ export const ShowRedirects = ({ applicationId }: Props) => {
 													})
 														.then(() => {
 															refetch();
-															utils.application.readTraefikConfig.invalidate({
-																applicationId,
-															});
 															toast.success("Redirect deleted successfully");
 														})
-														.catch(() => {
-															toast.error("Error deleting redirect");
+														.catch((err) => {
+															toast.error(err?.message || "Error deleting redirect");
 														});
 												}}
 											>

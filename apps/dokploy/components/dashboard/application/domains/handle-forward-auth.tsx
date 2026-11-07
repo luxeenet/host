@@ -48,7 +48,6 @@ export const HandleForwardAuth = ({ domainId, applicationId }: Props) => {
 	const refresh = async () => {
 		await utils.forwardAuth.status.invalidate({ domainId });
 		await utils.domain.byApplicationId.invalidate({ applicationId });
-		await utils.application.readTraefikConfig.invalidate({ applicationId });
 	};
 
 	const handleToggle = async (next: boolean) => {

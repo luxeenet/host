@@ -85,17 +85,15 @@ export const HandleSecurity = ({
 				await utils.application.one.invalidate({
 					applicationId,
 				});
-				await utils.application.readTraefikConfig.invalidate({
-					applicationId,
-				});
 				await refetch();
 				setIsOpen(false);
 			})
-			.catch(() => {
+			.catch((err) => {
 				toast.error(
-					securityId
+					err?.message ||
+					(securityId
 						? "Error updating the security"
-						: "Error creating security",
+						: "Error creating security"),
 				);
 			});
 	};

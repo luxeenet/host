@@ -32,9 +32,12 @@ export const ShowPorts = ({ applicationId }: Props) => {
 		<Card className="bg-background">
 			<CardHeader className="flex flex-row justify-between flex-wrap gap-4">
 				<div>
-					<CardTitle className="text-xl">Ports</CardTitle>
+					<CardTitle className="text-xl">Port Overrides & Publishing</CardTitle>
 					<CardDescription>
-						the ports allows you to expose your application to the internet
+						HatDot&apos;s Intelligent Deployment Engine automatically detects
+						and routes your application&apos;s internal web port. Manual port
+						mappings are only required for raw TCP/UDP exposure or manual port
+						overrides.
 					</CardDescription>
 				</div>
 
@@ -46,10 +49,11 @@ export const ShowPorts = ({ applicationId }: Props) => {
 				{data?.ports.length === 0 ? (
 					<div className="flex w-full flex-col items-center justify-center gap-3 pt-10">
 						<Rss className="size-8 text-muted-foreground" />
-						<span className="text-base text-muted-foreground">
-							No ports configured
+						<span className="text-base text-muted-foreground text-center max-w-md">
+							Automatic Port Detection Active. HatDot automatically discovers
+							your web service port during build and startup.
 						</span>
-						<HandlePorts applicationId={applicationId}>Add Port</HandlePorts>
+						<HandlePorts applicationId={applicationId}>Add Port Override</HandlePorts>
 					</div>
 				) : (
 					<div className="flex flex-col pt-2 gap-4">

@@ -10,8 +10,8 @@ import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
 import {
 	createTRPCRouter,
+	platformAdminProcedure,
 	protectedProcedure,
-	withPermission,
 } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
 import {
@@ -24,7 +24,7 @@ import {
 } from "@/server/db/schema";
 
 export const sshRouter = createTRPCRouter({
-	create: withPermission("sshKeys", "create")
+	create: platformAdminProcedure
 		.input(apiCreateSshKey)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -45,7 +45,7 @@ export const sshRouter = createTRPCRouter({
 				});
 			}
 		}),
-	remove: withPermission("sshKeys", "delete")
+	remove: platformAdminProcedure
 		.input(apiRemoveSshKey)
 		.mutation(async ({ input, ctx }) => {
 			try {
@@ -68,7 +68,7 @@ export const sshRouter = createTRPCRouter({
 				throw error;
 			}
 		}),
-	one: withPermission("sshKeys", "read")
+	one: platformAdminProcedure
 		.input(apiFindOneSshKey)
 		.query(async ({ input, ctx }) => {
 			const sshKey = await findSSHKeyById(input.sshKeyId);
@@ -81,7 +81,7 @@ export const sshRouter = createTRPCRouter({
 			}
 			return sshKey;
 		}),
-	all: withPermission("sshKeys", "read").query(async ({ ctx }) => {
+	all: platformAdminProcedure.query(async ({ ctx }) => {
 		return await db.query.sshKeys.findMany({
 			where: eq(sshKeys.organizationId, ctx.session.activeOrganizationId),
 			orderBy: desc(sshKeys.createdAt),
@@ -97,12 +97,12 @@ export const sshRouter = createTRPCRouter({
 			orderBy: desc(sshKeys.createdAt),
 		});
 	}),
-	generate: withPermission("sshKeys", "read")
+	generate: platformAdminProcedure
 		.input(apiGenerateSSHKey)
 		.mutation(async ({ input }) => {
 			return await generateSSHKey(input.type);
 		}),
-	update: withPermission("sshKeys", "create")
+	update: platformAdminProcedure
 		.input(apiUpdateSshKey)
 		.mutation(async ({ input, ctx }) => {
 			try {

@@ -95,16 +95,20 @@ interface Props {
 }
 
 export const TemplateGenerator = ({ environmentId }: Props) => {
+	const { data: userAuth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(userAuth as any)?.user?.isPlatformAdmin || (userAuth as any)?.isPlatformAdmin,
+	);
 	const [open, setOpen] = useState(false);
 	const stepper = useStepper();
-	const { data: aiSettings } = api.ai.getAll.useQuery();
+	const { data: aiSettings } = api.ai.getEnabledProviders.useQuery();
 	const { mutateAsync } = api.ai.deploy.useMutation();
 	const [templateInfo, setTemplateInfo] =
 		useState<TemplateInfo>(defaultTemplateInfo);
 	const utils = api.useUtils();
 
-	const haveAtleasOneProviderEnabled = aiSettings?.some(
-		(ai) => ai.isEnabled === true,
+	const haveAtleasOneProviderEnabled = Boolean(
+		aiSettings && aiSettings.length > 0,
 	);
 
 	const isDisabled = () => {
@@ -224,14 +228,20 @@ export const TemplateGenerator = ({ environmentId }: Props) => {
 											<div className="flex flex-col w-full">
 												<span>AI features are not enabled</span>
 												<span>
-													To use AI-powered template generation, please{" "}
-													<Link
-														href="/dashboard/settings/ai"
-														className="font-medium underline underline-offset-4"
-													>
-														enable AI in your settings
-													</Link>
-													.
+													{isPlatformAdmin ? (
+														<>
+															To use AI-powered template generation, please{" "}
+															<Link
+																href="/dashboard/settings/ai"
+																className="font-medium underline underline-offset-4"
+															>
+																enable AI in your settings
+															</Link>
+															.
+														</>
+													) : (
+														"AI template generation is not configured on this platform. Please contact your system administrator to enable an AI provider."
+													)}
 												</span>
 											</div>
 										</AlertBlock>

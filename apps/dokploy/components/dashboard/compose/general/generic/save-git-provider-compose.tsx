@@ -58,6 +58,10 @@ interface Props {
 }
 
 export const SaveGitProviderCompose = ({ composeId }: Props) => {
+	const { data: userAuth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(userAuth as any)?.user?.isPlatformAdmin || (userAuth as any)?.isPlatformAdmin,
+	);
 	const { data, refetch } = api.compose.one.useQuery({ composeId });
 	const { data: sshKeys } = api.sshKey.allForApps.useQuery();
 	const router = useRouter();
@@ -185,7 +189,7 @@ export const SaveGitProviderCompose = ({ composeId }: Props) => {
 									</FormItem>
 								)}
 							/>
-						) : (
+						) : isPlatformAdmin ? (
 							<Button
 								variant="secondary"
 								onClick={() => router.push("/dashboard/settings/ssh-keys")}
@@ -193,7 +197,7 @@ export const SaveGitProviderCompose = ({ composeId }: Props) => {
 							>
 								<KeyRoundIcon className="size-4" /> Add SSH Key
 							</Button>
-						)}
+						) : null}
 					</div>
 					<div className="space-y-4">
 						<FormField

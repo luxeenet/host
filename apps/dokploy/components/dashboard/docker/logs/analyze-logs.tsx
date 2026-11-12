@@ -37,6 +37,10 @@ interface Props {
 const MAX_LOG_LINES = 200;
 
 export function AnalyzeLogs({ logs, context }: Props) {
+	const { data: userAuth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(userAuth as any)?.user?.isPlatformAdmin || (userAuth as any)?.isPlatformAdmin,
+	);
 	const [open, setOpen] = useState(false);
 	const [aiId, setAiId] = useState<string>("");
 	const [copied, setCopied] = useState(false);
@@ -114,15 +118,18 @@ export function AnalyzeLogs({ logs, context }: Props) {
 						providers && providers.length === 0 ? (
 							<div className="flex flex-col items-center gap-3 py-2 text-center">
 								<p className="text-sm text-muted-foreground">
-									No AI providers configured. Set up a provider to start
-									analyzing logs.
+									{isPlatformAdmin
+										? "No AI providers configured. Set up a provider to start analyzing logs."
+										: "AI log analysis is not configured on this platform. Please contact your system administrator."}
 								</p>
-								<Button size="sm" variant="outline" asChild>
-									<Link href="/dashboard/settings/ai">
-										<Settings className="mr-2 h-3.5 w-3.5" />
-										Configure AI Provider
-									</Link>
-								</Button>
+								{isPlatformAdmin && (
+									<Button size="sm" variant="outline" asChild>
+										<Link href="/dashboard/settings/ai">
+											<Settings className="mr-2 h-3.5 w-3.5" />
+											Configure AI Provider
+										</Link>
+									</Button>
+								)}
 							</div>
 						) : (
 							<>

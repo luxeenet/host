@@ -182,7 +182,7 @@ export const setupDockerContainerTerminalWebSocketServer = (
 							role: (user as any).role || "member",
 						},
 						session: {
-							activeOrganizationId: session.activeOrganizationId || "",
+							activeOrganizationId: session.activeOrganizationId,
 						},
 					},
 					{
@@ -195,7 +195,7 @@ export const setupDockerContainerTerminalWebSocketServer = (
 							durationSeconds,
 						},
 					},
-				).catch(() => {});
+				).catch(() => { });
 			}
 		};
 
@@ -222,7 +222,7 @@ export const setupDockerContainerTerminalWebSocketServer = (
 						role: (user as any).role || "member",
 					},
 					session: {
-						activeOrganizationId: session.activeOrganizationId || "",
+						activeOrganizationId: session.activeOrganizationId,
 					},
 				},
 				{
@@ -237,7 +237,7 @@ export const setupDockerContainerTerminalWebSocketServer = (
 							: containerId.slice(0, 12),
 					},
 				},
-			).catch(() => {});
+			).catch(() => { });
 		}
 
 		try {

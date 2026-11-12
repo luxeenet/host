@@ -87,9 +87,9 @@ describe("Sidebar Navigation Menu Filtering", () => {
 		{ title: "Remote Servers", isEnabled: ({ isPlatformAdmin }: any) => !!isPlatformAdmin },
 		{ title: "Deployments", isEnabled: ({ isPlatformAdmin }: any) => !!isPlatformAdmin },
 		{ title: "Users", isEnabled: ({ permissions }: any) => permissions ? !!permissions?.member?.read : true },
-		{ title: "Audit Logs", isEnabled: ({ isPlatformAdmin, permissions }: any) => !!(isPlatformAdmin || permissions?.auditLog?.read) },
-		{ title: "SSH Keys", isEnabled: ({ permissions }: any) => permissions ? !!permissions?.sshKeys?.read : true },
-		{ title: "AI", isEnabled: ({ isPlatformAdmin, planFeatures }: any) => isPlatformAdmin || !!planFeatures?.ai },
+		{ title: "Audit Logs", isEnabled: ({ isPlatformAdmin }: any) => !!isPlatformAdmin },
+		{ title: "SSH Keys", isEnabled: ({ isPlatformAdmin }: any) => !!isPlatformAdmin },
+		{ title: "AI", isEnabled: ({ isPlatformAdmin }: any) => !!isPlatformAdmin },
 		{ title: "Tags", isEnabled: undefined },
 		{ title: "Git", isEnabled: undefined },
 		{ title: "Registry", isEnabled: undefined },
@@ -138,9 +138,6 @@ describe("Sidebar Navigation Menu Filtering", () => {
 		expect(visible).toContain("Profile");
 		expect(visible).toContain("Sessions");
 		expect(visible).toContain("Users");
-		expect(visible).toContain("Audit Logs");
-		expect(visible).toContain("SSH Keys");
-		expect(visible).toContain("AI");
 		expect(visible).toContain("Tags");
 		expect(visible).toContain("Git");
 		expect(visible).toContain("Registry");
@@ -152,7 +149,10 @@ describe("Sidebar Navigation Menu Filtering", () => {
 		expect(visible).toContain("Billing");
 		expect(visible).toContain("Invoices");
 
-		// Platform-only infrastructure must NOT be visible
+		// AI, SSH Keys, Audit Logs and platform-only infrastructure must NOT be visible to customers
+		expect(visible).not.toContain("AI");
+		expect(visible).not.toContain("SSH Keys");
+		expect(visible).not.toContain("Audit Logs");
 		expect(visible).not.toContain("Web Server");
 		expect(visible).not.toContain("Remote Servers");
 		expect(visible).not.toContain("Deployments");
@@ -189,5 +189,8 @@ describe("Sidebar Navigation Menu Filtering", () => {
 		expect(settingsVisible).toContain("License");
 		expect(settingsVisible).toContain("SSO");
 		expect(settingsVisible).toContain("Whitelabeling");
+		expect(settingsVisible).toContain("AI");
+		expect(settingsVisible).toContain("SSH Keys");
+		expect(settingsVisible).toContain("Audit Logs");
 	});
 });

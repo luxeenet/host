@@ -19,12 +19,12 @@ export default Page;
 Page.getLayout = (page: ReactElement) => {
 	return <DashboardLayout metaName="SSH Keys">{page}</DashboardLayout>;
 };
-import { requireAuthSession } from "@/utils/server-auth-guards";
+import { requirePlatformAdminSession } from "@/utils/server-auth-guards";
 
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,
 ) {
-	const authGuard = await requireAuthSession(ctx);
+	const authGuard = await requirePlatformAdminSession(ctx);
 	if ("redirect" in authGuard) {
 		return { redirect: authGuard.redirect };
 	}

@@ -42,12 +42,13 @@ import { slugify } from "@/lib/slug";
 import {
 	adminProcedure,
 	createTRPCRouter,
+	platformAdminProcedure,
 	protectedProcedure,
 } from "@/server/api/trpc";
 import { generatePassword } from "@/templates/utils";
 
 export const aiRouter = createTRPCRouter({
-	one: protectedProcedure
+	one: platformAdminProcedure
 		.input(z.object({ aiId: z.string() }))
 		.query(async ({ ctx, input }) => {
 			const setting = await getAiSettingById(input.aiId);
@@ -204,31 +205,21 @@ export const aiRouter = createTRPCRouter({
 				});
 			}
 		}),
-	create: adminProcedure.input(apiCreateAi).mutation(async ({ ctx, input }) => {
-		if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
-			await assertEntitlement(
-				PlanEntitlementService.checkCanUseAi(ctx.session.activeOrganizationId),
-			);
-		}
+	create: platformAdminProcedure.input(apiCreateAi).mutation(async ({ ctx, input }) => {
 		return await saveAiSettings(ctx.session.activeOrganizationId, input);
 	}),
 
-	update: adminProcedure.input(apiUpdateAi).mutation(async ({ ctx, input }) => {
-		if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
-			await assertEntitlement(
-				PlanEntitlementService.checkCanUseAi(ctx.session.activeOrganizationId),
-			);
-		}
+	update: platformAdminProcedure.input(apiUpdateAi).mutation(async ({ ctx, input }) => {
 		return await saveAiSettings(ctx.session.activeOrganizationId, input);
 	}),
 
-	getAll: adminProcedure.query(async ({ ctx }) => {
+	getAll: platformAdminProcedure.query(async ({ ctx }) => {
 		return await getAiSettingsByOrganizationId(
 			ctx.session.activeOrganizationId,
 		);
 	}),
 
-	get: protectedProcedure
+	get: platformAdminProcedure
 		.input(z.object({ aiId: z.string() }))
 		.query(async ({ ctx, input }) => {
 			const setting = await getAiSettingById(input.aiId);
@@ -238,19 +229,10 @@ export const aiRouter = createTRPCRouter({
 					message: "AI setting not found",
 				});
 			}
-			if (
-				setting.organizationId !== ctx.session.activeOrganizationId &&
-				!ctx.user.isPlatformAdmin
-			) {
-				throw new TRPCError({
-					code: "FORBIDDEN",
-					message: "Access denied",
-				});
-			}
 			return setting;
 		}),
 
-	delete: adminProcedure
+	delete: platformAdminProcedure
 		.input(z.object({ aiId: z.string() }))
 		.mutation(async ({ ctx, input }) => {
 			const setting = await getAiSettingById(input.aiId);
@@ -260,32 +242,16 @@ export const aiRouter = createTRPCRouter({
 					message: "AI setting not found",
 				});
 			}
-			if (
-				setting.organizationId !== ctx.session.activeOrganizationId &&
-				!ctx.user.isPlatformAdmin
-			) {
-				throw new TRPCError({
-					code: "FORBIDDEN",
-					message: "Access denied",
-				});
-			}
 			return await deleteAiSettings(input.aiId);
 		}),
 
-	getCustomProviders: protectedProcedure.query(async ({ ctx }) => {
+	getCustomProviders: platformAdminProcedure.query(async ({ ctx }) => {
 		return await getCustomAiProviders(ctx.session.activeOrganizationId);
 	}),
 
-	saveCustomProviders: adminProcedure
+	saveCustomProviders: platformAdminProcedure
 		.input(apiSaveAiCustomProviders)
 		.mutation(async ({ ctx, input }) => {
-			if (IS_CLOUD && !ctx.user.isPlatformAdmin) {
-				await assertEntitlement(
-					PlanEntitlementService.checkCanUseAi(
-						ctx.session.activeOrganizationId,
-					),
-				);
-			}
 			return await saveCustomAiProviders(
 				ctx.session.activeOrganizationId,
 				input.providers,

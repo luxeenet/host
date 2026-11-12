@@ -314,33 +314,21 @@ export const MENU: Menu = {
 			title: "Audit Logs",
 			icon: ClipboardList,
 			url: "/dashboard/settings/audit-logs",
-			isEnabled: ({ isPlatformAdmin, permissions }) =>
-				!!(isPlatformAdmin || permissions?.auditLog?.read),
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
 			title: "SSH Keys",
 			icon: KeyRound,
 			url: "/dashboard/settings/ssh-keys",
-			isEnabled: ({ permissions }) =>
-				permissions ? !!permissions?.sshKeys?.read : true,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			title: "AI",
 			icon: BotIcon,
 			url: "/dashboard/settings/ai",
 			isSingle: true,
-			isEnabled: ({ isPlatformAdmin, planFeatures, isCloud, permissions }) => {
-				if (isPlatformAdmin) return true;
-				if (isCloud) {
-					return !!(
-						planFeatures?.ai ||
-						planFeatures?.ai_agent ||
-						planFeatures?.ai_assistant
-					);
-				}
-				return !!permissions?.organization?.update;
-			},
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,

@@ -2,10 +2,10 @@ import { getAuditLogs } from "@dokploy/server/services/proprietary/audit-log";
 import { hasValidLicense } from "@dokploy/server/services/proprietary/license-key";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { createTRPCRouter, withPermission } from "../../trpc";
+import { createTRPCRouter, platformAdminProcedure } from "../../trpc";
 
 export const auditLogRouter = createTRPCRouter({
-	all: withPermission("auditLog", "read")
+	all: platformAdminProcedure
 		.use(async ({ ctx, next }) => {
 			const licensed = await hasValidLicense(ctx.session.activeOrganizationId);
 			if (!licensed) {

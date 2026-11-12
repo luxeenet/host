@@ -32,13 +32,13 @@ export const healthCheckFormSchema = z.object({
 interface HealthCheckFormProps {
 	id: string;
 	type:
-		| "postgres"
-		| "mariadb"
-		| "mongo"
-		| "mysql"
-		| "redis"
-		| "application"
-		| "libsql";
+	| "postgres"
+	| "mariadb"
+	| "mongo"
+	| "mysql"
+	| "redis"
+	| "application"
+	| "libsql";
 }
 
 export const HealthCheckForm = ({ id, type }: HealthCheckFormProps) => {

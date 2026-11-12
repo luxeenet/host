@@ -21,6 +21,8 @@ import {
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { BreadcrumbSidebar } from "@/components/shared/breadcrumb-sidebar";
 import { DialogAction } from "@/components/shared/dialog-action";
 import { DnsHelperModal } from "@/components/dashboard/application/domains/dns-helper-modal";
 import { api } from "@/utils/api";
@@ -224,21 +226,31 @@ export default function CustomDomainsPage() {
 					{`Custom Domains & Edge SSL - ${brand.APP_NAME}`}
 				</title>
 			</Head>
-			<div className="space-y-8">
+
+			<BreadcrumbSidebar
+				list={[
+					{ name: "Home", href: "/dashboard/home" },
+					{ name: "Domains", href: "/dashboard/domains" },
+				]}
+			/>
+
+			<div className="w-full">
+				<Card className="h-full bg-sidebar p-2.5 rounded-xl min-h-[85vh]">
+					<div className="rounded-xl bg-background shadow-md p-6 flex flex-col gap-6 h-full">
 				{/* Header */}
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 					<div>
-						<h1 className="text-2xl font-bold text-white tracking-tight">
-							Custom Domains & Edge SSL
+						<h1 className="text-3xl font-semibold tracking-tight">
+							Custom Domains
 						</h1>
-						<p className="text-slate-400 text-sm mt-1">
+						<p className="text-sm text-muted-foreground mt-1">
 							Attach your custom domains with automated HatDot edge SSL, DDoS protection, and global high-speed routing.
 						</p>
 					</div>
 
 					<Button
 						onClick={() => setShowAddModal(true)}
-						className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs gap-2 shrink-0 shadow-lg shadow-indigo-600/20"
+						size="sm" className="gap-2 shrink-0"
 					>
 						<Plus className="w-4 h-4" /> Add Custom Domain
 					</Button>
@@ -251,8 +263,8 @@ export default function CustomDomainsPage() {
 								<Cloud className="w-4 h-4 text-cyan-400" />
 							</div>
 							<div>
-								<h4 className="text-xs font-bold text-white">Platform Admin: Cloudflare for SaaS Configuration</h4>
-								<p className="text-[11px] text-slate-400">
+								<h4 className="text-xs font-bold text-foreground">Platform Admin: Cloudflare for SaaS Configuration</h4>
+								<p className="text-[11px] text-muted-foreground">
 									Manage Cloudflare Custom Hostnames, Zone ID, CNAME target ({assignedTarget}), Fallback Origin, and edge SSL automation.
 								</p>
 							</div>
@@ -269,55 +281,55 @@ export default function CustomDomainsPage() {
 					</div>
 				)}
 				{/* DNS Instructions Banner - Provider-Managed CNAME Target */}
-				<div className="rounded-xl bg-slate-900/80 border border-slate-800 p-6 space-y-4">
-					<div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-						<div className="w-9 h-9 rounded-lg bg-indigo-950/80 border border-indigo-500/20 flex items-center justify-center shrink-0">
-							<Globe className="w-5 h-5 text-indigo-400" />
+				<div className="rounded-xl border bg-card p-5 space-y-4">
+					<div className="flex items-center gap-3 border-b pb-3">
+						<div className="size-10 rounded-xl border bg-muted flex items-center justify-center shrink-0">
+							<Globe className="size-5 text-muted-foreground" />
 						</div>
 						<div>
-							<h3 className="text-sm font-bold text-white">Connect Your Domain</h3>
-							<p className="text-xs text-slate-400">
+							<h3 className="text-sm font-semibold text-foreground">Connect Your Domain</h3>
+							<p className="text-xs text-muted-foreground">
 								Create this DNS record with your domain registrar or DNS provider (such as GoDaddy, Namecheap, Route 53) to route requests to HatDot.
 							</p>
 						</div>
 					</div>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-						<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
-							<span className="text-slate-500 text-[10px] uppercase font-semibold">Record Type</span>
-							<p className="text-white font-mono font-bold">CNAME</p>
+						<div className="p-3 rounded-lg bg-muted/40 border space-y-1">
+							<span className="text-muted-foreground text-[10px] uppercase font-semibold">Record Type</span>
+							<p className="text-foreground font-mono font-bold">CNAME</p>
 						</div>
-						<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
-							<span className="text-slate-500 text-[10px] uppercase font-semibold">Host / Name</span>
-							<p className="text-white font-mono font-bold">www (or chosen subdomain)</p>
+						<div className="p-3 rounded-lg bg-muted/40 border space-y-1">
+							<span className="text-muted-foreground text-[10px] uppercase font-semibold">Host / Name</span>
+							<p className="text-foreground font-mono font-bold">www (or chosen subdomain)</p>
 						</div>
-						<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1 flex items-center justify-between">
+						<div className="p-3 rounded-lg bg-muted/40 border space-y-1 flex items-center justify-between">
 							<div className="overflow-hidden pr-2">
-								<span className="text-slate-500 text-[10px] uppercase font-semibold">Target / Hostname</span>
-								<p className="text-indigo-300 font-mono font-bold truncate">{assignedTarget}</p>
+								<span className="text-muted-foreground text-[10px] uppercase font-semibold">Target / Hostname</span>
+								<p className="text-foreground font-semibold font-mono font-bold truncate">{assignedTarget}</p>
 							</div>
 							<button
 								type="button"
 								onClick={() => copyRecord(assignedTarget)}
-								className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white shrink-0"
+								className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
 							>
 								{copiedDns ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
 							</button>
 						</div>
 					</div>
 
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-[11px] text-slate-400">
-						<div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-0.5">
-							<span className="text-slate-300 font-semibold block flex items-center gap-1.5">
-								<Globe className="w-3.5 h-3.5 text-indigo-400" />
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-[11px] text-muted-foreground">
+						<div className="p-2.5 rounded-lg bg-muted/40 border space-y-0.5">
+							<span className="text-foreground font-semibold block flex items-center gap-1.5">
+								<Globe className="w-3.5 h-3.5 text-foreground font-semibold" />
 								Apex / Root Domains (@)
 							</span>
 							<p>
-								Root domains require a DNS provider with CNAME Flattening or ALIAS/ANAME support (e.g. Route 53, Namecheap, DNSimple). Alternatively, use a <code className="text-indigo-300">www</code> CNAME.
+								Root domains require a DNS provider with CNAME Flattening or ALIAS/ANAME support (e.g. Route 53, Namecheap, DNSimple). Alternatively, use a <code className="text-foreground font-semibold">www</code> CNAME.
 							</p>
 						</div>
-						<div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-0.5">
-							<span className="text-slate-300 font-semibold block flex items-center gap-1.5">
+						<div className="p-2.5 rounded-lg bg-muted/40 border space-y-0.5">
+							<span className="text-foreground font-semibold block flex items-center gap-1.5">
 								<ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
 								Edge SSL & Routing
 							</span>
@@ -327,7 +339,7 @@ export default function CustomDomainsPage() {
 						</div>
 					</div>
 
-					<p className="text-xs text-slate-400 pt-1 flex items-center gap-1.5">
+					<p className="text-xs text-muted-foreground pt-1 flex items-center gap-1.5">
 						<Lock className="w-3.5 h-3.5 text-emerald-400" />
 						HatDot will verify the domain and automatically configure HTTPS once DNS propagation completes.
 					</p>
@@ -335,27 +347,27 @@ export default function CustomDomainsPage() {
 
 				{/* Add Domain Modal Form */}
 				{showAddModal && (
-					<div className="p-6 rounded-xl bg-slate-900 border border-indigo-500/40 space-y-4 shadow-2xl">
-						<h3 className="text-base font-bold text-white flex items-center gap-2">
-							<Plus className="w-4 h-4 text-indigo-400" /> Attach Custom Domain
+					<div className="p-6 rounded-xl bg-card border space-y-4 shadow-sm">
+						<h3 className="text-base font-bold text-foreground flex items-center gap-2">
+							<Plus className="w-4 h-4 text-foreground font-semibold" /> Attach Custom Domain
 						</h3>
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 							<div>
-								<label className="text-xs font-medium text-slate-300 block mb-1">Domain Name</label>
+								<label className="text-xs font-medium text-foreground block mb-1">Domain Name</label>
 								<input
 									type="text"
 									value={newDomain}
 									onChange={(e) => setNewDomain(e.target.value)}
 									placeholder="e.g. app.yourcompany.com"
-									className="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-indigo-500"
+									className="w-full px-3.5 py-2 rounded-lg bg-background border text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-ring"
 								/>
 							</div>
 							<div>
-								<label className="text-xs font-medium text-slate-300 block mb-1">Route to Application</label>
+								<label className="text-xs font-medium text-foreground block mb-1">Route to Application</label>
 								<select
 									value={activeAppId}
 									onChange={(e) => setSelectedAppId(e.target.value)}
-									className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:border-indigo-500"
+									className="w-full px-3 py-2 rounded-lg bg-background border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-ring"
 								>
 									{applicationsList.length === 0 ? (
 										<option value="">No applications found</option>
@@ -370,15 +382,15 @@ export default function CustomDomainsPage() {
 							</div>
 						</div>
 
-						<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs flex items-center justify-between">
+						<div className="p-3 rounded-lg bg-muted/40 border text-xs flex items-center justify-between">
 							<div>
-								<span className="text-slate-400 font-semibold block">DNS CNAME Target for this App:</span>
-								<span className="text-indigo-400 font-mono font-bold">{assignedTarget}</span>
+								<span className="text-muted-foreground font-semibold block">DNS CNAME Target for this App:</span>
+								<span className="text-foreground font-semibold font-mono font-bold">{assignedTarget}</span>
 							</div>
 							<button
 								type="button"
 								onClick={() => copyRecord(assignedTarget)}
-								className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
+								className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
 							>
 								{copiedDns ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
 							</button>
@@ -388,14 +400,14 @@ export default function CustomDomainsPage() {
 								variant="outline"
 								size="sm"
 								onClick={() => setShowAddModal(false)}
-								className="border-slate-800 text-slate-300 text-xs"
+								className="border text-foreground text-xs"
 							>
 								Cancel
 							</Button>
 							<Button
 								disabled={isAdding || !activeAppId}
 								onClick={handleAddDomain}
-								className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-5"
+								className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs px-5"
 							>
 								{isAdding ? "Attaching Domain..." : "Attach Domain"}
 							</Button>
@@ -404,10 +416,10 @@ export default function CustomDomainsPage() {
 				)}
 
 				{/* Domains List */}
-				<div className="rounded-xl bg-slate-900/60 border border-slate-800 overflow-hidden">
-					<div className="p-6 border-b border-slate-800">
-						<h3 className="text-base font-semibold text-white">Your Attached Custom Domains</h3>
-						<p className="text-xs text-slate-400">
+				<div className="rounded-xl border bg-card overflow-hidden">
+					<div className="p-5 border-b">
+						<h3 className="text-base font-semibold text-foreground">Your Attached Custom Domains</h3>
+						<p className="text-xs text-muted-foreground">
 							{routingTargetData?.isCloudflareSaas
 								? "Domains are routed and secured at HatDot's edge with automatic TLS once DNS records are verified."
 								: "All domains automatically provision Let's Encrypt TLS certificates once DNS points to the server."}
@@ -415,35 +427,35 @@ export default function CustomDomainsPage() {
 					</div>
 
 					{isLoadingDomains ? (
-						<div className="p-12 text-center text-slate-400 text-sm flex items-center justify-center gap-2">
-							<Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+						<div className="p-12 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+							<Loader2 className="w-4 h-4 animate-spin text-foreground font-semibold" />
 							Loading domains...
 						</div>
 					) : !domains || domains.length === 0 ? (
-						<div className="p-12 text-center text-slate-400 text-sm">
+						<div className="p-12 text-center text-muted-foreground text-sm">
 							No domains attached yet. Click &quot;Add Custom Domain&quot; above to connect your first domain.
 						</div>
 					) : (
-						<div className="divide-y divide-slate-800/60 text-slate-300">
+						<div className="divide-y divide-border text-foreground">
 							{domains.map((dom) => (
 								<div
 									key={dom.domainId}
-									className="p-5 hover:bg-slate-800/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+									className="p-5 hover:bg-muted/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
 								>
 									<div className="space-y-1">
 										<div className="flex items-center gap-2.5 flex-wrap">
-											<Globe className="w-4 h-4 text-indigo-400 shrink-0" />
+											<Globe className="w-4 h-4 text-foreground font-semibold shrink-0" />
 											<a
 												href={`${dom.https ? "https" : "http"}://${dom.host}${dom.path || ""}`}
 												target="_blank"
 												rel="noopener noreferrer"
-												className="text-sm font-bold text-white hover:text-indigo-300 flex items-center gap-1.5"
+												className="text-sm font-bold text-foreground hover:text-foreground font-semibold flex items-center gap-1.5"
 											>
-												{dom.host} <ExternalLink className="w-3 h-3 text-slate-500" />
+												{dom.host} <ExternalLink className="w-3 h-3 text-muted-foreground" />
 											</a>
 											{dom.isPrimary && (
-												<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-													<Star className="w-3 h-3 fill-indigo-400 text-indigo-400" />
+												<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 bg-secondary text-secondary-foreground border">
+													<Star className="w-3 h-3 fill-foreground text-foreground" />
 													Primary
 												</span>
 											)}
@@ -459,7 +471,7 @@ export default function CustomDomainsPage() {
 												</>
 											) : (
 												<>
-													<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+													<span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-muted text-muted-foreground border">
 														Let&apos;s Encrypt
 													</span>
 													<span
@@ -475,17 +487,17 @@ export default function CustomDomainsPage() {
 												</>
 											)}
 										</div>
-										<p className="text-xs text-slate-400">
+										<p className="text-xs text-muted-foreground">
 											Routed to{" "}
 											{dom.applicationId && dom.projectId && dom.environmentId ? (
 												<Link
 													href={`/dashboard/project/${dom.projectId}/environment/${dom.environmentId}/services/application/${dom.applicationId}`}
-													className="text-indigo-300 font-mono hover:underline"
+													className="text-foreground font-semibold font-mono hover:underline"
 												>
 													{dom.appName || dom.serviceName}
 												</Link>
 											) : (
-												<code className="text-indigo-300 font-mono">{dom.appName || dom.serviceName}</code>
+												<code className="text-foreground font-semibold font-mono">{dom.appName || dom.serviceName}</code>
 											)}
 											{" "}• Port {dom.port || 3000} • Created {new Date(dom.createdAt).toLocaleDateString()}
 										</p>
@@ -498,7 +510,7 @@ export default function CustomDomainsPage() {
 												size="sm"
 												disabled={isSettingPrimary}
 												onClick={() => handleSetPrimary(dom.domainId, dom.host)}
-												className="border-slate-800 text-slate-300 hover:bg-slate-800 text-xs gap-1.5 h-8"
+												className="border text-foreground hover:bg-muted text-xs gap-1.5 h-8"
 											>
 												<Star className="w-3.5 h-3.5 text-amber-400" /> Set as Primary
 											</Button>
@@ -553,12 +565,12 @@ export default function CustomDomainsPage() {
 											size="sm"
 											disabled={checkingHost === dom.host}
 											onClick={() => handleCheckDns(dom.host, dom.applicationId, dom.composeId)}
-											className="border-slate-800 text-slate-300 hover:bg-slate-800 text-xs gap-1.5 h-8"
+											className="border text-foreground hover:bg-muted text-xs gap-1.5 h-8"
 										>
 											{checkingHost === dom.host ? (
-												<Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+												<Loader2 className="w-3.5 h-3.5 animate-spin text-foreground font-semibold" />
 											) : (
-												<RefreshCw className="w-3.5 h-3.5 text-indigo-400" />
+												<RefreshCw className="w-3.5 h-3.5 text-foreground font-semibold" />
 											)}
 											Check DNS
 										</Button>
@@ -581,7 +593,7 @@ export default function CustomDomainsPage() {
 											<Button
 												variant="ghost"
 												size="sm"
-												className="text-slate-500 hover:text-red-400 hover:bg-red-950/20 h-8 w-8 p-0"
+												className="text-muted-foreground hover:text-red-400 hover:bg-red-950/20 h-8 w-8 p-0"
 											>
 												<Trash2 className="w-4 h-4" />
 											</Button>
@@ -592,6 +604,8 @@ export default function CustomDomainsPage() {
 						</div>
 					)}
 				</div>
+					</div>
+				</Card>
 			</div>
 		</>
 	);

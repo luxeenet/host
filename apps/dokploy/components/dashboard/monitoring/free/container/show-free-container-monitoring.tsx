@@ -267,11 +267,11 @@ export const ContainerFreeMonitoring = ({
 					</div>
 				</header>
 
-				<Card className="bg-background border-slate-800">
+				<Card className="bg-background">
 					<CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3">
 						<div className="space-y-1">
 							<CardTitle className="text-base font-semibold flex items-center gap-2">
-								<Activity className="size-4 text-indigo-400" />
+								<Activity className="size-4" />
 								Subscription Resource Metering
 							</CardTitle>
 							<p className="text-xs text-muted-foreground">
@@ -281,7 +281,7 @@ export const ContainerFreeMonitoring = ({
 						<Link href="/dashboard/usage">
 							<Button
 								size="sm"
-								className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5 shrink-0"
+								className="text-xs gap-1.5 shrink-0"
 							>
 								<Activity className="size-3.5" />
 								Open Usage Dashboard
@@ -290,12 +290,12 @@ export const ContainerFreeMonitoring = ({
 						</Link>
 					</CardHeader>
 					<CardContent className="space-y-4 pt-2">
-						<div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+						<div className="p-4 rounded-xl bg-muted/40 border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 							<div className="space-y-1">
-								<div className="text-xs font-medium text-slate-300">
+								<div className="text-xs font-medium text-foreground">
 									Plan Quota Dashboard
 								</div>
-								<div className="text-xs text-slate-400 leading-relaxed">
+								<div className="text-xs text-muted-foreground leading-relaxed">
 									View authoritative RAM, CPU, storage, and database quotas across all deployed services, check remaining capacity, and upgrade limits instantly.
 								</div>
 							</div>
@@ -303,7 +303,7 @@ export const ContainerFreeMonitoring = ({
 								<Button
 									variant="outline"
 									size="sm"
-									className="text-xs border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-950/40"
+									className="text-xs"
 								>
 									View Subscription Quotas
 								</Button>

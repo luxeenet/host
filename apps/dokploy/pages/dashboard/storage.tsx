@@ -44,6 +44,8 @@ import superjson from "superjson";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { BreadcrumbSidebar } from "@/components/shared/breadcrumb-sidebar";
 import { Input } from "@/components/ui/input";
 import {
 	Dialog,
@@ -82,9 +84,9 @@ function getProgressColor(percentage: number): {
 		};
 	}
 	return {
-		bar: "bg-indigo-500",
-		badge: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
-		text: "text-indigo-400",
+		bar: "bg-primary",
+		badge: "bg-secondary text-secondary-foreground border",
+		text: "text-foreground font-semibold",
 	};
 }
 
@@ -111,7 +113,7 @@ function getFileIcon(mimeType: string, isDir: boolean) {
 	if (mimeType.startsWith("text/")) {
 		return <FileText className="w-4 h-4 text-blue-400 shrink-0" />;
 	}
-	return <File className="w-4 h-4 text-slate-400 shrink-0" />;
+	return <File className="w-4 h-4 text-muted-foreground shrink-0" />;
 }
 
 export default function StorageManagementPage() {
@@ -376,19 +378,28 @@ export default function StorageManagementPage() {
 				<title>Storage Management - {brand.APP_NAME}</title>
 			</Head>
 
-			<div className="space-y-6">
+			<BreadcrumbSidebar
+				list={[
+					{ name: "Home", href: "/dashboard/home" },
+					{ name: "Storage", href: "/dashboard/storage" },
+				]}
+			/>
+
+			<div className="w-full">
+				<Card className="h-full bg-sidebar p-2.5 rounded-xl min-h-[85vh]">
+					<div className="rounded-xl bg-background shadow-md p-6 flex flex-col gap-6 h-full">
 				{/* Header */}
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 					<div>
 						<div className="flex items-center gap-2">
-							<h1 className="text-2xl font-bold text-white tracking-tight">
+							<h1 className="text-3xl font-semibold tracking-tight">
 								Storage Management
 							</h1>
-							<span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+							<span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground border">
 								File Storage
 							</span>
 						</div>
-						<p className="text-slate-400 text-sm mt-1">
+						<p className="text-sm text-muted-foreground mt-1">
 							Upload, manage, and organize your files.
 						</p>
 					</div>
@@ -399,7 +410,7 @@ export default function StorageManagementPage() {
 							size="sm"
 							onClick={handleRefresh}
 							disabled={isOverviewLoading || isDirLoading}
-							className="border-slate-800 text-slate-300 hover:text-white bg-slate-900/60 text-xs h-8 px-3 gap-1.5"
+							className="border text-foreground hover:text-foreground bg-muted/40 text-xs h-8 px-3 gap-1.5"
 						>
 							<RefreshCw
 								className={`w-3.5 h-3.5 ${
@@ -412,9 +423,9 @@ export default function StorageManagementPage() {
 						<Link href="/dashboard/billing">
 							<Button
 								size="sm"
-								className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-3.5 gap-1.5 font-medium"
+								className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-3.5 gap-1.5 font-medium"
 							>
-								<Sparkles className="w-3.5 h-3.5 text-indigo-200" />
+								<Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
 								Upgrade Quota
 							</Button>
 						</Link>
@@ -424,22 +435,22 @@ export default function StorageManagementPage() {
 				{/* Top Storage Overview Cards */}
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 					{/* Quota Gauge Card */}
-					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
+					<div className="rounded-xl border bg-card p-6 space-y-4">
 						<div className="flex items-center justify-between">
-							<span className="text-xs font-semibold text-slate-300">
+							<span className="text-xs font-semibold text-foreground">
 								Storage Usage
 							</span>
-							<div className="w-8 h-8 rounded-lg bg-indigo-950/80 border border-indigo-500/20 flex items-center justify-center">
-								<HardDrive className="w-4 h-4 text-indigo-400" />
+							<div className="w-8 h-8 rounded-lg bg-muted border flex items-center justify-center">
+								<HardDrive className="w-4 h-4 text-foreground font-semibold" />
 							</div>
 						</div>
 
 						<div>
 							<div className="flex items-baseline justify-between gap-2">
-								<h3 className="text-2xl font-extrabold text-white tracking-tight">
+								<h3 className="text-2xl font-extrabold text-foreground tracking-tight">
 									{overview?.quota?.formattedUsed || "0 MB"}
 								</h3>
-								<span className="text-xs font-medium text-slate-400">
+								<span className="text-xs font-medium text-muted-foreground">
 									/ {overview?.quota?.formattedLimit || "20 GB"}
 								</span>
 							</div>
@@ -448,29 +459,29 @@ export default function StorageManagementPage() {
 								<span className={`font-semibold flex items-center gap-1 ${quotaColors.text}`}>
 									{overview?.quota?.percentage || 0}% Used
 								</span>
-								<span className="text-slate-400 font-medium">
+								<span className="text-muted-foreground font-medium">
 									{overview?.quota?.formattedRemaining || "20 GB"} remaining
 								</span>
 							</div>
 						</div>
 
-						<div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+						<div className="w-full h-2 bg-muted/40 rounded-full overflow-hidden border border">
 							<div
 								className={`h-full ${quotaColors.bar} transition-all duration-500 rounded-full`}
 								style={{ width: `${Math.min(overview?.quota?.percentage || 0, 100)}%` }}
 							/>
 						</div>
 
-						<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+						<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
 							<ShieldCheck className="w-3 h-3 text-emerald-500/80 shrink-0" />
 							Your storage usage is updated automatically.
 						</p>
 					</div>
 
 					{/* File and Folder Counts */}
-					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
+					<div className="rounded-xl border bg-card p-6 space-y-4">
 						<div className="flex items-center justify-between">
-							<span className="text-xs font-semibold text-slate-300">
+							<span className="text-xs font-semibold text-foreground">
 								Files & Folders
 							</span>
 							<div className="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-500/20 flex items-center justify-center">
@@ -479,45 +490,45 @@ export default function StorageManagementPage() {
 						</div>
 
 						<div className="grid grid-cols-2 gap-4 pt-1">
-							<div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-								<span className="text-[11px] text-slate-400 font-medium">Total Files</span>
-								<div className="text-xl font-bold text-white mt-1">
+							<div className="p-3 bg-muted/40/50 rounded-lg border border">
+								<span className="text-[11px] text-muted-foreground font-medium">Total Files</span>
+								<div className="text-xl font-bold text-foreground mt-1">
 									{overview?.stats?.fileCount ?? 0}
 								</div>
 							</div>
-							<div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-								<span className="text-[11px] text-slate-400 font-medium">Folders</span>
-								<div className="text-xl font-bold text-white mt-1">
+							<div className="p-3 bg-muted/40/50 rounded-lg border border">
+								<span className="text-[11px] text-muted-foreground font-medium">Folders</span>
+								<div className="text-xl font-bold text-foreground mt-1">
 									{overview?.stats?.folderCount ?? 0}
 								</div>
 							</div>
 						</div>
 
-						<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+						<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
 							<Clock className="w-3 h-3 text-purple-400 shrink-0" />
 							Summary of your stored files and folders.
 						</p>
 					</div>
 
 					{/* Active Storage Location Selector */}
-					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
+					<div className="rounded-xl border bg-card p-6 space-y-4">
 						<div className="flex items-center justify-between">
-							<span className="text-xs font-semibold text-slate-300">
+							<span className="text-xs font-semibold text-foreground">
 								Storage
 							</span>
-							<span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+							<span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-foreground border border">
 								{activeLocationId === "default" ? "File Storage" : "Attached Storage"}
 							</span>
 						</div>
 
 						<div>
-							<label className="text-[11px] text-slate-400 block mb-1.5 font-medium">
+							<label className="text-[11px] text-muted-foreground block mb-1.5 font-medium">
 								Choose Storage
 							</label>
 							<select
 								value={activeLocationId}
 								onChange={(e) => handleSelectLocation(e.target.value)}
-								className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+								className="w-full bg-muted/40 border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
 							>
 								{(overview?.locations || []).map((loc) => (
 									<option key={loc.id} value={loc.id}>
@@ -527,7 +538,7 @@ export default function StorageManagementPage() {
 							</select>
 						</div>
 
-						<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+						<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
 							<Info className="w-3 h-3 text-cyan-400 shrink-0" />
 							{activeLocationId === "default"
 								? "Store and manage your files."
@@ -537,9 +548,9 @@ export default function StorageManagementPage() {
 				</div>
 
 				{/* File Manager Main Card */}
-				<div className="rounded-xl bg-slate-900/60 border border-slate-800 overflow-hidden">
+				<div className="rounded-xl border bg-card overflow-hidden">
 					{/* Toolbar */}
-					<div className="p-4 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-950/40">
+					<div className="p-4 border-b border flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/40/40">
 						{/* Breadcrumbs & Navigation */}
 						<div className="flex items-center gap-1.5 flex-wrap">
 							<Button
@@ -547,23 +558,23 @@ export default function StorageManagementPage() {
 								size="sm"
 								onClick={handleNavigateUp}
 								disabled={currentPath === "/"}
-								className="h-8 w-8 p-0 text-slate-400 hover:text-white"
+								className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
 								title="Go to parent directory"
 							>
 								<CornerLeftUp className="w-4 h-4" />
 							</Button>
 
-							<div className="flex items-center gap-1 text-xs text-slate-400 font-mono">
+							<div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
 								{(directoryData?.breadcrumbs || [{ name: "Root", path: "/" }]).map(
 									(b, idx, arr) => (
 										<div key={b.path} className="flex items-center gap-1">
-											{idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-600" />}
+											{idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
 											<button
 												onClick={() => handleNavigate(b.path)}
-												className={`hover:text-white transition-colors px-1 py-0.5 rounded ${
+												className={`hover:text-foreground transition-colors px-1 py-0.5 rounded ${
 													idx === arr.length - 1
-														? "text-white font-semibold bg-slate-800/60"
-														: "text-slate-400"
+														? "text-foreground font-semibold bg-muted/60"
+														: "text-muted-foreground"
 												}`}
 											>
 												{b.name}
@@ -578,12 +589,12 @@ export default function StorageManagementPage() {
 						<div className="flex items-center gap-2 flex-wrap">
 							{/* Search */}
 							<div className="relative">
-								<Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+								<Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
 								<Input
 									placeholder="Search files..."
 									value={searchQuery}
 									onChange={(e) => setSearchQuery(e.target.value)}
-									className="h-8 text-xs pl-8 pr-3 w-40 sm:w-48 bg-slate-950/80 border-slate-800 text-white"
+									className="h-8 text-xs pl-8 pr-3 w-40 sm:w-48 bg-muted/40/80 border text-foreground"
 								/>
 							</div>
 
@@ -593,12 +604,12 @@ export default function StorageManagementPage() {
 									<Button
 										variant="outline"
 										size="sm"
-										className="h-8 text-xs border-slate-800 text-slate-300 bg-slate-950/60 gap-1 px-2.5"
+										className="h-8 text-xs border text-foreground bg-muted/40/60 gap-1 px-2.5"
 									>
 										Sort: {sortBy} ({sortOrder})
 									</Button>
 								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end" className="bg-slate-950 border-slate-800 text-xs">
+								<DropdownMenuContent align="end" className="bg-muted/40 border text-xs">
 									<DropdownMenuItem onClick={() => setSortBy("name")}>
 										Name
 									</DropdownMenuItem>
@@ -611,7 +622,7 @@ export default function StorageManagementPage() {
 									<DropdownMenuItem onClick={() => setSortBy("type")}>
 										File Type
 									</DropdownMenuItem>
-									<DropdownMenuSeparator className="bg-slate-800" />
+									<DropdownMenuSeparator className="bg-muted" />
 									<DropdownMenuItem
 										onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
 									>
@@ -621,13 +632,13 @@ export default function StorageManagementPage() {
 							</DropdownMenu>
 
 							{/* View Mode Toggle */}
-							<div className="flex items-center border border-slate-800 rounded-lg p-0.5 bg-slate-950/60">
+							<div className="flex items-center border border rounded-lg p-0.5 bg-muted/40/60">
 								<button
 									onClick={() => setViewMode("list")}
 									className={`p-1 rounded ${
 										viewMode === "list"
-											? "bg-slate-800 text-white"
-											: "text-slate-400 hover:text-slate-200"
+											? "bg-muted text-foreground"
+											: "text-muted-foreground hover:text-foreground"
 									}`}
 									title="List view"
 								>
@@ -637,8 +648,8 @@ export default function StorageManagementPage() {
 									onClick={() => setViewMode("grid")}
 									className={`p-1 rounded ${
 										viewMode === "grid"
-											? "bg-slate-800 text-white"
-											: "text-slate-400 hover:text-slate-200"
+											? "bg-muted text-foreground"
+											: "text-muted-foreground hover:text-foreground"
 									}`}
 									title="Grid view"
 								>
@@ -651,7 +662,7 @@ export default function StorageManagementPage() {
 								variant="outline"
 								size="sm"
 								onClick={() => setIsCreateFolderOpen(true)}
-								className="h-8 text-xs border-slate-800 text-slate-300 hover:text-white bg-slate-950/60 gap-1.5 px-3"
+								className="h-8 text-xs border text-foreground hover:text-foreground bg-muted/40/60 gap-1.5 px-3"
 							>
 								<FolderPlus className="w-3.5 h-3.5 text-amber-400" />
 								New Folder
@@ -661,7 +672,7 @@ export default function StorageManagementPage() {
 							<Button
 								size="sm"
 								onClick={() => setIsUploadOpen(true)}
-								className="h-8 text-xs bg-indigo-600 hover:bg-indigo-500 text-white gap-1.5 px-3.5 font-medium"
+								className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 px-3.5 font-medium"
 							>
 								<Upload className="w-3.5 h-3.5" />
 								Upload
@@ -678,7 +689,7 @@ export default function StorageManagementPage() {
 									})
 								}
 								disabled={downloadArchiveMutation.isPending}
-								className="h-8 text-xs border-slate-800 text-slate-300 hover:text-white bg-slate-950/60 gap-1.5 px-2.5"
+								className="h-8 text-xs border text-foreground hover:text-foreground bg-muted/40/60 gap-1.5 px-2.5"
 								title="Download current folder as ZIP"
 							>
 								<Archive className="w-3.5 h-3.5 text-amber-400" />
@@ -689,16 +700,16 @@ export default function StorageManagementPage() {
 
 					{/* Bulk Actions Bar */}
 					{selectedPaths.size > 0 && (
-						<div className="bg-indigo-950/40 border-b border-indigo-500/20 px-6 py-2.5 flex items-center justify-between gap-4 text-xs">
+						<div className="bg-muted/60 border-b px-6 py-2.5 flex items-center justify-between gap-4 text-xs">
 							<div className="flex items-center gap-3">
-								<span className="font-semibold text-indigo-300">
+								<span className="font-semibold text-foreground font-semibold">
 									{selectedPaths.size} item(s) selected
 								</span>
 								<Button
 									variant="ghost"
 									size="sm"
 									onClick={() => setSelectedPaths(new Set())}
-									className="h-6 text-[11px] text-slate-400 hover:text-white p-1"
+									className="h-6 text-[11px] text-muted-foreground hover:text-foreground p-1"
 								>
 									Deselect All
 								</Button>
@@ -712,7 +723,7 @@ export default function StorageManagementPage() {
 										setMoveCopyAction("move");
 										setIsMoveCopyOpen(true);
 									}}
-									className="h-7 text-xs border-slate-800 text-slate-300 bg-slate-900 gap-1 px-2.5"
+									className="h-7 text-xs border text-foreground bg-muted/40 gap-1 px-2.5"
 								>
 									<Move className="w-3 h-3" /> Move
 								</Button>
@@ -723,7 +734,7 @@ export default function StorageManagementPage() {
 										setMoveCopyAction("copy");
 										setIsMoveCopyOpen(true);
 									}}
-									className="h-7 text-xs border-slate-800 text-slate-300 bg-slate-900 gap-1 px-2.5"
+									className="h-7 text-xs border text-foreground bg-muted/40 gap-1 px-2.5"
 								>
 									<Copy className="w-3 h-3" /> Copy
 								</Button>
@@ -734,7 +745,7 @@ export default function StorageManagementPage() {
 										setDeleteTargets(Array.from(selectedPaths));
 										setIsDeleteOpen(true);
 									}}
-									className="h-7 text-xs bg-red-600 hover:bg-red-500 text-white gap-1 px-2.5"
+									className="h-7 text-xs bg-red-600 hover:bg-red-500 text-foreground gap-1 px-2.5"
 								>
 									<Trash2 className="w-3 h-3" /> Delete
 								</Button>
@@ -744,8 +755,8 @@ export default function StorageManagementPage() {
 
 					{/* Content View */}
 					{isDirLoading && !directoryData ? (
-						<div className="p-12 text-center text-slate-400 space-y-3">
-							<RefreshCw className="w-8 h-8 animate-spin mx-auto text-indigo-400" />
+						<div className="p-12 text-center text-muted-foreground space-y-3">
+							<RefreshCw className="w-8 h-8 animate-spin mx-auto text-foreground font-semibold" />
 							<p className="text-xs">Loading files...</p>
 						</div>
 					) : directoryData?.entries && directoryData.entries.length > 0 ? (
@@ -753,15 +764,15 @@ export default function StorageManagementPage() {
 							/* List Table View */
 							<div className="overflow-x-auto">
 								<table className="w-full text-left text-xs">
-									<thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800">
+									<thead className="bg-muted/40/60 text-muted-foreground border-b border">
 										<tr>
 											<th className="w-10 px-4 py-3 text-center">
 												<button
 													onClick={handleSelectAll}
-													className="text-slate-500 hover:text-slate-300"
+													className="text-muted-foreground hover:text-foreground"
 												>
 													{selectedPaths.size === directoryData.entries.length ? (
-														<CheckSquare className="w-4 h-4 text-indigo-400" />
+														<CheckSquare className="w-4 h-4 text-foreground font-semibold" />
 													) : (
 														<Square className="w-4 h-4" />
 													)}
@@ -774,23 +785,23 @@ export default function StorageManagementPage() {
 											<th className="px-4 py-3 font-medium text-right">Actions</th>
 										</tr>
 									</thead>
-									<tbody className="divide-y divide-slate-800/60 text-slate-300">
+									<tbody className="divide-y divide-border text-foreground">
 										{directoryData.entries.map((entry) => {
 											const isSelected = selectedPaths.has(entry.path);
 											return (
 												<tr
 													key={entry.path}
-													className={`hover:bg-slate-800/30 transition-colors ${
-														isSelected ? "bg-indigo-950/20" : ""
+													className={`hover:bg-muted/30 transition-colors ${
+														isSelected ? "bg-muted" : ""
 													}`}
 												>
 													<td className="px-4 py-3 text-center">
 														<button
 															onClick={() => handleToggleSelect(entry.path)}
-															className="text-slate-500 hover:text-slate-300"
+															className="text-muted-foreground hover:text-foreground"
 														>
 															{isSelected ? (
-																<CheckSquare className="w-4 h-4 text-indigo-400" />
+																<CheckSquare className="w-4 h-4 text-foreground font-semibold" />
 															) : (
 																<Square className="w-4 h-4" />
 															)}
@@ -802,7 +813,7 @@ export default function StorageManagementPage() {
 															{entry.isDirectory ? (
 																<button
 																	onClick={() => handleNavigate(entry.path)}
-																	className="font-medium text-white hover:text-indigo-400 transition-colors truncate max-w-xs sm:max-w-md text-left"
+																	className="font-medium text-foreground hover:text-foreground font-semibold transition-colors truncate max-w-xs sm:max-w-md text-left"
 																>
 																	{entry.name}
 																</button>
@@ -813,22 +824,22 @@ export default function StorageManagementPage() {
 																			? handleOpenPreview(entry.path)
 																			: handleDownloadFile(entry.path)
 																	}
-																	className="font-medium text-slate-200 hover:text-indigo-300 transition-colors truncate max-w-xs sm:max-w-md text-left"
+																	className="font-medium text-foreground hover:text-foreground font-semibold transition-colors truncate max-w-xs sm:max-w-md text-left"
 																>
 																	{entry.name}
 																</button>
 															)}
 														</div>
 													</td>
-													<td className="px-4 py-3 font-mono text-slate-400">
+													<td className="px-4 py-3 font-mono text-muted-foreground">
 														{entry.formattedSize}
 													</td>
-													<td className="px-4 py-3 text-slate-400">
-														<span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+													<td className="px-4 py-3 text-muted-foreground">
+														<span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-foreground border border">
 															{entry.isDirectory ? "DIR" : entry.mimeType.split("/")[1] || entry.mimeType}
 														</span>
 													</td>
-													<td className="px-4 py-3 text-slate-400 font-mono text-[11px]">
+													<td className="px-4 py-3 text-muted-foreground font-mono text-[11px]">
 														{new Date(entry.updatedAt).toLocaleString()}
 													</td>
 													<td className="px-4 py-3 text-right">
@@ -838,7 +849,7 @@ export default function StorageManagementPage() {
 																	variant="ghost"
 																	size="sm"
 																	onClick={() => handleOpenPreview(entry.path)}
-																	className="h-7 w-7 p-0 text-slate-400 hover:text-white"
+																	className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
 																	title="Preview"
 																>
 																	<Eye className="w-3.5 h-3.5" />
@@ -849,7 +860,7 @@ export default function StorageManagementPage() {
 																	variant="ghost"
 																	size="sm"
 																	onClick={() => handleDownloadFile(entry.path)}
-																	className="h-7 w-7 p-0 text-slate-400 hover:text-white"
+																	className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
 																	title="Download"
 																>
 																	<Download className="w-3.5 h-3.5" />
@@ -860,14 +871,14 @@ export default function StorageManagementPage() {
 																	<Button
 																		variant="ghost"
 																		size="sm"
-																		className="h-7 w-7 p-0 text-slate-400 hover:text-white"
+																		className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
 																	>
 																		•••
 																	</Button>
 																</DropdownMenuTrigger>
 																<DropdownMenuContent
 																	align="end"
-																	className="bg-slate-950 border-slate-800 text-xs"
+																	className="bg-muted/40 border text-xs"
 																>
 																	<DropdownMenuItem
 																		onClick={() => {
@@ -899,7 +910,7 @@ export default function StorageManagementPage() {
 																	>
 																		<Copy className="w-3.5 h-3.5 mr-2" /> Copy
 																	</DropdownMenuItem>
-																	<DropdownMenuSeparator className="bg-slate-800" />
+																	<DropdownMenuSeparator className="bg-muted" />
 																	<DropdownMenuItem
 																		className="text-red-400 focus:text-red-400 focus:bg-red-950/40"
 																		onClick={() => {
@@ -929,16 +940,16 @@ export default function StorageManagementPage() {
 											key={entry.path}
 											className={`p-4 rounded-xl border transition-all text-center group relative flex flex-col items-center justify-between min-h-[140px] ${
 												isSelected
-													? "bg-indigo-950/40 border-indigo-500/50"
-													: "bg-slate-950/40 border-slate-800 hover:border-slate-700 hover:bg-slate-800/20"
+													? "bg-muted border-foreground/30"
+													: "bg-muted/40/40 border hover:border hover:bg-muted/20"
 											}`}
 										>
 											<button
 												onClick={() => handleToggleSelect(entry.path)}
-												className="absolute top-2 left-2 text-slate-500 hover:text-slate-300"
+												className="absolute top-2 left-2 text-muted-foreground hover:text-foreground"
 											>
 												{isSelected ? (
-													<CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+													<CheckSquare className="w-3.5 h-3.5 text-foreground font-semibold" />
 												) : (
 													<Square className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100" />
 												)}
@@ -954,15 +965,15 @@ export default function StorageManagementPage() {
 												}
 												className="cursor-pointer flex flex-col items-center gap-2 pt-2 w-full"
 											>
-												<div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center">
+												<div className="w-12 h-12 rounded-xl border bg-card flex items-center justify-center">
 													{getFileIcon(entry.mimeType, entry.isDirectory)}
 												</div>
-												<span className="text-xs font-medium text-slate-200 truncate max-w-[120px]">
+												<span className="text-xs font-medium text-foreground truncate max-w-[120px]">
 													{entry.name}
 												</span>
 											</div>
 
-											<div className="text-[10px] text-slate-500 pt-1 flex items-center justify-between w-full">
+											<div className="text-[10px] text-muted-foreground pt-1 flex items-center justify-between w-full">
 												<span>{entry.formattedSize}</span>
 												<span>{entry.isDirectory ? "DIR" : entry.mimeType.split("/")[1] || "FILE"}</span>
 											</div>
@@ -974,10 +985,10 @@ export default function StorageManagementPage() {
 					) : (
 						/* Empty State */
 						<div className="p-16 text-center space-y-4">
-							<FolderOpen className="w-12 h-12 text-slate-600 mx-auto" />
+							<FolderOpen className="w-12 h-12 text-muted-foreground mx-auto" />
 							<div>
-								<h4 className="text-base font-semibold text-white">This folder is empty</h4>
-								<p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+								<h4 className="text-base font-semibold text-foreground">This folder is empty</h4>
+								<p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
 									Upload files or create folders to organize your assets and data.
 								</p>
 							</div>
@@ -985,7 +996,7 @@ export default function StorageManagementPage() {
 								<Button
 									size="sm"
 									onClick={() => setIsUploadOpen(true)}
-									className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 gap-1.5"
+									className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-4 gap-1.5"
 								>
 									<Upload className="w-3.5 h-3.5" />
 									Upload File
@@ -994,7 +1005,7 @@ export default function StorageManagementPage() {
 									size="sm"
 									variant="outline"
 									onClick={() => setIsCreateFolderOpen(true)}
-									className="border-slate-800 text-slate-300 text-xs h-8 px-4 gap-1.5"
+									className="border text-foreground text-xs h-8 px-4 gap-1.5"
 								>
 									<FolderPlus className="w-3.5 h-3.5 text-amber-400" />
 									Create Folder
@@ -1004,7 +1015,7 @@ export default function StorageManagementPage() {
 					)}
 
 					{/* Footer Note */}
-					<div className="p-4 bg-slate-950/40 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
+					<div className="p-4 bg-muted/40 border-t text-[11px] text-muted-foreground flex items-center justify-between">
 						<span className="flex items-center gap-1.5">
 							<ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
 							<span>All uploads and changes are saved to your account.</span>
@@ -1014,11 +1025,13 @@ export default function StorageManagementPage() {
 						</span>
 					</div>
 				</div>
+					</div>
+				</Card>
 			</div>
 
 			{/* Modal: New Folder */}
 			<Dialog open={isCreateFolderOpen} onOpenChange={setIsCreateFolderOpen}>
-				<DialogContent className="bg-slate-950 border-slate-800 text-white max-w-md">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle className="text-base font-bold flex items-center gap-2">
 							<FolderPlus className="w-4 h-4 text-amber-400" />
@@ -1027,17 +1040,17 @@ export default function StorageManagementPage() {
 					</DialogHeader>
 					<div className="space-y-4 py-2">
 						<div>
-							<label className="text-xs text-slate-400 block mb-1">Folder Name</label>
+							<label className="text-xs text-muted-foreground block mb-1">Folder Name</label>
 							<Input
 								placeholder="e.g. documents, assets, models"
 								value={newFolderName}
 								onChange={(e) => setNewFolderName(e.target.value)}
-								className="bg-slate-900 border-slate-800 text-white text-xs"
+								className="bg-muted/40 border text-foreground text-xs"
 								autoFocus
 							/>
 						</div>
-						<p className="text-[11px] text-slate-500">
-							Folder: <span className="font-mono text-slate-300">{currentPath}</span>
+						<p className="text-[11px] text-muted-foreground">
+							Folder: <span className="font-mono text-foreground">{currentPath}</span>
 						</p>
 					</div>
 					<DialogFooter>
@@ -1045,7 +1058,7 @@ export default function StorageManagementPage() {
 							variant="outline"
 							size="sm"
 							onClick={() => setIsCreateFolderOpen(false)}
-							className="border-slate-800 text-slate-300 text-xs"
+							className="border text-foreground text-xs"
 						>
 							Cancel
 						</Button>
@@ -1059,7 +1072,7 @@ export default function StorageManagementPage() {
 								})
 							}
 							disabled={!newFolderName.trim() || createFolderMutation.isPending}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs"
 						>
 							Create Folder
 						</Button>
@@ -1069,10 +1082,10 @@ export default function StorageManagementPage() {
 
 			{/* Modal: Upload Files */}
 			<Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-				<DialogContent className="bg-slate-950 border-slate-800 text-white max-w-lg">
+				<DialogContent className="max-w-lg">
 					<DialogHeader>
 						<DialogTitle className="text-base font-bold flex items-center gap-2">
-							<Upload className="w-4 h-4 text-indigo-400" />
+							<Upload className="w-4 h-4 text-foreground font-semibold" />
 							Upload Files
 						</DialogTitle>
 					</DialogHeader>
@@ -1080,11 +1093,11 @@ export default function StorageManagementPage() {
 						{/* Dropzone */}
 						<div
 							onClick={() => fileInputRef.current?.click()}
-							className="border-2 border-dashed border-slate-800 hover:border-indigo-500/60 rounded-xl p-8 text-center cursor-pointer transition-colors bg-slate-900/40"
+							className="border-2 border-dashed border hover:border-primary/50 rounded-xl p-8 text-center cursor-pointer transition-colors bg-muted/40"
 						>
-							<Upload className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
-							<p className="text-xs font-semibold text-white">Click or drag files here to upload</p>
-							<p className="text-[11px] text-slate-500 mt-1">
+							<Upload className="w-8 h-8 text-foreground font-semibold mx-auto mb-2" />
+							<p className="text-xs font-semibold text-foreground">Click or drag files here to upload</p>
+							<p className="text-[11px] text-muted-foreground mt-1">
 								Upload documents, images, archives, or code files up to 100 MB each.
 							</p>
 							<input
@@ -1102,11 +1115,11 @@ export default function StorageManagementPage() {
 
 						{/* Selected files list */}
 						{uploadFiles.length > 0 && (
-							<div className="max-h-40 overflow-y-auto space-y-1.5 p-2 bg-slate-900/60 rounded-lg border border-slate-800 text-xs">
+							<div className="max-h-40 overflow-y-auto space-y-1.5 p-2 bg-muted/40 rounded-lg border border text-xs">
 								{uploadFiles.map((f, i) => (
-									<div key={i} className="flex items-center justify-between text-slate-300 py-1 px-2">
+									<div key={i} className="flex items-center justify-between text-foreground py-1 px-2">
 										<span className="truncate max-w-xs">{f.name}</span>
-										<span className="font-mono text-slate-500 text-[11px]">
+										<span className="font-mono text-muted-foreground text-[11px]">
 											{(f.size / 1024 / 1024).toFixed(2)} MB
 										</span>
 									</div>
@@ -1114,9 +1127,9 @@ export default function StorageManagementPage() {
 							</div>
 						)}
 
-						<div className="p-3 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-between text-xs">
-							<span className="text-slate-400">Available Storage:</span>
-							<span className="font-semibold text-white">
+						<div className="p-3 bg-muted/40 rounded-lg border border flex items-center justify-between text-xs">
+							<span className="text-muted-foreground">Available Storage:</span>
+							<span className="font-semibold text-foreground">
 								{overview?.quota?.formattedRemaining || "Unlimited"}
 							</span>
 						</div>
@@ -1127,7 +1140,7 @@ export default function StorageManagementPage() {
 							size="sm"
 							onClick={() => setIsUploadOpen(false)}
 							disabled={isUploading}
-							className="border-slate-800 text-slate-300 text-xs"
+							className="border text-foreground text-xs"
 						>
 							Cancel
 						</Button>
@@ -1135,7 +1148,7 @@ export default function StorageManagementPage() {
 							size="sm"
 							onClick={handleUploadSubmit}
 							disabled={uploadFiles.length === 0 || isUploading}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs gap-1.5"
 						>
 							{isUploading ? (
 								<>
@@ -1152,20 +1165,20 @@ export default function StorageManagementPage() {
 
 			{/* Modal: Rename */}
 			<Dialog open={isRenameOpen} onOpenChange={setIsRenameOpen}>
-				<DialogContent className="bg-slate-950 border-slate-800 text-white max-w-md">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle className="text-base font-bold flex items-center gap-2">
-							<Edit2 className="w-4 h-4 text-indigo-400" />
+							<Edit2 className="w-4 h-4 text-foreground font-semibold" />
 							Rename Item
 						</DialogTitle>
 					</DialogHeader>
 					<div className="space-y-4 py-2">
 						<div>
-							<label className="text-xs text-slate-400 block mb-1">New Name</label>
+							<label className="text-xs text-muted-foreground block mb-1">New Name</label>
 							<Input
 								value={renameNewName}
 								onChange={(e) => setRenameNewName(e.target.value)}
-								className="bg-slate-900 border-slate-800 text-white text-xs"
+								className="bg-muted/40 border text-foreground text-xs"
 								autoFocus
 							/>
 						</div>
@@ -1175,7 +1188,7 @@ export default function StorageManagementPage() {
 							variant="outline"
 							size="sm"
 							onClick={() => setIsRenameOpen(false)}
-							className="border-slate-800 text-slate-300 text-xs"
+							className="border text-foreground text-xs"
 						>
 							Cancel
 						</Button>
@@ -1190,7 +1203,7 @@ export default function StorageManagementPage() {
 								});
 							}}
 							disabled={!renameNewName.trim() || renameItemMutation.isPending}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs"
 						>
 							Save Name
 						</Button>
@@ -1200,11 +1213,11 @@ export default function StorageManagementPage() {
 
 			{/* Modal: Move / Copy */}
 			<Dialog open={isMoveCopyOpen} onOpenChange={setIsMoveCopyOpen}>
-				<DialogContent className="bg-slate-950 border-slate-800 text-white max-w-md">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle className="text-base font-bold flex items-center gap-2">
 							{moveCopyAction === "move" ? (
-								<Move className="w-4 h-4 text-indigo-400" />
+								<Move className="w-4 h-4 text-foreground font-semibold" />
 							) : (
 								<Copy className="w-4 h-4 text-purple-400" />
 							)}
@@ -1213,15 +1226,15 @@ export default function StorageManagementPage() {
 					</DialogHeader>
 					<div className="space-y-4 py-2">
 						<div>
-							<label className="text-xs text-slate-400 block mb-1">Destination Folder</label>
+							<label className="text-xs text-muted-foreground block mb-1">Destination Folder</label>
 							<Input
 								placeholder="e.g. / or /documents"
 								value={moveCopyTargetFolder}
 								onChange={(e) => setMoveCopyTargetFolder(e.target.value)}
-								className="bg-slate-900 border-slate-800 text-white text-xs font-mono"
+								className="bg-muted/40 border text-foreground text-xs font-mono"
 							/>
 						</div>
-						<p className="text-[11px] text-slate-500">
+						<p className="text-[11px] text-muted-foreground">
 							Selected items will be {moveCopyAction === "move" ? "moved" : "duplicated"} into this folder.
 						</p>
 					</div>
@@ -1230,7 +1243,7 @@ export default function StorageManagementPage() {
 							variant="outline"
 							size="sm"
 							onClick={() => setIsMoveCopyOpen(false)}
-							className="border-slate-800 text-slate-300 text-xs"
+							className="border text-foreground text-xs"
 						>
 							Cancel
 						</Button>
@@ -1253,7 +1266,7 @@ export default function StorageManagementPage() {
 								}
 							}}
 							disabled={moveItemsMutation.isPending || copyItemsMutation.isPending}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs"
 						>
 							Confirm {moveCopyAction === "move" ? "Move" : "Copy"}
 						</Button>
@@ -1263,18 +1276,18 @@ export default function StorageManagementPage() {
 
 			{/* Modal: Delete Confirmation */}
 			<Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-				<DialogContent className="bg-slate-950 border-slate-800 text-white max-w-md">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle className="text-base font-bold flex items-center gap-2 text-red-400">
 							<AlertTriangle className="w-4 h-4 text-red-400" />
 							Confirm Deletion
 						</DialogTitle>
 					</DialogHeader>
-					<div className="space-y-3 py-2 text-xs text-slate-300">
+					<div className="space-y-3 py-2 text-xs text-foreground">
 						<p>
-							Are you sure you want to delete <span className="font-bold text-white">{deleteTargets.length} item(s)</span>?
+							Are you sure you want to delete <span className="font-bold text-foreground">{deleteTargets.length} item(s)</span>?
 						</p>
-						<div className="max-h-32 overflow-y-auto p-2 bg-slate-900 rounded border border-slate-800 font-mono text-[11px] text-slate-400 space-y-1">
+						<div className="max-h-32 overflow-y-auto p-2 bg-muted/40 rounded border border font-mono text-[11px] text-muted-foreground space-y-1">
 							{deleteTargets.map((p) => (
 								<div key={p} className="truncate">
 									{p}
@@ -1290,7 +1303,7 @@ export default function StorageManagementPage() {
 							variant="outline"
 							size="sm"
 							onClick={() => setIsDeleteOpen(false)}
-							className="border-slate-800 text-slate-300 text-xs"
+							className="border text-foreground text-xs"
 						>
 							Cancel
 						</Button>
@@ -1304,7 +1317,7 @@ export default function StorageManagementPage() {
 								})
 							}
 							disabled={deleteItemsMutation.isPending}
-							className="bg-red-600 hover:bg-red-500 text-white text-xs"
+							className="bg-red-600 hover:bg-red-500 text-foreground text-xs"
 						>
 							Delete Permanently
 						</Button>
@@ -1314,13 +1327,13 @@ export default function StorageManagementPage() {
 
 			{/* Modal: Safe File Preview */}
 			<Dialog open={!!previewFile} onOpenChange={(open) => !open && setPreviewFile(null)}>
-				<DialogContent className="bg-slate-950 border-slate-800 text-white max-w-3xl">
+				<DialogContent className="max-w-3xl">
 					<DialogHeader>
 						<DialogTitle className="text-sm font-bold flex items-center justify-between">
 							<div className="flex items-center gap-2 truncate">
-								<Eye className="w-4 h-4 text-indigo-400" />
+								<Eye className="w-4 h-4 text-foreground font-semibold" />
 								<span className="truncate">{previewFile?.name}</span>
-								<span className="text-[11px] text-slate-500 font-mono">
+								<span className="text-[11px] text-muted-foreground font-mono">
 									({previewFile?.formattedSize})
 								</span>
 							</div>
@@ -1329,7 +1342,7 @@ export default function StorageManagementPage() {
 									size="sm"
 									variant="outline"
 									onClick={() => handleDownloadFile(previewFile.path)}
-									className="h-7 text-xs border-slate-800 text-slate-300 hover:text-white"
+									className="h-7 text-xs border text-foreground hover:text-foreground"
 								>
 									<Download className="w-3.5 h-3.5 mr-1" /> Download
 								</Button>
@@ -1339,7 +1352,7 @@ export default function StorageManagementPage() {
 
 					<div className="py-2">
 						{previewFile?.previewType === "image" ? (
-							<div className="flex items-center justify-center p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+							<div className="flex items-center justify-center p-4 bg-muted/40/50 rounded-xl border border">
 								{/* Safe raster image preview */}
 								<img
 									src={`data:${previewFile.mimeType};base64,${previewFile.content}`}
@@ -1349,7 +1362,7 @@ export default function StorageManagementPage() {
 							</div>
 						) : (
 							<div className="space-y-2">
-								<pre className="p-4 bg-slate-900 rounded-xl border border-slate-800 font-mono text-xs overflow-auto max-h-[60vh] text-slate-200 whitespace-pre-wrap break-words">
+								<pre className="p-4 bg-muted/40 rounded-xl border border font-mono text-xs overflow-auto max-h-[60vh] text-foreground whitespace-pre-wrap break-words">
 									{previewFile?.content}
 								</pre>
 								{previewFile?.truncated && (

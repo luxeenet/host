@@ -7,6 +7,7 @@ import type { ReactElement } from "react";
 import { ContainerFreeMonitoring } from "@/components/dashboard/monitoring/free/container/show-free-container-monitoring";
 import { ShowPaidMonitoring } from "@/components/dashboard/monitoring/paid/servers/show-paid-monitoring";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
+import { BreadcrumbSidebar } from "@/components/shared/breadcrumb-sidebar";
 import { Card } from "@/components/ui/card";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { api } from "@/utils/api";
@@ -23,7 +24,14 @@ const Dashboard = () => {
 
 	const { data: monitoring, isPending } = api.user.getMetricsToken.useQuery();
 	return (
-		<div className="space-y-4 pb-10">
+		<>
+			<BreadcrumbSidebar
+				list={[
+					{ name: "Home", href: "/dashboard/home" },
+					{ name: "Monitoring", href: "/dashboard/monitoring" },
+				]}
+			/>
+			<div className="space-y-4 pb-10">
 			{/* <AlertBlock>
 				You are watching the <strong>Free</strong> plan.{" "}
 				<a
@@ -80,6 +88,7 @@ const Dashboard = () => {
 				</>
 			)}
 		</div>
+		</>
 	);
 };
 

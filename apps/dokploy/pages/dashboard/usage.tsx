@@ -27,6 +27,8 @@ import superjson from "superjson";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { BreadcrumbSidebar } from "@/components/shared/breadcrumb-sidebar";
 import { api } from "@/utils/api";
 import { appRouter } from "@/server/api/root";
 
@@ -50,9 +52,9 @@ function getProgressColor(percentage: number): {
 		};
 	}
 	return {
-		bar: "bg-indigo-500",
-		badge: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
-		text: "text-indigo-400",
+		bar: "bg-primary",
+		badge: "bg-secondary text-secondary-foreground border",
+		text: "text-foreground font-semibold",
 	};
 }
 
@@ -100,29 +102,38 @@ export default function ResourceUsagePage() {
 				<title>Resource Usage Analytics - {brand.APP_NAME}</title>
 			</Head>
 
-			<div className="space-y-8">
+			<BreadcrumbSidebar
+				list={[
+					{ name: "Home", href: "/dashboard/home" },
+					{ name: "Usage", href: "/dashboard/usage" },
+				]}
+			/>
+
+			<div className="w-full">
+				<Card className="h-full bg-sidebar p-2.5 rounded-xl min-h-[85vh]">
+					<div className="rounded-xl bg-background shadow-md p-6 flex flex-col gap-6 h-full">
 				{/* Header */}
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 					<div>
 						<div className="flex items-center gap-2">
-							<h1 className="text-2xl font-bold text-white tracking-tight">
+							<h1 className="text-3xl font-semibold tracking-tight">
 								Resource Usage & Metering
 							</h1>
 							{usage?.planName && (
-								<span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+								<span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground border">
 									{usage.planName} Plan
 								</span>
 							)}
 						</div>
-						<p className="text-slate-400 text-sm mt-1">
+						<p className="text-sm text-muted-foreground mt-1">
 							Live resource usage, quota tracking, and subscription limits.
 						</p>
 					</div>
 
 					<div className="flex items-center gap-2.5">
 						{usage?.billingPeriodEnd && (
-							<span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-slate-300 border border-slate-800 flex items-center gap-1.5">
-								<Clock className="w-3.5 h-3.5 text-slate-400" />
+							<span className="px-3 py-1 rounded-full text-xs font-medium bg-muted/40 text-foreground border border flex items-center gap-1.5">
+								<Clock className="w-3.5 h-3.5 text-muted-foreground" />
 								Period resets {new Date(usage.billingPeriodEnd).toLocaleDateString()}
 							</span>
 						)}
@@ -132,7 +143,7 @@ export default function ResourceUsagePage() {
 							size="sm"
 							onClick={handleManualRefresh}
 							disabled={isRefreshing || isLoading}
-							className="border-slate-800 text-slate-300 hover:text-white bg-slate-900/60 text-xs h-8 px-3 gap-1.5"
+							className="border text-foreground hover:text-foreground bg-muted/40 text-xs h-8 px-3 gap-1.5"
 						>
 							<RefreshCw
 								className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
@@ -143,9 +154,9 @@ export default function ResourceUsagePage() {
 						<Link href="/dashboard/billing">
 							<Button
 								size="sm"
-								className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-3.5 gap-1.5 font-medium"
+								className="text-xs h-8 px-3.5 gap-1.5 font-medium"
 							>
-								<Sparkles className="w-3.5 h-3.5 text-indigo-200" />
+								<Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
 								Upgrade Plan
 							</Button>
 						</Link>
@@ -158,10 +169,10 @@ export default function ResourceUsagePage() {
 						<div className="flex items-start gap-3">
 							<AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
 							<div>
-								<h3 className="text-sm font-semibold text-white">
+								<h3 className="text-sm font-semibold text-foreground">
 									Approaching Subscription Quota Limits
 								</h3>
-								<p className="text-xs text-slate-400 mt-0.5">
+								<p className="text-xs text-muted-foreground mt-0.5">
 									One or more workloads are nearing the memory, CPU, or service capacity allocated to your current plan. Upgrade anytime for instantaneous limit expansion.
 								</p>
 							</div>
@@ -169,7 +180,7 @@ export default function ResourceUsagePage() {
 						<Link href="/dashboard/billing" className="shrink-0">
 							<Button
 								size="sm"
-								className="bg-amber-600 hover:bg-amber-500 text-white text-xs h-8 px-4 gap-1.5 font-semibold"
+								className="bg-amber-600 hover:bg-amber-500 text-foreground text-xs h-8 px-4 gap-1.5 font-semibold"
 							>
 								View Upgrades <ArrowUpRight className="w-3.5 h-3.5" />
 							</Button>
@@ -183,11 +194,11 @@ export default function ResourceUsagePage() {
 						{[...Array(6)].map((_, i) => (
 							<div
 								key={i}
-								className="rounded-xl bg-slate-900/40 border border-slate-800 p-6 space-y-4 animate-pulse"
+								className="rounded-xl border bg-card p-6 space-y-4 animate-pulse"
 							>
-								<div className="h-4 bg-slate-800 rounded w-1/3" />
-								<div className="h-8 bg-slate-800 rounded w-2/3" />
-								<div className="h-2 bg-slate-800 rounded w-full" />
+								<div className="h-4 bg-muted rounded w-1/3" />
+								<div className="h-8 bg-muted rounded w-2/3" />
+								<div className="h-2 bg-muted rounded w-full" />
 							</div>
 						))}
 					</div>
@@ -197,10 +208,10 @@ export default function ResourceUsagePage() {
 				{isError && (
 					<div className="p-8 rounded-xl bg-red-950/20 border border-red-500/20 text-center space-y-3">
 						<AlertTriangle className="w-8 h-8 text-red-400 mx-auto" />
-						<h3 className="text-sm font-semibold text-white">
+						<h3 className="text-sm font-semibold text-foreground">
 							Unable to Load Resource Usage
 						</h3>
-						<p className="text-xs text-slate-400 max-w-md mx-auto">
+						<p className="text-xs text-muted-foreground max-w-md mx-auto">
 							{error?.message || "An unexpected error occurred while loading resource metrics."}
 						</p>
 						<Button
@@ -218,22 +229,22 @@ export default function ResourceUsagePage() {
 				{usage && (
 					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 						{/* RAM Quota Gauge */}
-						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
+						<div className="rounded-xl border bg-card p-6 space-y-4 relative overflow-hidden group hover:border transition-colors">
 							<div className="flex items-center justify-between">
-								<span className="text-xs font-semibold text-slate-300">
+								<span className="text-xs font-semibold text-foreground">
 									RAM Usage
 								</span>
-								<div className="w-8 h-8 rounded-lg bg-indigo-950/80 border border-indigo-500/20 flex items-center justify-center">
-									<Activity className="w-4 h-4 text-indigo-400" />
+								<div className="w-8 h-8 rounded-lg bg-muted border flex items-center justify-center">
+									<Activity className="w-4 h-4 text-foreground font-semibold" />
 								</div>
 							</div>
 
 							<div>
 								<div className="flex items-baseline justify-between gap-2">
-									<h3 className="text-2xl font-extrabold text-white tracking-tight">
+									<h3 className="text-2xl font-extrabold text-foreground tracking-tight">
 										{usage.ram.formattedUsed}
 									</h3>
-									<span className="text-xs font-medium text-slate-400">
+									<span className="text-xs font-medium text-muted-foreground">
 										/ {usage.ram.formattedLimit} Limit
 									</span>
 								</div>
@@ -243,29 +254,29 @@ export default function ResourceUsagePage() {
 										<TrendingUp className="w-3 h-3" />
 										{usage.ram.percentage}% Used
 									</span>
-									<span className="text-slate-400 font-medium">
+									<span className="text-muted-foreground font-medium">
 										{usage.ram.formattedRemaining} remaining
 									</span>
 								</div>
 							</div>
 
-							<div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+							<div className="w-full h-2 bg-muted/40 rounded-full overflow-hidden border border">
 								<div
 									className={`h-full ${ramColors.bar} transition-all duration-500 rounded-full`}
 									style={{ width: `${Math.min(usage.ram.percentage, 100)}%` }}
 								/>
 							</div>
 
-							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+							<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
 								<ShieldCheck className="w-3 h-3 text-emerald-500/80 shrink-0" />
 								{usage.ram.statusLabel || "Memory used by your active applications."}
 							</p>
 						</div>
 
 						{/* CPU Load Gauge */}
-						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
+						<div className="rounded-xl border bg-card p-6 space-y-4 relative overflow-hidden group hover:border transition-colors">
 							<div className="flex items-center justify-between">
-								<span className="text-xs font-semibold text-slate-300">
+								<span className="text-xs font-semibold text-foreground">
 									CPU Usage
 								</span>
 								<div className="w-8 h-8 rounded-lg bg-blue-950/80 border border-blue-500/20 flex items-center justify-center">
@@ -275,10 +286,10 @@ export default function ResourceUsagePage() {
 
 							<div>
 								<div className="flex items-baseline justify-between gap-2">
-									<h3 className="text-2xl font-extrabold text-white tracking-tight">
+									<h3 className="text-2xl font-extrabold text-foreground tracking-tight">
 										{usage.cpu.formattedUsed}
 									</h3>
-									<span className="text-xs font-medium text-slate-400">
+									<span className="text-xs font-medium text-muted-foreground">
 										/ {usage.cpu.formattedLimit}
 									</span>
 								</div>
@@ -288,29 +299,29 @@ export default function ResourceUsagePage() {
 										<Activity className="w-3 h-3" />
 										{usage.cpu.percentage}% Utilization
 									</span>
-									<span className="text-slate-400 font-medium">
+									<span className="text-muted-foreground font-medium">
 										{usage.cpu.formattedRemaining} remaining
 									</span>
 								</div>
 							</div>
 
-							<div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+							<div className="w-full h-2 bg-muted/40 rounded-full overflow-hidden border border">
 								<div
 									className={`h-full ${cpuColors.bar} transition-all duration-500 rounded-full`}
 									style={{ width: `${Math.min(usage.cpu.percentage, 100)}%` }}
 								/>
 							</div>
 
-							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+							<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
 								<CheckCircle className="w-3 h-3 text-blue-400/80 shrink-0" />
 								{usage.cpu.statusLabel}
 							</p>
 						</div>
 
 						{/* Storage Quota Gauge */}
-						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
+						<div className="rounded-xl border bg-card p-6 space-y-4 relative overflow-hidden group hover:border transition-colors">
 							<div className="flex items-center justify-between">
-								<span className="text-xs font-semibold text-slate-300">
+								<span className="text-xs font-semibold text-foreground">
 									Storage Usage
 								</span>
 								<div className="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-500/20 flex items-center justify-center">
@@ -320,10 +331,10 @@ export default function ResourceUsagePage() {
 
 							<div>
 								<div className="flex items-baseline justify-between gap-2">
-									<h3 className="text-2xl font-extrabold text-white tracking-tight">
+									<h3 className="text-2xl font-extrabold text-foreground tracking-tight">
 										{usage.storage.formattedUsed}
 									</h3>
-									<span className="text-xs font-medium text-slate-400">
+									<span className="text-xs font-medium text-muted-foreground">
 										/ {usage.storage.formattedLimit}
 									</span>
 								</div>
@@ -333,29 +344,29 @@ export default function ResourceUsagePage() {
 										<TrendingUp className="w-3 h-3" />
 										{usage.storage.percentage}% Used
 									</span>
-									<span className="text-slate-400 font-medium">
+									<span className="text-muted-foreground font-medium">
 										{usage.storage.formattedRemaining} remaining
 									</span>
 								</div>
 							</div>
 
-							<div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+							<div className="w-full h-2 bg-muted/40 rounded-full overflow-hidden border border">
 								<div
 									className={`h-full ${storageColors.bar} transition-all duration-500 rounded-full`}
 									style={{ width: `${Math.min(usage.storage.percentage, 100)}%` }}
 								/>
 							</div>
 
-							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+							<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
 								<CheckCircle className="w-3 h-3 text-purple-400/80 shrink-0" />
 								{usage.storage.statusLabel || "Storage used by your files, applications, and backups."}
 							</p>
 						</div>
 
 						{/* Monthly Egress Bandwidth */}
-						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
+						<div className="rounded-xl border bg-card p-6 space-y-4 relative overflow-hidden group hover:border transition-colors">
 							<div className="flex items-center justify-between">
-								<span className="text-xs font-semibold text-slate-300">
+								<span className="text-xs font-semibold text-foreground">
 									Bandwidth Usage
 								</span>
 								<div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-500/20 flex items-center justify-center">
@@ -365,10 +376,10 @@ export default function ResourceUsagePage() {
 
 							<div>
 								<div className="flex items-baseline justify-between gap-2">
-									<h3 className="text-2xl font-extrabold text-white tracking-tight">
+									<h3 className="text-2xl font-extrabold text-foreground tracking-tight">
 										{usage.bandwidth.formattedUsed}
 									</h3>
-									<span className="text-xs font-medium text-slate-400">
+									<span className="text-xs font-medium text-muted-foreground">
 										/ {usage.bandwidth.formattedLimit} Included
 									</span>
 								</div>
@@ -378,29 +389,29 @@ export default function ResourceUsagePage() {
 										<CheckCircle className="w-3 h-3" />
 										{usage.bandwidth.percentage}% Consumed
 									</span>
-									<span className="text-slate-400 font-medium">
+									<span className="text-muted-foreground font-medium">
 										{usage.bandwidth.formattedRemaining} remaining
 									</span>
 								</div>
 							</div>
 
-							<div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+							<div className="w-full h-2 bg-muted/40 rounded-full overflow-hidden border border">
 								<div
 									className={`h-full ${bandwidthColors.bar} transition-all duration-500 rounded-full`}
 									style={{ width: `${Math.min(usage.bandwidth.percentage, 100)}%` }}
 								/>
 							</div>
 
-							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+							<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
 								<Globe className="w-3 h-3 text-cyan-400/80 shrink-0" />
 								{usage.bandwidth.statusLabel || "Outbound HTTP and service egress for the active billing cycle."}
 							</p>
 						</div>
 
 						{/* Application Slots */}
-						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
+						<div className="rounded-xl border bg-card p-6 space-y-4 relative overflow-hidden group hover:border transition-colors">
 							<div className="flex items-center justify-between">
-								<span className="text-xs font-semibold text-slate-300">
+								<span className="text-xs font-semibold text-foreground">
 									Application Slots
 								</span>
 								<div className="w-8 h-8 rounded-lg bg-emerald-950/80 border border-emerald-500/20 flex items-center justify-center">
@@ -410,10 +421,10 @@ export default function ResourceUsagePage() {
 
 							<div>
 								<div className="flex items-baseline justify-between gap-2">
-									<h3 className="text-2xl font-extrabold text-white tracking-tight">
+									<h3 className="text-2xl font-extrabold text-foreground tracking-tight">
 										{usage.applications.used} Apps
 									</h3>
-									<span className="text-xs font-medium text-slate-400">
+									<span className="text-xs font-medium text-muted-foreground">
 										/ {usage.applications.limit === -1 ? "Unlimited" : `${usage.applications.limit} Max`}
 									</span>
 								</div>
@@ -423,29 +434,29 @@ export default function ResourceUsagePage() {
 										<Layers className="w-3 h-3" />
 										{usage.applications.percentage}% Slots Active
 									</span>
-									<span className="text-slate-400 font-medium">
+									<span className="text-muted-foreground font-medium">
 										{usage.applications.remaining === -1 ? "Unlimited" : `${usage.applications.remaining} available`}
 									</span>
 								</div>
 							</div>
 
-							<div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+							<div className="w-full h-2 bg-muted/40 rounded-full overflow-hidden border border">
 								<div
 									className={`h-full ${appColors.bar} transition-all duration-500 rounded-full`}
 									style={{ width: `${Math.min(usage.applications.percentage, 100)}%` }}
 								/>
 							</div>
 
-							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+							<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
 								<Box className="w-3 h-3 text-emerald-400/80 shrink-0" />
 								Standalone applications and Git repository deployments.
 							</p>
 						</div>
 
 						{/* Database Slots */}
-						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4 relative overflow-hidden group hover:border-slate-700 transition-colors">
+						<div className="rounded-xl border bg-card p-6 space-y-4 relative overflow-hidden group hover:border transition-colors">
 							<div className="flex items-center justify-between">
-								<span className="text-xs font-semibold text-slate-300">
+								<span className="text-xs font-semibold text-foreground">
 									Database Quota
 								</span>
 								<div className="w-8 h-8 rounded-lg bg-amber-950/80 border border-amber-500/20 flex items-center justify-center">
@@ -455,10 +466,10 @@ export default function ResourceUsagePage() {
 
 							<div>
 								<div className="flex items-baseline justify-between gap-2">
-									<h3 className="text-2xl font-extrabold text-white tracking-tight">
+									<h3 className="text-2xl font-extrabold text-foreground tracking-tight">
 										{usage.databases.used} DBs
 									</h3>
-									<span className="text-xs font-medium text-slate-400">
+									<span className="text-xs font-medium text-muted-foreground">
 										/ {usage.databases.limit === -1 ? "Unlimited" : `${usage.databases.limit} Max`}
 									</span>
 								</div>
@@ -468,20 +479,20 @@ export default function ResourceUsagePage() {
 										<Database className="w-3 h-3" />
 										{usage.databases.percentage}% Quota Used
 									</span>
-									<span className="text-slate-400 font-medium">
+									<span className="text-muted-foreground font-medium">
 										{usage.databases.remaining === -1 ? "Unlimited" : `${usage.databases.remaining} available`}
 									</span>
 								</div>
 							</div>
 
-							<div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+							<div className="w-full h-2 bg-muted/40 rounded-full overflow-hidden border border">
 								<div
 									className={`h-full ${dbColors.bar} transition-all duration-500 rounded-full`}
 									style={{ width: `${Math.min(usage.databases.percentage, 100)}%` }}
 								/>
 							</div>
 
-							<p className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+							<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
 								<CheckCircle className="w-3 h-3 text-amber-400/80 shrink-0" />
 								Managed database instances provisioned for this organization.
 							</p>
@@ -490,19 +501,19 @@ export default function ResourceUsagePage() {
 				)}
 
 				{/* Workload Breakdown Table */}
-				<div className="rounded-xl bg-slate-900/60 border border-slate-800 overflow-hidden">
-					<div className="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+				<div className="rounded-xl border bg-card overflow-hidden">
+					<div className="p-6 border-b border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 						<div>
-							<h3 className="text-base font-semibold text-white">
+							<h3 className="text-base font-semibold text-foreground">
 								Application & Database Usage
 							</h3>
-							<p className="text-xs text-slate-400 mt-0.5">
+							<p className="text-xs text-muted-foreground mt-0.5">
 								Resource metrics for your active applications and services.
 							</p>
 						</div>
 
 						{usage?.timestamp && (
-							<span className="text-[11px] text-slate-500 font-mono">
+							<span className="text-[11px] text-muted-foreground font-mono">
 								Last measured {new Date(usage.timestamp).toLocaleTimeString()}
 							</span>
 						)}
@@ -511,7 +522,7 @@ export default function ResourceUsagePage() {
 					{usage?.workloads && usage.workloads.length > 0 ? (
 						<div className="overflow-x-auto">
 							<table className="w-full text-left text-xs">
-								<thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800">
+								<thead className="bg-muted/40/60 text-muted-foreground border-b border">
 									<tr>
 										<th className="px-6 py-3.5 font-medium">Service Name</th>
 										<th className="px-6 py-3.5 font-medium">Type</th>
@@ -523,33 +534,33 @@ export default function ResourceUsagePage() {
 										<th className="px-6 py-3.5 font-medium text-right">Status</th>
 									</tr>
 								</thead>
-								<tbody className="divide-y divide-slate-800/60 text-slate-300">
+								<tbody className="divide-y divide-border text-foreground">
 									{usage.workloads.map((w) => (
 										<tr
 											key={w.id}
-											className="hover:bg-slate-800/30 transition-colors"
+											className="hover:bg-muted/30 transition-colors"
 										>
-											<td className="px-6 py-4 font-bold text-white flex items-center gap-2">
+											<td className="px-6 py-4 font-bold text-foreground flex items-center gap-2">
 												{w.serviceType === "database" ? (
 													<Database className="w-4 h-4 text-amber-400 shrink-0" />
 												) : (
-													<Box className="w-4 h-4 text-indigo-400 shrink-0" />
+													<Box className="w-4 h-4 text-foreground font-semibold shrink-0" />
 												)}
 												<span className="truncate max-w-xs">{w.name}</span>
 											</td>
-											<td className="px-6 py-4 text-slate-400">
-												<span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-slate-800 text-slate-300 border border-slate-700">
+											<td className="px-6 py-4 text-muted-foreground">
+												<span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-muted text-foreground border border">
 													{w.engine || w.serviceType}
 												</span>
 											</td>
-											<td className="px-6 py-4 text-slate-400 font-mono text-[11px]">
+											<td className="px-6 py-4 text-muted-foreground font-mono text-[11px]">
 												{w.projectName} / {w.environmentName}
 											</td>
-											<td className="px-6 py-4 font-mono font-medium text-indigo-300">
+											<td className="px-6 py-4 font-mono font-medium text-foreground font-semibold">
 												{w.telemetryStatus === "collecting" ? (
 													<span className="text-amber-400">Collecting...</span>
 												) : w.telemetryStatus === "unavailable" ? (
-													<span className="text-slate-500">
+													<span className="text-muted-foreground">
 														{w.allocatedRamMb ? `${w.allocatedRamMb} MB (limit)` : "Unavailable"}
 													</span>
 												) : w.telemetryStatus === "zero" || w.measuredRamMb === 0 ? (
@@ -564,20 +575,20 @@ export default function ResourceUsagePage() {
 												{w.telemetryStatus === "collecting" ? (
 													<span className="text-amber-400">Collecting...</span>
 												) : w.telemetryStatus === "unavailable" ? (
-													<span className="text-slate-500">Unavailable</span>
+													<span className="text-muted-foreground">Unavailable</span>
 												) : w.telemetryStatus === "zero" || (w.measuredCpuPercent === 0 && (!w.measuredCpuMcores || w.measuredCpuMcores === 0)) ? (
-													<span className="text-slate-400">0 mCPU (0.0%)</span>
+													<span className="text-muted-foreground">0 mCPU (0.0%)</span>
 												) : w.telemetryStatus === "stale" ? (
 													<span>{`${(w.measuredCpuPercent * 10).toFixed(0)} mCPU (${w.measuredCpuPercent.toFixed(1)}% stale)`}</span>
 												) : (
 													`${(w.measuredCpuPercent * 10).toFixed(0)} mCPU (${w.measuredCpuPercent.toFixed(1)}%)`
 												)}
 											</td>
-											<td className="px-6 py-4 font-mono text-slate-300">
+											<td className="px-6 py-4 font-mono text-foreground">
 												{w.telemetryStatus === "collecting" ? (
 													<span className="text-amber-400">Collecting...</span>
 												) : w.telemetryStatus === "unavailable" ? (
-													<span className="text-slate-500">Unavailable</span>
+													<span className="text-muted-foreground">Unavailable</span>
 												) : w.telemetryStatus === "zero" || ((w.measuredEgressMb ?? w.measuredNetworkMb) === 0) ? (
 													"0.0 MB"
 												) : (
@@ -615,7 +626,7 @@ export default function ResourceUsagePage() {
 													</span>
 												) : (
 													<span
-														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700"
+														className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border"
 														title={w.telemetryReason || "Offline"}
 													>
 														Offline
@@ -628,7 +639,7 @@ export default function ResourceUsagePage() {
 														(w.lifecycleStatus || w.status) === "running"
 															? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
 															: (w.lifecycleStatus || w.status) === "stopped"
-																? "bg-slate-800 text-slate-400 border-slate-700"
+																? "bg-muted text-muted-foreground border"
 																: (w.lifecycleStatus || w.status) === "pending"
 																	? "bg-amber-500/20 text-amber-400 border-amber-500/30"
 																	: "bg-red-500/20 text-red-400 border-red-500/30"
@@ -644,18 +655,18 @@ export default function ResourceUsagePage() {
 						</div>
 					) : (
 						<div className="p-12 text-center space-y-3">
-							<Box className="w-10 h-10 text-slate-600 mx-auto" />
-							<h4 className="text-sm font-semibold text-white">
+							<Box className="w-10 h-10 text-muted-foreground mx-auto" />
+							<h4 className="text-sm font-semibold text-foreground">
 								No Deployed Applications Found
 							</h4>
-							<p className="text-xs text-slate-400 max-w-sm mx-auto">
+							<p className="text-xs text-muted-foreground max-w-sm mx-auto">
 								Deploy an application or database to view real-time resource usage and plan limits.
 							</p>
 							<div className="pt-2">
 								<Link href="/dashboard/home">
 									<Button
 										size="sm"
-										className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4"
+										className="text-xs h-8 px-4"
 									>
 										Deploy an Application
 									</Button>
@@ -665,7 +676,7 @@ export default function ResourceUsagePage() {
 					)}
 
 					{/* Resource Tracking Footer */}
-					<div className="p-4 bg-slate-950/40 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
+					<div className="p-4 bg-muted/40 border-t text-[11px] text-muted-foreground flex items-center justify-between">
 						<span className="flex items-center gap-1.5">
 							<ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
 							<strong>Resource Tracking:</strong> Usage is calculated in real time based on your active services.
@@ -675,6 +686,8 @@ export default function ResourceUsagePage() {
 						</span>
 					</div>
 				</div>
+					</div>
+				</Card>
 			</div>
 		</>
 	);

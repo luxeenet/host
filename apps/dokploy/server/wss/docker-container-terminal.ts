@@ -49,7 +49,14 @@ export const setupDockerContainerTerminalWebSocketServer = (
 	wssTerm.on("connection", async (ws, req) => {
 		const url = new URL(req.url || "", `http://${req.headers.host}`);
 		const containerId = url.searchParams.get("containerId");
-		const activeWay = url.searchParams.get("activeWay");
+		const rawActiveWay = url.searchParams.get("activeWay");
+		const activeWay =
+			rawActiveWay &&
+			rawActiveWay !== "undefined" &&
+			rawActiveWay !== "null" &&
+			rawActiveWay.trim() !== ""
+				? rawActiveWay.trim()
+				: undefined;
 		const serverId = url.searchParams.get("serverId");
 		const serviceId = url.searchParams.get("serviceId");
 		const { cols, rows } = parseTerminalSize(
@@ -59,26 +66,30 @@ export const setupDockerContainerTerminalWebSocketServer = (
 		const { user, session } = await validateRequest(req);
 
 		if (!containerId) {
+			ws.send("\r\n\x1b[31mError: No container specified.\x1b[0m\r\n");
 			ws.close(4000, "containerId not provided");
 			return;
 		}
 
 		// Security: Validate containerId to prevent command injection
 		if (!isValidContainerId(containerId)) {
+			ws.send("\r\n\x1b[31mError: Invalid container identifier.\x1b[0m\r\n");
 			ws.close(4000, "Invalid container ID format");
 			return;
 		}
 
 		// Security: Validate shell to prevent command injection
 		if (activeWay && !isValidShell(activeWay)) {
+			ws.send("\r\n\x1b[31mError: Invalid shell specified.\x1b[0m\r\n");
 			ws.close(4000, "Invalid shell specified");
 			return;
 		}
 
-		// Default to 'sh' if no shell specified
-		const shell = activeWay || "sh";
+		// Default to 'bash' (standard shell) if no shell specified
+		const shell = activeWay || "bash";
 
 		if (!user || !session) {
+			ws.send("\r\n\x1b[31mAuthentication required.\x1b[0m\r\n");
 			ws.close(4001, "Authentication required");
 			return;
 		}
@@ -95,6 +106,9 @@ export const setupDockerContainerTerminalWebSocketServer = (
 		}
 
 		if (!(await canAccessDockerOverWss(user, session, serverId, serviceId))) {
+			ws.send(
+				"\r\n\x1b[31mAccess denied: You are not authorized to access this application terminal.\x1b[0m\r\n",
+			);
 			ws.close(4003, "Not authorized");
 			return;
 		}

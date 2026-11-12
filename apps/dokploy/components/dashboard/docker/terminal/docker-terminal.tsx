@@ -33,8 +33,7 @@ export const DockerTerminal: React.FC<Props> = ({
 	const isPlatformAdmin = Boolean(
 		(userAuth as any)?.user?.isPlatformAdmin || (userAuth as any)?.isPlatformAdmin,
 	);
-	// Platform admins can manually choose bash or /bin/sh; customers default to universal shell (sh)
-	const [activeWay, setActiveWay] = React.useState<string | undefined>(undefined);
+	const [activeWay, setActiveWay] = React.useState<string>("bash");
 	const { resolvedTheme } = useTheme();
 	useEffect(() => {
 		if (!containerId || containerId === PLACEHOLDER_CONTAINER_ID) {
@@ -78,11 +77,23 @@ export const DockerTerminal: React.FC<Props> = ({
 			addonFit.fit();
 
 			const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-			const wsUrl = `${protocol}//${window.location.host}/docker-container-terminal?containerId=${containerId}&activeWay=${activeWay}&cols=${term.cols}&rows=${term.rows}${serverId ? `&serverId=${serverId}` : ""}${serviceId ? `&serviceId=${serviceId}` : ""}${appName ? `&appName=${encodeURIComponent(appName)}` : ""}`;
+			const shellToUse = activeWay || "bash";
+			const wsUrl = `${protocol}//${window.location.host}/docker-container-terminal?containerId=${encodeURIComponent(containerId)}&activeWay=${encodeURIComponent(shellToUse)}&cols=${term.cols}&rows=${term.rows}${serverId ? `&serverId=${encodeURIComponent(serverId)}` : ""}${serviceId ? `&serviceId=${encodeURIComponent(serviceId)}` : ""}${appName ? `&appName=${encodeURIComponent(appName)}` : ""}`;
 
 			ws = new WebSocket(wsUrl);
 			const addonAttach = new AttachAddon(ws);
 			term.loadAddon(addonAttach);
+
+			ws.onclose = (event) => {
+				if (event.code !== 1000 && event.code !== 1005) {
+					term?.write(
+						`\r\n\x1b[31mTerminal session disconnected (code: ${event.code}${event.reason ? ` - ${event.reason}` : ""}).\x1b[0m\r\n`,
+					);
+				}
+			};
+			ws.onerror = () => {
+				term?.write("\r\n\x1b[31mTerminal connection error.\x1b[0m\r\n");
+			};
 
 			const sendResize = (cols: number, rows: number) => {
 				if (ws && ws.readyState === WebSocket.OPEN) {
@@ -118,7 +129,7 @@ export const DockerTerminal: React.FC<Props> = ({
 					<span className="text-xs text-muted-foreground">
 						Shell selection (Admin only):
 					</span>
-					<Tabs value={activeWay || "sh"} onValueChange={setActiveWay}>
+					<Tabs value={activeWay} onValueChange={setActiveWay}>
 						<TabsList>
 							<TabsTrigger value="bash">Bash</TabsTrigger>
 							<TabsTrigger value="sh">/bin/sh</TabsTrigger>

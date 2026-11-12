@@ -388,643 +388,637 @@ export default function StorageManagementPage() {
 			<div className="w-full">
 				<Card className="h-full bg-sidebar p-2.5 rounded-xl min-h-[85vh]">
 					<div className="rounded-xl bg-background shadow-md p-6 flex flex-col gap-6 h-full">
-				{/* Header */}
-				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-					<div>
-						<div className="flex items-center gap-2">
-							<h1 className="text-3xl font-semibold tracking-tight">
-								Storage Management
-							</h1>
-							<span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground border">
-								File Storage
-							</span>
-						</div>
-						<p className="text-sm text-muted-foreground mt-1">
-							Upload, manage, and organize your files.
-						</p>
-					</div>
-
-					<div className="flex items-center gap-2.5">
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={handleRefresh}
-							disabled={isOverviewLoading || isDirLoading}
-							className="border text-foreground hover:text-foreground bg-muted/40 text-xs h-8 px-3 gap-1.5"
-						>
-							<RefreshCw
-								className={`w-3.5 h-3.5 ${
-									isOverviewLoading || isDirLoading ? "animate-spin" : ""
-								}`}
-							/>
-							Refresh
-						</Button>
-
-						<Link href="/dashboard/billing">
-							<Button
-								size="sm"
-								className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-3.5 gap-1.5 font-medium"
-							>
-								<Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
-								Upgrade Quota
-							</Button>
-						</Link>
-					</div>
-				</div>
-
-				{/* Top Storage Overview Cards */}
-				<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-					{/* Quota Gauge Card */}
-					<div className="rounded-xl border bg-card p-6 space-y-4">
-						<div className="flex items-center justify-between">
-							<span className="text-xs font-semibold text-foreground">
-								Storage Usage
-							</span>
-							<div className="w-8 h-8 rounded-lg bg-muted border flex items-center justify-center">
-								<HardDrive className="w-4 h-4 text-foreground font-semibold" />
-							</div>
-						</div>
-
-						<div>
-							<div className="flex items-baseline justify-between gap-2">
-								<h3 className="text-2xl font-extrabold text-foreground tracking-tight">
-									{overview?.quota?.formattedUsed || "0 MB"}
-								</h3>
-								<span className="text-xs font-medium text-muted-foreground">
-									/ {overview?.quota?.formattedLimit || "20 GB"}
-								</span>
-							</div>
-
-							<div className="flex items-center justify-between mt-1 text-[11px]">
-								<span className={`font-semibold flex items-center gap-1 ${quotaColors.text}`}>
-									{overview?.quota?.percentage || 0}% Used
-								</span>
-								<span className="text-muted-foreground font-medium">
-									{overview?.quota?.formattedRemaining || "20 GB"} remaining
-								</span>
-							</div>
-						</div>
-
-						<div className="w-full h-2 bg-muted/40 rounded-full overflow-hidden border border">
-							<div
-								className={`h-full ${quotaColors.bar} transition-all duration-500 rounded-full`}
-								style={{ width: `${Math.min(overview?.quota?.percentage || 0, 100)}%` }}
-							/>
-						</div>
-
-						<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
-							<ShieldCheck className="w-3 h-3 text-emerald-500/80 shrink-0" />
-							Your storage usage is updated automatically.
-						</p>
-					</div>
-
-					{/* File and Folder Counts */}
-					<div className="rounded-xl border bg-card p-6 space-y-4">
-						<div className="flex items-center justify-between">
-							<span className="text-xs font-semibold text-foreground">
-								Files & Folders
-							</span>
-							<div className="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-500/20 flex items-center justify-center">
-								<Layers className="w-4 h-4 text-purple-400" />
-							</div>
-						</div>
-
-						<div className="grid grid-cols-2 gap-4 pt-1">
-							<div className="p-3 bg-muted/40/50 rounded-lg border border">
-								<span className="text-[11px] text-muted-foreground font-medium">Total Files</span>
-								<div className="text-xl font-bold text-foreground mt-1">
-									{overview?.stats?.fileCount ?? 0}
+						{/* Header */}
+						<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+							<div>
+								<div className="flex items-center gap-2">
+									<h1 className="text-3xl font-semibold tracking-tight">
+										Storage Management
+									</h1>
+									<span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground border">
+										File Storage
+									</span>
 								</div>
+								<p className="text-sm text-muted-foreground mt-1">
+									Upload, manage, and organize your files.
+								</p>
 							</div>
-							<div className="p-3 bg-muted/40/50 rounded-lg border border">
-								<span className="text-[11px] text-muted-foreground font-medium">Folders</span>
-								<div className="text-xl font-bold text-foreground mt-1">
-									{overview?.stats?.folderCount ?? 0}
+
+							<div className="flex items-center gap-2.5">
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={handleRefresh}
+									disabled={isOverviewLoading || isDirLoading}
+									className="border text-foreground hover:text-foreground bg-muted/40 text-xs h-8 px-3 gap-1.5"
+								>
+									<RefreshCw
+										className={`w-3.5 h-3.5 ${isOverviewLoading || isDirLoading ? "animate-spin" : ""
+											}`}
+									/>
+									Refresh
+								</Button>
+
+								<Link href="/dashboard/billing">
+									<Button
+										size="sm"
+										className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-3.5 gap-1.5 font-medium"
+									>
+										<Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
+										Upgrade Quota
+									</Button>
+								</Link>
+							</div>
+						</div>
+
+						{/* Top Storage Overview Cards */}
+						<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+							{/* Quota Gauge Card */}
+							<div className="rounded-xl border bg-card p-6 space-y-4">
+								<div className="flex items-center justify-between">
+									<span className="text-xs font-semibold text-foreground">
+										Storage Usage
+									</span>
+									<div className="w-8 h-8 rounded-lg bg-muted border flex items-center justify-center">
+										<HardDrive className="w-4 h-4 text-foreground font-semibold" />
+									</div>
 								</div>
+
+								<div>
+									<div className="flex items-baseline justify-between gap-2">
+										<h3 className="text-2xl font-extrabold text-foreground tracking-tight">
+											{overview?.quota?.formattedUsed || "0 MB"}
+										</h3>
+										<span className="text-xs font-medium text-muted-foreground">
+											/ {overview?.quota?.formattedLimit || "20 GB"}
+										</span>
+									</div>
+
+									<div className="flex items-center justify-between mt-1 text-[11px]">
+										<span className={`font-semibold flex items-center gap-1 ${quotaColors.text}`}>
+											{overview?.quota?.percentage || 0}% Used
+										</span>
+										<span className="text-muted-foreground font-medium">
+											{overview?.quota?.formattedRemaining || "20 GB"} remaining
+										</span>
+									</div>
+								</div>
+
+								<div className="w-full h-2 bg-muted/40 rounded-full overflow-hidden border border">
+									<div
+										className={`h-full ${quotaColors.bar} transition-all duration-500 rounded-full`}
+										style={{ width: `${Math.min(overview?.quota?.percentage || 0, 100)}%` }}
+									/>
+								</div>
+
+								<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
+									<ShieldCheck className="w-3 h-3 text-emerald-500/80 shrink-0" />
+									Your storage usage is updated automatically.
+								</p>
 							</div>
-						</div>
 
-						<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
-							<Clock className="w-3 h-3 text-purple-400 shrink-0" />
-							Summary of your stored files and folders.
-						</p>
-					</div>
+							{/* File and Folder Counts */}
+							<div className="rounded-xl border bg-card p-6 space-y-4">
+								<div className="flex items-center justify-between">
+									<span className="text-xs font-semibold text-foreground">
+										Files & Folders
+									</span>
+									<div className="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-500/20 flex items-center justify-center">
+										<Layers className="w-4 h-4 text-purple-400" />
+									</div>
+								</div>
 
-					{/* Active Storage Location Selector */}
-					<div className="rounded-xl border bg-card p-6 space-y-4">
-						<div className="flex items-center justify-between">
-							<span className="text-xs font-semibold text-foreground">
-								Storage
-							</span>
-							<span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-foreground border border">
-								{activeLocationId === "default" ? "File Storage" : "Attached Storage"}
-							</span>
-						</div>
-
-						<div>
-							<label className="text-[11px] text-muted-foreground block mb-1.5 font-medium">
-								Choose Storage
-							</label>
-							<select
-								value={activeLocationId}
-								onChange={(e) => handleSelectLocation(e.target.value)}
-								className="w-full bg-muted/40 border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-							>
-								{(overview?.locations || []).map((loc) => (
-									<option key={loc.id} value={loc.id}>
-										{loc.name === "Customer File Storage" ? "File Storage" : loc.name} {loc.formattedUsed ? `(${loc.formattedUsed})` : ""}
-									</option>
-								))}
-							</select>
-						</div>
-
-						<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
-							<Info className="w-3 h-3 text-cyan-400 shrink-0" />
-							{activeLocationId === "default"
-								? "Store and manage your files."
-								: "Files attached to your applications."}
-						</p>
-					</div>
-				</div>
-
-				{/* File Manager Main Card */}
-				<div className="rounded-xl border bg-card overflow-hidden">
-					{/* Toolbar */}
-					<div className="p-4 border-b border flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/40/40">
-						{/* Breadcrumbs & Navigation */}
-						<div className="flex items-center gap-1.5 flex-wrap">
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={handleNavigateUp}
-								disabled={currentPath === "/"}
-								className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-								title="Go to parent directory"
-							>
-								<CornerLeftUp className="w-4 h-4" />
-							</Button>
-
-							<div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
-								{(directoryData?.breadcrumbs || [{ name: "Root", path: "/" }]).map(
-									(b, idx, arr) => (
-										<div key={b.path} className="flex items-center gap-1">
-											{idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
-											<button
-												onClick={() => handleNavigate(b.path)}
-												className={`hover:text-foreground transition-colors px-1 py-0.5 rounded ${
-													idx === arr.length - 1
-														? "text-foreground font-semibold bg-muted/60"
-														: "text-muted-foreground"
-												}`}
-											>
-												{b.name}
-											</button>
+								<div className="grid grid-cols-2 gap-4 pt-1">
+									<div className="p-3 bg-muted/40/50 rounded-lg border border">
+										<span className="text-[11px] text-muted-foreground font-medium">Total Files</span>
+										<div className="text-xl font-bold text-foreground mt-1">
+											{overview?.stats?.fileCount ?? 0}
 										</div>
-									),
-								)}
+									</div>
+									<div className="p-3 bg-muted/40/50 rounded-lg border border">
+										<span className="text-[11px] text-muted-foreground font-medium">Folders</span>
+										<div className="text-xl font-bold text-foreground mt-1">
+											{overview?.stats?.folderCount ?? 0}
+										</div>
+									</div>
+								</div>
+
+								<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
+									<Clock className="w-3 h-3 text-purple-400 shrink-0" />
+									Summary of your stored files and folders.
+								</p>
+							</div>
+
+							{/* Active Storage Location Selector */}
+							<div className="rounded-xl border bg-card p-6 space-y-4">
+								<div className="flex items-center justify-between">
+									<span className="text-xs font-semibold text-foreground">
+										Storage
+									</span>
+									<span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-foreground border border">
+										{activeLocationId === "default" ? "File Storage" : "Attached Storage"}
+									</span>
+								</div>
+
+								<div>
+									<label className="text-[11px] text-muted-foreground block mb-1.5 font-medium">
+										Choose Storage
+									</label>
+									<select
+										value={activeLocationId}
+										onChange={(e) => handleSelectLocation(e.target.value)}
+										className="w-full bg-muted/40 border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+									>
+										{(overview?.locations || []).map((loc) => (
+											<option key={loc.id} value={loc.id}>
+												{loc.name === "Customer File Storage" ? "File Storage" : loc.name} {loc.formattedUsed ? `(${loc.formattedUsed})` : ""}
+											</option>
+										))}
+									</select>
+								</div>
+
+								<p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-0.5">
+									<Info className="w-3 h-3 text-cyan-400 shrink-0" />
+									{activeLocationId === "default"
+										? "Store and manage your files."
+										: "Files attached to your applications."}
+								</p>
 							</div>
 						</div>
 
-						{/* Actions & Filters */}
-						<div className="flex items-center gap-2 flex-wrap">
-							{/* Search */}
-							<div className="relative">
-								<Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-								<Input
-									placeholder="Search files..."
-									value={searchQuery}
-									onChange={(e) => setSearchQuery(e.target.value)}
-									className="h-8 text-xs pl-8 pr-3 w-40 sm:w-48 bg-muted/40/80 border text-foreground"
-								/>
-							</div>
+						{/* File Manager Main Card */}
+						<div className="rounded-xl border bg-card overflow-hidden">
+							{/* Toolbar */}
+							<div className="p-4 border-b border flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/40/40">
+								{/* Breadcrumbs & Navigation */}
+								<div className="flex items-center gap-1.5 flex-wrap">
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={handleNavigateUp}
+										disabled={currentPath === "/"}
+										className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+										title="Go to parent directory"
+									>
+										<CornerLeftUp className="w-4 h-4" />
+									</Button>
 
-							{/* Sort dropdown */}
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
+									<div className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
+										{(directoryData?.breadcrumbs || [{ name: "Root", path: "/" }]).map(
+											(b, idx, arr) => (
+												<div key={b.path} className="flex items-center gap-1">
+													{idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
+													<button
+														onClick={() => handleNavigate(b.path)}
+														className={`hover:text-foreground transition-colors px-1 py-0.5 rounded ${idx === arr.length - 1
+																? "text-foreground font-semibold bg-muted/60"
+																: "text-muted-foreground"
+															}`}
+													>
+														{b.name}
+													</button>
+												</div>
+											),
+										)}
+									</div>
+								</div>
+
+								{/* Actions & Filters */}
+								<div className="flex items-center gap-2 flex-wrap">
+									{/* Search */}
+									<div className="relative">
+										<Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+										<Input
+											placeholder="Search files..."
+											value={searchQuery}
+											onChange={(e) => setSearchQuery(e.target.value)}
+											className="h-8 text-xs pl-8 pr-3 w-40 sm:w-48 bg-muted/40/80 border text-foreground"
+										/>
+									</div>
+
+									{/* Sort dropdown */}
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<Button
+												variant="outline"
+												size="sm"
+												className="h-8 text-xs border text-foreground bg-muted/40/60 gap-1 px-2.5"
+											>
+												Sort: {sortBy} ({sortOrder})
+											</Button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent align="end" className="bg-muted/40 border text-xs">
+											<DropdownMenuItem onClick={() => setSortBy("name")}>
+												Name
+											</DropdownMenuItem>
+											<DropdownMenuItem onClick={() => setSortBy("size")}>
+												Size
+											</DropdownMenuItem>
+											<DropdownMenuItem onClick={() => setSortBy("updatedAt")}>
+												Date Modified
+											</DropdownMenuItem>
+											<DropdownMenuItem onClick={() => setSortBy("type")}>
+												File Type
+											</DropdownMenuItem>
+											<DropdownMenuSeparator className="bg-muted" />
+											<DropdownMenuItem
+												onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+											>
+												{sortOrder === "asc" ? "Ascending ↑" : "Descending ↓"}
+											</DropdownMenuItem>
+										</DropdownMenuContent>
+									</DropdownMenu>
+
+									{/* View Mode Toggle */}
+									<div className="flex items-center border border rounded-lg p-0.5 bg-muted/40/60">
+										<button
+											onClick={() => setViewMode("list")}
+											className={`p-1 rounded ${viewMode === "list"
+													? "bg-muted text-foreground"
+													: "text-muted-foreground hover:text-foreground"
+												}`}
+											title="List view"
+										>
+											<LayoutList className="w-3.5 h-3.5" />
+										</button>
+										<button
+											onClick={() => setViewMode("grid")}
+											className={`p-1 rounded ${viewMode === "grid"
+													? "bg-muted text-foreground"
+													: "text-muted-foreground hover:text-foreground"
+												}`}
+											title="Grid view"
+										>
+											<LayoutGrid className="w-3.5 h-3.5" />
+										</button>
+									</div>
+
+									{/* New Folder Button */}
 									<Button
 										variant="outline"
 										size="sm"
-										className="h-8 text-xs border text-foreground bg-muted/40/60 gap-1 px-2.5"
+										onClick={() => setIsCreateFolderOpen(true)}
+										className="h-8 text-xs border text-foreground hover:text-foreground bg-muted/40/60 gap-1.5 px-3"
 									>
-										Sort: {sortBy} ({sortOrder})
+										<FolderPlus className="w-3.5 h-3.5 text-amber-400" />
+										New Folder
 									</Button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end" className="bg-muted/40 border text-xs">
-									<DropdownMenuItem onClick={() => setSortBy("name")}>
-										Name
-									</DropdownMenuItem>
-									<DropdownMenuItem onClick={() => setSortBy("size")}>
-										Size
-									</DropdownMenuItem>
-									<DropdownMenuItem onClick={() => setSortBy("updatedAt")}>
-										Date Modified
-									</DropdownMenuItem>
-									<DropdownMenuItem onClick={() => setSortBy("type")}>
-										File Type
-									</DropdownMenuItem>
-									<DropdownMenuSeparator className="bg-muted" />
-									<DropdownMenuItem
-										onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+
+									{/* Upload Button */}
+									<Button
+										size="sm"
+										onClick={() => setIsUploadOpen(true)}
+										className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 px-3.5 font-medium"
 									>
-										{sortOrder === "asc" ? "Ascending ↑" : "Descending ↓"}
-									</DropdownMenuItem>
-								</DropdownMenuContent>
-							</DropdownMenu>
+										<Upload className="w-3.5 h-3.5" />
+										Upload
+									</Button>
 
-							{/* View Mode Toggle */}
-							<div className="flex items-center border border rounded-lg p-0.5 bg-muted/40/60">
-								<button
-									onClick={() => setViewMode("list")}
-									className={`p-1 rounded ${
-										viewMode === "list"
-											? "bg-muted text-foreground"
-											: "text-muted-foreground hover:text-foreground"
-									}`}
-									title="List view"
-								>
-									<LayoutList className="w-3.5 h-3.5" />
-								</button>
-								<button
-									onClick={() => setViewMode("grid")}
-									className={`p-1 rounded ${
-										viewMode === "grid"
-											? "bg-muted text-foreground"
-											: "text-muted-foreground hover:text-foreground"
-									}`}
-									title="Grid view"
-								>
-									<LayoutGrid className="w-3.5 h-3.5" />
-								</button>
+									{/* Download Folder Archive */}
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() =>
+											downloadArchiveMutation.mutate({
+												locationId: activeLocationId,
+												folderPath: currentPath,
+											})
+										}
+										disabled={downloadArchiveMutation.isPending}
+										className="h-8 text-xs border text-foreground hover:text-foreground bg-muted/40/60 gap-1.5 px-2.5"
+										title="Download current folder as ZIP"
+									>
+										<Archive className="w-3.5 h-3.5 text-amber-400" />
+										ZIP
+									</Button>
+								</div>
 							</div>
 
-							{/* New Folder Button */}
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => setIsCreateFolderOpen(true)}
-								className="h-8 text-xs border text-foreground hover:text-foreground bg-muted/40/60 gap-1.5 px-3"
-							>
-								<FolderPlus className="w-3.5 h-3.5 text-amber-400" />
-								New Folder
-							</Button>
+							{/* Bulk Actions Bar */}
+							{selectedPaths.size > 0 && (
+								<div className="bg-muted/60 border-b px-6 py-2.5 flex items-center justify-between gap-4 text-xs">
+									<div className="flex items-center gap-3">
+										<span className="font-semibold text-foreground font-semibold">
+											{selectedPaths.size} item(s) selected
+										</span>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => setSelectedPaths(new Set())}
+											className="h-6 text-[11px] text-muted-foreground hover:text-foreground p-1"
+										>
+											Deselect All
+										</Button>
+									</div>
 
-							{/* Upload Button */}
-							<Button
-								size="sm"
-								onClick={() => setIsUploadOpen(true)}
-								className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 px-3.5 font-medium"
-							>
-								<Upload className="w-3.5 h-3.5" />
-								Upload
-							</Button>
+									<div className="flex items-center gap-2">
+										<Button
+											size="sm"
+											variant="outline"
+											onClick={() => {
+												setMoveCopyAction("move");
+												setIsMoveCopyOpen(true);
+											}}
+											className="h-7 text-xs border text-foreground bg-muted/40 gap-1 px-2.5"
+										>
+											<Move className="w-3 h-3" /> Move
+										</Button>
+										<Button
+											size="sm"
+											variant="outline"
+											onClick={() => {
+												setMoveCopyAction("copy");
+												setIsMoveCopyOpen(true);
+											}}
+											className="h-7 text-xs border text-foreground bg-muted/40 gap-1 px-2.5"
+										>
+											<Copy className="w-3 h-3" /> Copy
+										</Button>
+										<Button
+											size="sm"
+											variant="destructive"
+											onClick={() => {
+												setDeleteTargets(Array.from(selectedPaths));
+												setIsDeleteOpen(true);
+											}}
+											className="h-7 text-xs bg-red-600 hover:bg-red-500 text-foreground gap-1 px-2.5"
+										>
+											<Trash2 className="w-3 h-3" /> Delete
+										</Button>
+									</div>
+								</div>
+							)}
 
-							{/* Download Folder Archive */}
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() =>
-									downloadArchiveMutation.mutate({
-										locationId: activeLocationId,
-										folderPath: currentPath,
-									})
-								}
-								disabled={downloadArchiveMutation.isPending}
-								className="h-8 text-xs border text-foreground hover:text-foreground bg-muted/40/60 gap-1.5 px-2.5"
-								title="Download current folder as ZIP"
-							>
-								<Archive className="w-3.5 h-3.5 text-amber-400" />
-								ZIP
-							</Button>
-						</div>
-					</div>
-
-					{/* Bulk Actions Bar */}
-					{selectedPaths.size > 0 && (
-						<div className="bg-muted/60 border-b px-6 py-2.5 flex items-center justify-between gap-4 text-xs">
-							<div className="flex items-center gap-3">
-								<span className="font-semibold text-foreground font-semibold">
-									{selectedPaths.size} item(s) selected
-								</span>
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => setSelectedPaths(new Set())}
-									className="h-6 text-[11px] text-muted-foreground hover:text-foreground p-1"
-								>
-									Deselect All
-								</Button>
-							</div>
-
-							<div className="flex items-center gap-2">
-								<Button
-									size="sm"
-									variant="outline"
-									onClick={() => {
-										setMoveCopyAction("move");
-										setIsMoveCopyOpen(true);
-									}}
-									className="h-7 text-xs border text-foreground bg-muted/40 gap-1 px-2.5"
-								>
-									<Move className="w-3 h-3" /> Move
-								</Button>
-								<Button
-									size="sm"
-									variant="outline"
-									onClick={() => {
-										setMoveCopyAction("copy");
-										setIsMoveCopyOpen(true);
-									}}
-									className="h-7 text-xs border text-foreground bg-muted/40 gap-1 px-2.5"
-								>
-									<Copy className="w-3 h-3" /> Copy
-								</Button>
-								<Button
-									size="sm"
-									variant="destructive"
-									onClick={() => {
-										setDeleteTargets(Array.from(selectedPaths));
-										setIsDeleteOpen(true);
-									}}
-									className="h-7 text-xs bg-red-600 hover:bg-red-500 text-foreground gap-1 px-2.5"
-								>
-									<Trash2 className="w-3 h-3" /> Delete
-								</Button>
-							</div>
-						</div>
-					)}
-
-					{/* Content View */}
-					{isDirLoading && !directoryData ? (
-						<div className="p-12 text-center text-muted-foreground space-y-3">
-							<RefreshCw className="w-8 h-8 animate-spin mx-auto text-foreground font-semibold" />
-							<p className="text-xs">Loading files...</p>
-						</div>
-					) : directoryData?.entries && directoryData.entries.length > 0 ? (
-						viewMode === "list" ? (
-							/* List Table View */
-							<div className="overflow-x-auto">
-								<table className="w-full text-left text-xs">
-									<thead className="bg-muted/40/60 text-muted-foreground border-b border">
-										<tr>
-											<th className="w-10 px-4 py-3 text-center">
-												<button
-													onClick={handleSelectAll}
-													className="text-muted-foreground hover:text-foreground"
-												>
-													{selectedPaths.size === directoryData.entries.length ? (
-														<CheckSquare className="w-4 h-4 text-foreground font-semibold" />
-													) : (
-														<Square className="w-4 h-4" />
-													)}
-												</button>
-											</th>
-											<th className="px-4 py-3 font-medium">Name</th>
-											<th className="px-4 py-3 font-medium">Size</th>
-											<th className="px-4 py-3 font-medium">Type</th>
-											<th className="px-4 py-3 font-medium">Date Modified</th>
-											<th className="px-4 py-3 font-medium text-right">Actions</th>
-										</tr>
-									</thead>
-									<tbody className="divide-y divide-border text-foreground">
-										{directoryData.entries.map((entry) => {
-											const isSelected = selectedPaths.has(entry.path);
-											return (
-												<tr
-													key={entry.path}
-													className={`hover:bg-muted/30 transition-colors ${
-														isSelected ? "bg-muted" : ""
-													}`}
-												>
-													<td className="px-4 py-3 text-center">
+							{/* Content View */}
+							{isDirLoading && !directoryData ? (
+								<div className="p-12 text-center text-muted-foreground space-y-3">
+									<RefreshCw className="w-8 h-8 animate-spin mx-auto text-foreground font-semibold" />
+									<p className="text-xs">Loading files...</p>
+								</div>
+							) : directoryData?.entries && directoryData.entries.length > 0 ? (
+								viewMode === "list" ? (
+									/* List Table View */
+									<div className="overflow-x-auto">
+										<table className="w-full text-left text-xs">
+											<thead className="bg-muted/40/60 text-muted-foreground border-b border">
+												<tr>
+													<th className="w-10 px-4 py-3 text-center">
 														<button
-															onClick={() => handleToggleSelect(entry.path)}
+															onClick={handleSelectAll}
 															className="text-muted-foreground hover:text-foreground"
 														>
-															{isSelected ? (
+															{selectedPaths.size === directoryData.entries.length ? (
 																<CheckSquare className="w-4 h-4 text-foreground font-semibold" />
 															) : (
 																<Square className="w-4 h-4" />
 															)}
 														</button>
-													</td>
-													<td className="px-4 py-3">
-														<div className="flex items-center gap-2.5">
-															{getFileIcon(entry.mimeType, entry.isDirectory)}
-															{entry.isDirectory ? (
-																<button
-																	onClick={() => handleNavigate(entry.path)}
-																	className="font-medium text-foreground hover:text-foreground font-semibold transition-colors truncate max-w-xs sm:max-w-md text-left"
-																>
-																	{entry.name}
-																</button>
-															) : (
-																<button
-																	onClick={() =>
-																		entry.isSafePreview
-																			? handleOpenPreview(entry.path)
-																			: handleDownloadFile(entry.path)
-																	}
-																	className="font-medium text-foreground hover:text-foreground font-semibold transition-colors truncate max-w-xs sm:max-w-md text-left"
-																>
-																	{entry.name}
-																</button>
-															)}
-														</div>
-													</td>
-													<td className="px-4 py-3 font-mono text-muted-foreground">
-														{entry.formattedSize}
-													</td>
-													<td className="px-4 py-3 text-muted-foreground">
-														<span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-foreground border border">
-															{entry.isDirectory ? "DIR" : entry.mimeType.split("/")[1] || entry.mimeType}
-														</span>
-													</td>
-													<td className="px-4 py-3 text-muted-foreground font-mono text-[11px]">
-														{new Date(entry.updatedAt).toLocaleString()}
-													</td>
-													<td className="px-4 py-3 text-right">
-														<div className="flex items-center justify-end gap-1">
-															{!entry.isDirectory && entry.isSafePreview && (
-																<Button
-																	variant="ghost"
-																	size="sm"
-																	onClick={() => handleOpenPreview(entry.path)}
-																	className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-																	title="Preview"
-																>
-																	<Eye className="w-3.5 h-3.5" />
-																</Button>
-															)}
-															{!entry.isDirectory && (
-																<Button
-																	variant="ghost"
-																	size="sm"
-																	onClick={() => handleDownloadFile(entry.path)}
-																	className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-																	title="Download"
-																>
-																	<Download className="w-3.5 h-3.5" />
-																</Button>
-															)}
-															<DropdownMenu>
-																<DropdownMenuTrigger asChild>
-																	<Button
-																		variant="ghost"
-																		size="sm"
-																		className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-																	>
-																		•••
-																	</Button>
-																</DropdownMenuTrigger>
-																<DropdownMenuContent
-																	align="end"
-																	className="bg-muted/40 border text-xs"
-																>
-																	<DropdownMenuItem
-																		onClick={() => {
-																			setRenameTarget({
-																				path: entry.path,
-																				currentName: entry.name,
-																			});
-																			setRenameNewName(entry.name);
-																			setIsRenameOpen(true);
-																		}}
-																	>
-																		<Edit2 className="w-3.5 h-3.5 mr-2" /> Rename
-																	</DropdownMenuItem>
-																	<DropdownMenuItem
-																		onClick={() => {
-																			setSelectedPaths(new Set([entry.path]));
-																			setMoveCopyAction("move");
-																			setIsMoveCopyOpen(true);
-																		}}
-																	>
-																		<Move className="w-3.5 h-3.5 mr-2" /> Move
-																	</DropdownMenuItem>
-																	<DropdownMenuItem
-																		onClick={() => {
-																			setSelectedPaths(new Set([entry.path]));
-																			setMoveCopyAction("copy");
-																			setIsMoveCopyOpen(true);
-																		}}
-																	>
-																		<Copy className="w-3.5 h-3.5 mr-2" /> Copy
-																	</DropdownMenuItem>
-																	<DropdownMenuSeparator className="bg-muted" />
-																	<DropdownMenuItem
-																		className="text-red-400 focus:text-red-400 focus:bg-red-950/40"
-																		onClick={() => {
-																			setDeleteTargets([entry.path]);
-																			setIsDeleteOpen(true);
-																		}}
-																	>
-																		<Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-																	</DropdownMenuItem>
-																</DropdownMenuContent>
-															</DropdownMenu>
-														</div>
-													</td>
+													</th>
+													<th className="px-4 py-3 font-medium">Name</th>
+													<th className="px-4 py-3 font-medium">Size</th>
+													<th className="px-4 py-3 font-medium">Type</th>
+													<th className="px-4 py-3 font-medium">Date Modified</th>
+													<th className="px-4 py-3 font-medium text-right">Actions</th>
 												</tr>
+											</thead>
+											<tbody className="divide-y divide-border text-foreground">
+												{directoryData.entries.map((entry) => {
+													const isSelected = selectedPaths.has(entry.path);
+													return (
+														<tr
+															key={entry.path}
+															className={`hover:bg-muted/30 transition-colors ${isSelected ? "bg-muted" : ""
+																}`}
+														>
+															<td className="px-4 py-3 text-center">
+																<button
+																	onClick={() => handleToggleSelect(entry.path)}
+																	className="text-muted-foreground hover:text-foreground"
+																>
+																	{isSelected ? (
+																		<CheckSquare className="w-4 h-4 text-foreground font-semibold" />
+																	) : (
+																		<Square className="w-4 h-4" />
+																	)}
+																</button>
+															</td>
+															<td className="px-4 py-3">
+																<div className="flex items-center gap-2.5">
+																	{getFileIcon(entry.mimeType, entry.isDirectory)}
+																	{entry.isDirectory ? (
+																		<button
+																			onClick={() => handleNavigate(entry.path)}
+																			className="font-medium text-foreground hover:text-foreground font-semibold transition-colors truncate max-w-xs sm:max-w-md text-left"
+																		>
+																			{entry.name}
+																		</button>
+																	) : (
+																		<button
+																			onClick={() =>
+																				entry.isSafePreview
+																					? handleOpenPreview(entry.path)
+																					: handleDownloadFile(entry.path)
+																			}
+																			className="font-medium text-foreground hover:text-foreground font-semibold transition-colors truncate max-w-xs sm:max-w-md text-left"
+																		>
+																			{entry.name}
+																		</button>
+																	)}
+																</div>
+															</td>
+															<td className="px-4 py-3 font-mono text-muted-foreground">
+																{entry.formattedSize}
+															</td>
+															<td className="px-4 py-3 text-muted-foreground">
+																<span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-foreground border border">
+																	{entry.isDirectory ? "DIR" : entry.mimeType.split("/")[1] || entry.mimeType}
+																</span>
+															</td>
+															<td className="px-4 py-3 text-muted-foreground font-mono text-[11px]">
+																{new Date(entry.updatedAt).toLocaleString()}
+															</td>
+															<td className="px-4 py-3 text-right">
+																<div className="flex items-center justify-end gap-1">
+																	{!entry.isDirectory && entry.isSafePreview && (
+																		<Button
+																			variant="ghost"
+																			size="sm"
+																			onClick={() => handleOpenPreview(entry.path)}
+																			className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+																			title="Preview"
+																		>
+																			<Eye className="w-3.5 h-3.5" />
+																		</Button>
+																	)}
+																	{!entry.isDirectory && (
+																		<Button
+																			variant="ghost"
+																			size="sm"
+																			onClick={() => handleDownloadFile(entry.path)}
+																			className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+																			title="Download"
+																		>
+																			<Download className="w-3.5 h-3.5" />
+																		</Button>
+																	)}
+																	<DropdownMenu>
+																		<DropdownMenuTrigger asChild>
+																			<Button
+																				variant="ghost"
+																				size="sm"
+																				className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+																			>
+																				•••
+																			</Button>
+																		</DropdownMenuTrigger>
+																		<DropdownMenuContent
+																			align="end"
+																			className="bg-muted/40 border text-xs"
+																		>
+																			<DropdownMenuItem
+																				onClick={() => {
+																					setRenameTarget({
+																						path: entry.path,
+																						currentName: entry.name,
+																					});
+																					setRenameNewName(entry.name);
+																					setIsRenameOpen(true);
+																				}}
+																			>
+																				<Edit2 className="w-3.5 h-3.5 mr-2" /> Rename
+																			</DropdownMenuItem>
+																			<DropdownMenuItem
+																				onClick={() => {
+																					setSelectedPaths(new Set([entry.path]));
+																					setMoveCopyAction("move");
+																					setIsMoveCopyOpen(true);
+																				}}
+																			>
+																				<Move className="w-3.5 h-3.5 mr-2" /> Move
+																			</DropdownMenuItem>
+																			<DropdownMenuItem
+																				onClick={() => {
+																					setSelectedPaths(new Set([entry.path]));
+																					setMoveCopyAction("copy");
+																					setIsMoveCopyOpen(true);
+																				}}
+																			>
+																				<Copy className="w-3.5 h-3.5 mr-2" /> Copy
+																			</DropdownMenuItem>
+																			<DropdownMenuSeparator className="bg-muted" />
+																			<DropdownMenuItem
+																				className="text-red-400 focus:text-red-400 focus:bg-red-950/40"
+																				onClick={() => {
+																					setDeleteTargets([entry.path]);
+																					setIsDeleteOpen(true);
+																				}}
+																			>
+																				<Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+																			</DropdownMenuItem>
+																		</DropdownMenuContent>
+																	</DropdownMenu>
+																</div>
+															</td>
+														</tr>
+													);
+												})}
+											</tbody>
+										</table>
+									</div>
+								) : (
+									/* Grid View */
+									<div className="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+										{directoryData.entries.map((entry) => {
+											const isSelected = selectedPaths.has(entry.path);
+											return (
+												<div
+													key={entry.path}
+													className={`p-4 rounded-xl border transition-all text-center group relative flex flex-col items-center justify-between min-h-[140px] ${isSelected
+															? "bg-muted border-foreground/30"
+															: "bg-muted/40/40 border hover:border hover:bg-muted/20"
+														}`}
+												>
+													<button
+														onClick={() => handleToggleSelect(entry.path)}
+														className="absolute top-2 left-2 text-muted-foreground hover:text-foreground"
+													>
+														{isSelected ? (
+															<CheckSquare className="w-3.5 h-3.5 text-foreground font-semibold" />
+														) : (
+															<Square className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100" />
+														)}
+													</button>
+
+													<div
+														onClick={() =>
+															entry.isDirectory
+																? handleNavigate(entry.path)
+																: entry.isSafePreview
+																	? handleOpenPreview(entry.path)
+																	: handleDownloadFile(entry.path)
+														}
+														className="cursor-pointer flex flex-col items-center gap-2 pt-2 w-full"
+													>
+														<div className="w-12 h-12 rounded-xl border bg-card flex items-center justify-center">
+															{getFileIcon(entry.mimeType, entry.isDirectory)}
+														</div>
+														<span className="text-xs font-medium text-foreground truncate max-w-[120px]">
+															{entry.name}
+														</span>
+													</div>
+
+													<div className="text-[10px] text-muted-foreground pt-1 flex items-center justify-between w-full">
+														<span>{entry.formattedSize}</span>
+														<span>{entry.isDirectory ? "DIR" : entry.mimeType.split("/")[1] || "FILE"}</span>
+													</div>
+												</div>
 											);
 										})}
-									</tbody>
-								</table>
-							</div>
-						) : (
-							/* Grid View */
-							<div className="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-								{directoryData.entries.map((entry) => {
-									const isSelected = selectedPaths.has(entry.path);
-									return (
-										<div
-											key={entry.path}
-											className={`p-4 rounded-xl border transition-all text-center group relative flex flex-col items-center justify-between min-h-[140px] ${
-												isSelected
-													? "bg-muted border-foreground/30"
-													: "bg-muted/40/40 border hover:border hover:bg-muted/20"
-											}`}
+									</div>
+								)
+							) : (
+								/* Empty State */
+								<div className="p-16 text-center space-y-4">
+									<FolderOpen className="w-12 h-12 text-muted-foreground mx-auto" />
+									<div>
+										<h4 className="text-base font-semibold text-foreground">This folder is empty</h4>
+										<p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+											Upload files or create folders to organize your assets and data.
+										</p>
+									</div>
+									<div className="flex items-center justify-center gap-2 pt-2">
+										<Button
+											size="sm"
+											onClick={() => setIsUploadOpen(true)}
+											className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-4 gap-1.5"
 										>
-											<button
-												onClick={() => handleToggleSelect(entry.path)}
-												className="absolute top-2 left-2 text-muted-foreground hover:text-foreground"
-											>
-												{isSelected ? (
-													<CheckSquare className="w-3.5 h-3.5 text-foreground font-semibold" />
-												) : (
-													<Square className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100" />
-												)}
-											</button>
+											<Upload className="w-3.5 h-3.5" />
+											Upload File
+										</Button>
+										<Button
+											size="sm"
+											variant="outline"
+											onClick={() => setIsCreateFolderOpen(true)}
+											className="border text-foreground text-xs h-8 px-4 gap-1.5"
+										>
+											<FolderPlus className="w-3.5 h-3.5 text-amber-400" />
+											Create Folder
+										</Button>
+									</div>
+								</div>
+							)}
 
-											<div
-												onClick={() =>
-													entry.isDirectory
-														? handleNavigate(entry.path)
-														: entry.isSafePreview
-															? handleOpenPreview(entry.path)
-															: handleDownloadFile(entry.path)
-												}
-												className="cursor-pointer flex flex-col items-center gap-2 pt-2 w-full"
-											>
-												<div className="w-12 h-12 rounded-xl border bg-card flex items-center justify-center">
-													{getFileIcon(entry.mimeType, entry.isDirectory)}
-												</div>
-												<span className="text-xs font-medium text-foreground truncate max-w-[120px]">
-													{entry.name}
-												</span>
-											</div>
-
-											<div className="text-[10px] text-muted-foreground pt-1 flex items-center justify-between w-full">
-												<span>{entry.formattedSize}</span>
-												<span>{entry.isDirectory ? "DIR" : entry.mimeType.split("/")[1] || "FILE"}</span>
-											</div>
-										</div>
-									);
-								})}
-							</div>
-						)
-					) : (
-						/* Empty State */
-						<div className="p-16 text-center space-y-4">
-							<FolderOpen className="w-12 h-12 text-muted-foreground mx-auto" />
-							<div>
-								<h4 className="text-base font-semibold text-foreground">This folder is empty</h4>
-								<p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-									Upload files or create folders to organize your assets and data.
-								</p>
-							</div>
-							<div className="flex items-center justify-center gap-2 pt-2">
-								<Button
-									size="sm"
-									onClick={() => setIsUploadOpen(true)}
-									className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-4 gap-1.5"
-								>
-									<Upload className="w-3.5 h-3.5" />
-									Upload File
-								</Button>
-								<Button
-									size="sm"
-									variant="outline"
-									onClick={() => setIsCreateFolderOpen(true)}
-									className="border text-foreground text-xs h-8 px-4 gap-1.5"
-								>
-									<FolderPlus className="w-3.5 h-3.5 text-amber-400" />
-									Create Folder
-								</Button>
+							{/* Footer Note */}
+							<div className="p-4 bg-muted/40 border-t text-[11px] text-muted-foreground flex items-center justify-between">
+								<span className="flex items-center gap-1.5">
+									<ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+									<span>All uploads and changes are saved to your account.</span>
+								</span>
+								<span>
+									Maximum file size: 100 MB
+								</span>
 							</div>
 						</div>
-					)}
-
-					{/* Footer Note */}
-					<div className="p-4 bg-muted/40 border-t text-[11px] text-muted-foreground flex items-center justify-between">
-						<span className="flex items-center gap-1.5">
-							<ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-							<span>All uploads and changes are saved to your account.</span>
-						</span>
-						<span>
-							Maximum file size: 100 MB
-						</span>
-					</div>
-				</div>
 					</div>
 				</Card>
 			</div>

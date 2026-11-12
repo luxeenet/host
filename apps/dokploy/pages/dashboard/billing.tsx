@@ -28,6 +28,8 @@ import { appRouter } from "@/server/api/root";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { BreadcrumbSidebar } from "@/components/shared/breadcrumb-sidebar";
 import { api } from "@/utils/api";
 import {
 	Dialog,
@@ -152,18 +154,17 @@ export default function BillingPage() {
 			<div className="space-y-8">
 				{/* Page Header */}
 				<div>
-					<h1 className="text-2xl font-bold text-white tracking-tight">Billing & Subscriptions</h1>
-					<p className="text-slate-400 text-sm mt-1">
+					<h1 className="text-2xl font-bold text-foreground tracking-tight">Billing & Subscriptions</h1>
+					<p className="text-muted-foreground text-sm mt-1">
 						Manage your {brand.APP_NAME} subscription plan, pay invoices via SonicPesa Mobile Money (M-Pesa, Tigo, Airtel, Halopesa), and download receipts.
 					</p>
 				</div>
 
 				{/* Active Subscription Banner */}
-				<div className="rounded-xl bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-900 border border-indigo-500/30 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
-					<div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-					<div className="space-y-3 relative z-10">
+				<div className="rounded-xl border bg-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm">
+					<div className="space-y-3">
 						<div className="flex items-center gap-3">
-							<span className="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1.5">
+							<span className="px-3 py-1 rounded-full text-xs font-semibold bg-secondary text-secondary-foreground border flex items-center gap-1.5">
 								<Zap className="w-3.5 h-3.5" /> {activePlan?.name || "Free Starter"} Plan
 							</span>
 							<span
@@ -179,43 +180,44 @@ export default function BillingPage() {
 							</span>
 						</div>
 						<div>
-							<h2 className="text-3xl font-extrabold text-white">
+							<h2 className="text-3xl font-bold tracking-tight text-foreground">
 								{formattedPrice}{" "}
-								<span className="text-slate-400 text-sm font-normal">
+								<span className="text-muted-foreground text-sm font-normal">
 									/ {activePlan?.billingCycle || "month"}
 								</span>
 							</h2>
-							<p className="text-slate-400 text-xs mt-1">
+							<p className="text-muted-foreground text-xs mt-1">
 								{sub?.currentPeriodEnd
 									? `Billing period valid until: ${new Date(sub.currentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
 									: "No active expiration date"}
 							</p>
 						</div>
-						<div className="flex flex-wrap gap-4 text-xs text-slate-300">
+						<div className="flex flex-wrap gap-4 text-xs text-foreground">
 							<span className="flex items-center gap-1.5">
-								<CheckCircle className="w-3.5 h-3.5 text-indigo-400" />
+								<CheckCircle className="w-3.5 h-3.5 text-foreground font-semibold" />
 								{activePlan?.resources?.find((r) => r.resourceKey === "max_applications")?.value ?? "Unlimited"} Application Slots
 							</span>
 							<span className="flex items-center gap-1.5">
-								<CheckCircle className="w-3.5 h-3.5 text-indigo-400" />
+								<CheckCircle className="w-3.5 h-3.5 text-foreground font-semibold" />
 								{activePlan?.resources?.find((r) => r.resourceKey === "max_databases")?.value ?? "Unlimited"} Managed Databases
 							</span>
 							<span className="flex items-center gap-1.5">
-								<CheckCircle className="w-3.5 h-3.5 text-indigo-400" />
+								<CheckCircle className="w-3.5 h-3.5 text-foreground font-semibold" />
 								{activePlan?.resources?.find((r) => r.resourceKey === "max_domains")?.value ?? "Unlimited"} Custom Domains
 							</span>
 						</div>
 					</div>
 
-					<div className="flex flex-col sm:flex-row gap-3 relative z-10 shrink-0">
+					<div className="flex flex-col sm:flex-row gap-3 shrink-0">
 						<Button
+							size="sm"
 							onClick={() => {
 								const elem = document.getElementById("payment-section");
 								elem?.scrollIntoView({ behavior: "smooth" });
 							}}
-							className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white text-xs font-medium w-full sm:w-auto shadow-lg shadow-indigo-600/20"
+							className="gap-1.5 w-full sm:w-auto"
 						>
-							<Sparkles className="w-3.5 h-3.5 mr-1.5" /> Pay / Upgrade Subscription
+							<Sparkles className="size-3.5" /> Pay / Upgrade Subscription
 						</Button>
 					</div>
 				</div>
@@ -223,13 +225,13 @@ export default function BillingPage() {
 				{/* SonicPesa Mobile Money Payment Section */}
 				<div id="payment-section" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 					{/* Left: Payment Method Setup */}
-					<div className="lg:col-span-2 rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-5">
-						<div className="flex items-center justify-between border-b border-slate-800 pb-4">
+					<div className="lg:col-span-2 rounded-xl border bg-card p-6 space-y-5 shadow-sm">
+						<div className="flex items-center justify-between border-b pb-4">
 							<div>
-								<h3 className="text-base font-semibold text-white flex items-center gap-2">
+								<h3 className="text-base font-semibold text-foreground flex items-center gap-2">
 									<Smartphone className="w-4 h-4 text-emerald-400" /> SonicPesa Instant Mobile Money (Push USSD)
 								</h3>
-								<p className="text-xs text-slate-400 mt-0.5">
+								<p className="text-xs text-muted-foreground mt-0.5">
 									Pay securely with M-Pesa, Tigo Pesa, Airtel Money, or Halopesa in Tanzania (TZS).
 								</p>
 							</div>
@@ -240,7 +242,7 @@ export default function BillingPage() {
 
 						{/* Plan Selection */}
 						<div className="space-y-2">
-							<label className="text-xs font-medium text-slate-300 block">Select Target Plan</label>
+							<label className="text-xs font-medium text-foreground block">Select Target Plan</label>
 							<div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
 								{plans?.filter((p) => Number(p.price) > 0).map((p) => (
 									<button
@@ -249,18 +251,18 @@ export default function BillingPage() {
 										onClick={() => setSelectedPlanId(p.id)}
 										className={`p-3 rounded-lg border text-left transition-all ${
 											selectedPlanId === p.id
-												? "bg-indigo-950/40 border-indigo-500 text-white shadow-sm"
-												: "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+												? "bg-accent border-foreground/30 font-medium text-foreground shadow-sm"
+												: "bg-muted/40/60 border text-muted-foreground hover:border"
 										}`}
 									>
 										<div className="flex justify-between items-center">
-											<span className="text-xs font-bold text-white">{p.name}</span>
-											{selectedPlanId === p.id && <CheckCircle className="w-3.5 h-3.5 text-indigo-400" />}
+											<span className="text-xs font-bold text-foreground">{p.name}</span>
+											{selectedPlanId === p.id && <CheckCircle className="w-3.5 h-3.5 text-foreground font-semibold" />}
 										</div>
-										<p className="text-sm font-extrabold text-indigo-400 mt-1">
-											{Number(p.price).toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">TZS</span>
+										<p className="text-sm font-bold text-foreground mt-1">
+											{Number(p.price).toLocaleString()} <span className="text-[10px] text-muted-foreground font-normal">TZS</span>
 										</p>
-										<p className="text-[10px] text-slate-400 mt-0.5">{p.description}</p>
+										<p className="text-[10px] text-muted-foreground mt-0.5">{p.description}</p>
 									</button>
 								))}
 							</div>
@@ -268,7 +270,7 @@ export default function BillingPage() {
 
 						{/* Mobile Money Operator selection */}
 						<div className="space-y-2 pt-2">
-							<label className="text-xs font-medium text-slate-300 block">Mobile Network Operator</label>
+							<label className="text-xs font-medium text-foreground block">Mobile Network Operator</label>
 							<div className="grid grid-cols-4 gap-2">
 								{[
 									{ id: "mpesa", name: "Vodacom M-Pesa", color: "text-red-400" },
@@ -282,8 +284,8 @@ export default function BillingPage() {
 										onClick={() => setPaymentMethod(net.id as any)}
 										className={`p-2.5 rounded-lg border text-center transition-all ${
 											paymentMethod === net.id
-												? "bg-slate-800 border-indigo-500 text-white"
-												: "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+												? "bg-secondary border-foreground/30 text-foreground"
+												: "bg-muted/40 border text-muted-foreground hover:border"
 										}`}
 									>
 										<p className="text-xs font-semibold">{net.name}</p>
@@ -294,7 +296,7 @@ export default function BillingPage() {
 
 						{/* Phone Number Input Form */}
 						<div className="space-y-3 pt-2">
-							<label className="text-xs font-medium text-slate-300 block">
+							<label className="text-xs font-medium text-foreground block">
 								Payer Mobile Phone Number (for USSD Push Prompt)
 							</label>
 							<div className="flex gap-2">
@@ -303,12 +305,12 @@ export default function BillingPage() {
 									value={phone}
 									onChange={(e) => setPhone(e.target.value)}
 									placeholder="07XXXXXXXX or 2557XXXXXXXX"
-									className="flex-1 px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-indigo-500"
+									className="flex-1 px-3.5 py-2.5 rounded-lg bg-background border text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-ring"
 								/>
 								<Button
 									disabled={initiatePaymentMutation.isPending}
 									onClick={handleSendUSSDPush}
-									className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-5 shadow-lg shadow-emerald-600/20"
+									className="text-xs px-5"
 								>
 									{initiatePaymentMutation.isPending ? (
 										<RefreshCw className="w-4 h-4 animate-spin" />
@@ -317,37 +319,37 @@ export default function BillingPage() {
 									)}
 								</Button>
 							</div>
-							<p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+							<p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
 								<Shield className="w-3.5 h-3.5 text-emerald-400" /> SonicPesa API will trigger an automatic USSD PIN authorization screen on your mobile phone.
 							</p>
 						</div>
 					</div>
 
 					{/* Right: Plan Features & Summary */}
-					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
-						<h3 className="text-base font-semibold text-white flex items-center gap-2">
-							<Receipt className="w-4 h-4 text-indigo-400" /> Plan Entitlements
+					<div className="rounded-xl border bg-card p-6 space-y-4 shadow-sm">
+						<h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+							<Receipt className="w-4 h-4 text-foreground font-semibold" /> Plan Entitlements
 						</h3>
 
 						<div className="space-y-3 text-xs">
 							{plans
 								?.find((p) => p.id === (selectedPlanId || sub?.planId))
 								?.features?.map((f) => (
-									<div key={f.id} className="flex items-center justify-between py-1 border-b border-slate-800/40">
-										<span className="text-slate-400 capitalize">{f.featureKey.replace(/_/g, " ")}</span>
-										<span className={f.enabled ? "text-emerald-400 font-medium" : "text-slate-500"}>
+									<div key={f.id} className="flex items-center justify-between py-1 border-b">
+										<span className="text-muted-foreground capitalize">{f.featureKey.replace(/_/g, " ")}</span>
+										<span className={f.enabled ? "text-emerald-400 font-medium" : "text-muted-foreground"}>
 											{f.enabled ? "Enabled" : "Not Included"}
 										</span>
 									</div>
 								))}
 						</div>
 
-						<div className="pt-4 border-t border-slate-800 text-xs space-y-2 text-slate-400">
+						<div className="pt-4 border-t text-xs space-y-2 text-muted-foreground">
 							<p className="flex justify-between">
-								<span>Selected Currency:</span> <strong className="text-slate-200">TZS (Tanzanian Shilling)</strong>
+								<span>Selected Currency:</span> <strong className="text-foreground">TZS (Tanzanian Shilling)</strong>
 							</p>
 							<p className="flex justify-between">
-								<span>Payment Provider:</span> <strong className="text-slate-200">SonicPesa</strong>
+								<span>Payment Provider:</span> <strong className="text-foreground">SonicPesa</strong>
 							</p>
 							<p className="flex justify-between">
 								<span>Activation:</span> <strong className="text-emerald-400 font-bold">Instant Automatic</strong>
@@ -357,17 +359,17 @@ export default function BillingPage() {
 				</div>
 
 				{/* Invoice History Table */}
-				<div className="rounded-xl bg-slate-900/60 border border-slate-800 overflow-hidden">
-					<div className="p-6 border-b border-slate-800 flex items-center justify-between">
+				<div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+					<div className="p-6 border-b flex items-center justify-between">
 						<div>
-							<h3 className="text-base font-semibold text-white">Invoice & Payment Records</h3>
-							<p className="text-xs text-slate-400">Past invoices, transactions, and payment receipts.</p>
+							<h3 className="text-base font-semibold text-foreground">Invoice & Payment Records</h3>
+							<p className="text-xs text-muted-foreground">Past invoices, transactions, and payment receipts.</p>
 						</div>
 						<Button
 							variant="outline"
 							size="sm"
 							onClick={() => utils.subscription.getInvoices.invalidate()}
-							className="text-xs border-slate-700 text-slate-300"
+							className="text-xs border text-foreground"
 						>
 							<RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
 						</Button>
@@ -375,7 +377,7 @@ export default function BillingPage() {
 
 					<div className="overflow-x-auto">
 						<table className="w-full text-left text-xs">
-							<thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800">
+							<thead className="bg-muted/50 text-muted-foreground border-b">
 								<tr>
 									<th className="px-6 py-3.5 font-medium">Invoice Number</th>
 									<th className="px-6 py-3.5 font-medium">Billing Date</th>
@@ -385,17 +387,17 @@ export default function BillingPage() {
 									<th className="px-6 py-3.5 font-medium text-right">Payment Date</th>
 								</tr>
 							</thead>
-							<tbody className="divide-y divide-slate-800/60 text-slate-300">
+							<tbody className="divide-y divide-border text-foreground">
 								{invoicesLoading ? (
 									<tr>
-										<td colSpan={6} className="px-6 py-8 text-center text-slate-400">
-											<RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-400" />
+										<td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+											<RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-foreground font-semibold" />
 											Loading invoices...
 										</td>
 									</tr>
 								) : invoices?.length === 0 ? (
 									<tr>
-										<td colSpan={6} className="px-6 py-8 text-center text-slate-400">
+										<td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
 											No invoices generated yet.
 										</td>
 									</tr>
@@ -403,8 +405,8 @@ export default function BillingPage() {
 									invoices?.map((inv) => {
 										const latestPayment = inv.payments?.[0];
 										return (
-											<tr key={inv.id} className="hover:bg-slate-800/30 transition-colors">
-												<td className="px-6 py-4 font-mono font-medium text-white">{inv.invoiceNumber}</td>
+											<tr key={inv.id} className="hover:bg-muted/50 transition-colors">
+												<td className="px-6 py-4 font-mono font-medium text-foreground">{inv.invoiceNumber}</td>
 												<td className="px-6 py-4">
 													{new Date(inv.createdAt).toLocaleDateString("en-US", {
 														month: "short",
@@ -412,10 +414,10 @@ export default function BillingPage() {
 														year: "numeric",
 													})}
 												</td>
-												<td className="px-6 py-4 font-semibold text-white">
+												<td className="px-6 py-4 font-semibold text-foreground">
 													{Number(inv.amount).toLocaleString()} {inv.currency}
 												</td>
-												<td className="px-6 py-4 text-slate-400">
+												<td className="px-6 py-4 text-muted-foreground">
 													{latestPayment?.provider || "SonicPesa"}{" "}
 													{latestPayment?.providerTransactionId ? `(${latestPayment.providerTransactionId})` : ""}
 												</td>
@@ -426,13 +428,13 @@ export default function BillingPage() {
 																? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
 																: inv.status === "open"
 																	? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-																	: "bg-slate-800 text-slate-400 border-slate-700"
+																	: "bg-secondary text-muted-foreground border"
 														}`}
 													>
 														{inv.status}
 													</span>
 												</td>
-												<td className="px-6 py-4 text-right text-slate-400">
+												<td className="px-6 py-4 text-right text-muted-foreground">
 													{inv.paidAt
 														? new Date(inv.paidAt).toLocaleDateString("en-US", {
 																month: "short",
@@ -453,12 +455,12 @@ export default function BillingPage() {
 
 			{/* SonicPesa Live USSD Push Dialog */}
 			<Dialog open={isModalOpen} onOpenChange={(open) => !open && setIsModalOpen(false)}>
-				<DialogContent className="bg-slate-900 border-slate-800 text-white max-w-md">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle className="text-lg font-bold flex items-center gap-2">
 							<Smartphone className="w-5 h-5 text-emerald-400" /> SonicPesa USSD Push Sent
 						</DialogTitle>
-						<DialogDescription className="text-slate-400 text-xs">
+						<DialogDescription className="text-muted-foreground text-xs">
 							Please check your mobile phone for the payment authorization prompt.
 						</DialogDescription>
 					</DialogHeader>
@@ -472,19 +474,19 @@ export default function BillingPage() {
 									</div>
 								</div>
 								<div className="space-y-1">
-									<h4 className="text-base font-semibold text-white">Enter Your Mobile PIN</h4>
-									<p className="text-xs text-slate-400">
+									<h4 className="text-base font-semibold text-foreground">Enter Your Mobile PIN</h4>
+									<p className="text-xs text-muted-foreground">
 										SonicPesa has dispatched a USSD prompt of{" "}
 										<strong className="text-emerald-400">
 											{orderAmount ? `${orderAmount.toLocaleString()} TZS` : ""}
 										</strong>{" "}
-										to <strong className="text-white">{phone}</strong>.
+										to <strong className="text-foreground">{phone}</strong>.
 									</p>
 								</div>
-								<div className="text-xs font-mono text-slate-500 bg-slate-950 px-3 py-1.5 rounded-md border border-slate-800">
+								<div className="text-xs font-mono text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-md border">
 									Order: {currentOrderId} • Ref: {orderReference || "—"}
 								</div>
-								<p className="text-xs text-slate-500">
+								<p className="text-xs text-muted-foreground">
 									Waiting for authorization... Auto-expiring in {countdown}s
 								</p>
 							</>
@@ -496,14 +498,14 @@ export default function BillingPage() {
 									<CheckCircle2 className="w-10 h-10 text-emerald-400" />
 								</div>
 								<div className="space-y-1">
-									<h4 className="text-lg font-bold text-white">Payment Confirmed!</h4>
-									<p className="text-xs text-slate-300">
+									<h4 className="text-lg font-bold text-foreground">Payment Confirmed!</h4>
+									<p className="text-xs text-foreground">
 										Your plan has been activated immediately. Thank you for choosing {brand.APP_NAME}!
 									</p>
 								</div>
 								<Button
 									onClick={() => setIsModalOpen(false)}
-									className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-6 mt-2"
+									className="bg-emerald-600 hover:bg-emerald-500 text-foreground text-xs px-6 mt-2"
 								>
 									Done
 								</Button>
@@ -516,14 +518,14 @@ export default function BillingPage() {
 									<XCircle className="w-10 h-10 text-red-400" />
 								</div>
 								<div className="space-y-1">
-									<h4 className="text-lg font-bold text-white">Payment Incomplete</h4>
-									<p className="text-xs text-slate-400">
+									<h4 className="text-lg font-bold text-foreground">Payment Incomplete</h4>
+									<p className="text-xs text-muted-foreground">
 										The payment was cancelled or timed out. Please try sending the prompt again.
 									</p>
 								</div>
 								<Button
 									onClick={() => setIsModalOpen(false)}
-									className="bg-slate-800 hover:bg-slate-700 text-white text-xs px-6 mt-2"
+									className="text-xs px-6 mt-2"
 								>
 									Close
 								</Button>

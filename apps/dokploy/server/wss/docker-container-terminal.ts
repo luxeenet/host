@@ -209,7 +209,7 @@ export const setupDockerContainerTerminalWebSocketServer = (
 
 		// Send application-oriented welcome banner
 		ws.send(
-			`\r\n\x1b[36mConnected to Application Terminal: ${appName}\x1b[0m\r\n\x1b[90mIsolated application runtime. Host access is strictly disabled.\x1b[0m\r\n\r\n`,
+			`\r\n\x1b[36mConnected to Terminal: ${appName}\x1b[0m\r\n\x1b[90mIsolated application runtime. Host access is strictly disabled.\x1b[0m\r\n\r\n`,
 		);
 
 		// Record session start audit log

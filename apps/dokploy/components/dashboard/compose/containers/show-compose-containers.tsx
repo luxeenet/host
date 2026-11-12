@@ -271,7 +271,7 @@ const ContainerRow = ({
 									serviceId={serviceId}
 									appName={container.name}
 								>
-									Application Terminal
+									Terminal
 								</DockerTerminalModal>
 								<DropdownMenuSeparator />
 								<DropdownMenuItem

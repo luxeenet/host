@@ -101,7 +101,7 @@ export const DockerTerminalModal = ({
 				onEscapeKeyDown={(event) => event.preventDefault()}
 			>
 				<DialogHeader>
-					<DialogTitle>Application Terminal</DialogTitle>
+					<DialogTitle>Terminal</DialogTitle>
 					<DialogDescription>
 						Connected to: <span className="font-semibold text-foreground">{appName}</span>
 					</DialogDescription>
@@ -119,19 +119,25 @@ export const DockerTerminalModal = ({
 					</SelectTrigger>
 					<SelectContent>
 						<SelectGroup>
-							{data?.map((container, index) => (
-								<SelectItem
-									key={container.containerId}
-									value={container.containerId}
-								>
-									{isPlatformAdmin
-										? `${container.name} (${container.containerId.slice(0, 12)})`
-										: `Instance ${index + 1}`}{" "}
-									<Badge variant={badgeStateColor(container.state)}>
-										{container.state}
-									</Badge>
-								</SelectItem>
-							))}
+							{data?.map((container, index) => {
+								const instanceLabel =
+									data.length === 1
+										? (appName || `Instance ${index + 1}`)
+										: `${appName || "Application"} (Instance ${index + 1})`;
+								return (
+									<SelectItem
+										key={container.containerId}
+										value={container.containerId}
+									>
+										{isPlatformAdmin
+											? `${instanceLabel} - ${container.containerId.slice(0, 12)}`
+											: instanceLabel}{" "}
+										<Badge variant={badgeStateColor(container.state)}>
+											{container.state}
+										</Badge>
+									</SelectItem>
+								);
+							})}
 							<SelectLabel>Application Instances ({data?.length})</SelectLabel>
 						</SelectGroup>
 					</SelectContent>
@@ -141,6 +147,7 @@ export const DockerTerminalModal = ({
 					id="terminal"
 					containerId={containerId || "select-a-container"}
 					serviceId={serviceId}
+					appName={appName}
 				/>
 				<Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
 					<DialogContent onEscapeKeyDown={(event) => event.preventDefault()}>

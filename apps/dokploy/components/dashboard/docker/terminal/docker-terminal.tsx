@@ -7,6 +7,7 @@ import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { useTheme } from "next-themes";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fixMacOsAltKeys } from "@/lib/terminal-keyboard";
+import { api } from "@/utils/api";
 
 interface Props {
 	id: string;
@@ -28,7 +29,12 @@ export const DockerTerminal: React.FC<Props> = ({
 	appName,
 }) => {
 	const termRef = useRef(null);
-	const [activeWay, setActiveWay] = React.useState<string | undefined>("bash");
+	const { data: userAuth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(userAuth as any)?.user?.isPlatformAdmin || (userAuth as any)?.isPlatformAdmin,
+	);
+	// Platform admins can manually choose bash or /bin/sh; customers default to universal shell (sh)
+	const [activeWay, setActiveWay] = React.useState<string | undefined>(undefined);
 	const { resolvedTheme } = useTheme();
 	useEffect(() => {
 		if (!containerId || containerId === PLACEHOLDER_CONTAINER_ID) {
@@ -107,12 +113,12 @@ export const DockerTerminal: React.FC<Props> = ({
 
 	return (
 		<div className="flex flex-col gap-4">
-			{hasContainer && (
-				<div className="flex flex-col gap-2  mt-4">
-					<span>
-						Select way to connect to <b>{containerId}</b>
+			{hasContainer && isPlatformAdmin && (
+				<div className="flex flex-col gap-2 mt-2">
+					<span className="text-xs text-muted-foreground">
+						Shell selection (Admin only):
 					</span>
-					<Tabs value={activeWay} onValueChange={setActiveWay}>
+					<Tabs value={activeWay || "sh"} onValueChange={setActiveWay}>
 						<TabsList>
 							<TabsTrigger value="bash">Bash</TabsTrigger>
 							<TabsTrigger value="sh">/bin/sh</TabsTrigger>
@@ -126,8 +132,8 @@ export const DockerTerminal: React.FC<Props> = ({
 				</div>
 			) : (
 				<div className="flex h-[420px] w-full items-center justify-center rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-					Select a container above to open a terminal. If none are listed, make
-					sure the service is deployed and running.
+					Select an application instance above to open a terminal. If none are listed, make
+					sure the application is deployed and running.
 				</div>
 			)}
 		</div>

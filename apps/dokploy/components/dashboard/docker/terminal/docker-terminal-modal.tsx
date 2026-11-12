@@ -68,9 +68,15 @@ export const DockerTerminalModal = ({
 				onEscapeKeyDown={(event) => event.preventDefault()}
 			>
 				<DialogHeader>
-					<DialogTitle>Application Terminal</DialogTitle>
+					<DialogTitle>Terminal</DialogTitle>
 					<DialogDescription>
-						Secure terminal access to your application runtime environment
+						{appName ? (
+							<>
+								Connected to: <span className="font-semibold text-foreground">{appName}</span>
+							</>
+						) : (
+							"Terminal access to your application runtime environment"
+						)}
 					</DialogDescription>
 				</DialogHeader>
 

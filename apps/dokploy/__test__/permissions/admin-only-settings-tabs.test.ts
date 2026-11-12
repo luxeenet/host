@@ -7,6 +7,10 @@ vi.mock("@dokploy/server", () => ({
 	generateSSHKey: vi.fn(),
 	removeSSHKeyById: vi.fn(),
 	updateSSHKeyById: vi.fn(),
+	createCertificate: vi.fn(),
+	findCertificateById: vi.fn(),
+	removeCertificateById: vi.fn(),
+	updateCertificate: vi.fn(),
 	IS_CLOUD: false,
 }));
 
@@ -14,6 +18,9 @@ vi.mock("@dokploy/server/db", () => ({
 	db: {
 		query: {
 			sshKeys: {
+				findMany: vi.fn().mockResolvedValue([]),
+			},
+			certificates: {
 				findMany: vi.fn().mockResolvedValue([]),
 			},
 		},
@@ -41,6 +48,7 @@ vi.mock("@dokploy/server/services/proprietary/license-key", () => ({
 import { sshRouter } from "../../server/api/routers/ssh-key";
 import { aiRouter } from "../../server/api/routers/ai";
 import { auditLogRouter } from "../../server/api/routers/proprietary/audit-log";
+import { certificateRouter } from "../../server/api/routers/certificate";
 import { requirePlatformAdminSession } from "../../utils/server-auth-guards";
 
 describe("Admin-Only Settings Tabs (AI, SSH Keys, Audit Logs)", () => {
@@ -202,6 +210,35 @@ describe("Admin-Only Settings Tabs (AI, SSH Keys, Audit Logs)", () => {
 		it("allows platform admin to read audit logs", async () => {
 			const caller = auditLogRouter.createCaller(adminCtx as any);
 			const result = await caller.all({});
+			expect(result).toEqual([]);
+		});
+	});
+
+	describe("Certificates Router (certificateRouter) Access Control", () => {
+		it("strictly denies non-platform admin from listing certificates", async () => {
+			const caller = certificateRouter.createCaller(customerCtx as any);
+			await expect(caller.all()).rejects.toThrowError(TRPCError);
+			await expect(caller.all()).rejects.toMatchObject({
+				code: "FORBIDDEN",
+				message: "Platform administrator access required.",
+			});
+		});
+
+		it("strictly denies non-platform admin from creating certificates in Traefik directory", async () => {
+			const caller = certificateRouter.createCaller(customerCtx as any);
+			await expect(
+				caller.create({
+					name: "wildcard-cert",
+					certificateData: "-----BEGIN CERTIFICATE-----...",
+					privateKey: "-----BEGIN PRIVATE KEY-----...",
+					organizationId: "org-cust-1",
+				}),
+			).rejects.toThrowError(TRPCError);
+		});
+
+		it("allows platform admin to list certificates", async () => {
+			const caller = certificateRouter.createCaller(adminCtx as any);
+			const result = await caller.all();
 			expect(result).toEqual([]);
 		});
 	});

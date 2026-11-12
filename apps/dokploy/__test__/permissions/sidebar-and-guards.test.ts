@@ -96,7 +96,7 @@ describe("Sidebar Navigation Menu Filtering", () => {
 		{ title: "Secrets", isEnabled: undefined },
 		{ title: "DNS Providers", isEnabled: undefined },
 		{ title: "S3 Destinations", isEnabled: undefined },
-		{ title: "Certificates", isEnabled: ({ permissions }: any) => permissions ? !!permissions?.certificate?.read : true },
+		{ title: "Certificates", isEnabled: ({ isPlatformAdmin }: any) => !!isPlatformAdmin },
 		{ title: "Notifications", isEnabled: ({ permissions }: any) => permissions ? !!permissions?.notification?.read : true },
 		{ title: "Billing", isEnabled: ({ auth, isCloud }: any) => !!(auth?.role === "owner" && isCloud) },
 		{ title: "Invoices", isEnabled: ({ auth, isCloud }: any) => !!(auth?.role === "owner" && isCloud) },
@@ -144,15 +144,15 @@ describe("Sidebar Navigation Menu Filtering", () => {
 		expect(visible).toContain("Secrets");
 		expect(visible).toContain("DNS Providers");
 		expect(visible).toContain("S3 Destinations");
-		expect(visible).toContain("Certificates");
 		expect(visible).toContain("Notifications");
 		expect(visible).toContain("Billing");
 		expect(visible).toContain("Invoices");
 
-		// AI, SSH Keys, Audit Logs and platform-only infrastructure must NOT be visible to customers
+		// AI, SSH Keys, Audit Logs, Certificates and platform-only infrastructure must NOT be visible to customers
 		expect(visible).not.toContain("AI");
 		expect(visible).not.toContain("SSH Keys");
 		expect(visible).not.toContain("Audit Logs");
+		expect(visible).not.toContain("Certificates");
 		expect(visible).not.toContain("Web Server");
 		expect(visible).not.toContain("Remote Servers");
 		expect(visible).not.toContain("Deployments");
@@ -192,5 +192,6 @@ describe("Sidebar Navigation Menu Filtering", () => {
 		expect(settingsVisible).toContain("AI");
 		expect(settingsVisible).toContain("SSH Keys");
 		expect(settingsVisible).toContain("Audit Logs");
+		expect(settingsVisible).toContain("Certificates");
 	});
 });

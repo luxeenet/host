@@ -378,8 +378,7 @@ export const MENU: Menu = {
 			title: "Certificates",
 			url: "/dashboard/settings/certificates",
 			icon: ShieldCheck,
-			isEnabled: ({ permissions }) =>
-				permissions ? !!permissions?.certificate?.read : true,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,

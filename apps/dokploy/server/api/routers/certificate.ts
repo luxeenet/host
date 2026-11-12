@@ -8,7 +8,7 @@ import {
 import { db } from "@dokploy/server/db";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
-import { createTRPCRouter, withPermission } from "@/server/api/trpc";
+import { createTRPCRouter, platformAdminProcedure } from "@/server/api/trpc";
 import { audit } from "@/server/api/utils/audit";
 import {
 	apiCreateCertificate,
@@ -18,7 +18,7 @@ import {
 } from "@/server/db/schema";
 
 export const certificateRouter = createTRPCRouter({
-	create: withPermission("certificate", "create")
+	create: platformAdminProcedure
 		.input(apiCreateCertificate)
 		.mutation(async ({ input, ctx }) => {
 			if (IS_CLOUD && !input.serverId) {
@@ -40,7 +40,7 @@ export const certificateRouter = createTRPCRouter({
 			return cert;
 		}),
 
-	one: withPermission("certificate", "read")
+	one: platformAdminProcedure
 		.input(apiFindCertificate)
 		.query(async ({ input, ctx }) => {
 			const certificates = await findCertificateById(input.certificateId);
@@ -52,7 +52,7 @@ export const certificateRouter = createTRPCRouter({
 			}
 			return certificates;
 		}),
-	remove: withPermission("certificate", "delete")
+	remove: platformAdminProcedure
 		.input(apiFindCertificate)
 		.mutation(async ({ input, ctx }) => {
 			const certificates = await findCertificateById(input.certificateId);
@@ -71,7 +71,7 @@ export const certificateRouter = createTRPCRouter({
 			await removeCertificateById(input.certificateId);
 			return true;
 		}),
-	all: withPermission("certificate", "read").query(async ({ ctx }) => {
+	all: platformAdminProcedure.query(async ({ ctx }) => {
 		return await db.query.certificates.findMany({
 			where: eq(certificates.organizationId, ctx.session.activeOrganizationId),
 			with: {
@@ -79,7 +79,7 @@ export const certificateRouter = createTRPCRouter({
 			},
 		});
 	}),
-	update: withPermission("certificate", "update")
+	update: platformAdminProcedure
 		.input(apiUpdateCertificate)
 		.mutation(async ({ input, ctx }) => {
 			const certificate = await findCertificateById(input.certificateId);

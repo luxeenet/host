@@ -46,9 +46,11 @@ import {
 	RedisIcon,
 } from "@/components/icons/data-tools-icons";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
+import { BreadcrumbSidebar } from "@/components/shared/breadcrumb-sidebar";
 import { CodeEditor } from "@/components/shared/code-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -913,29 +915,37 @@ export default function DatabaseManagePage() {
 				</title>
 			</Head>
 
-			<div className="space-y-6 pb-16">
-				{/* Top Bar / Breadcrumb Navigation */}
-				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+			<BreadcrumbSidebar
+				list={[
+					{ name: "Home", href: "/dashboard/home" },
+					{ name: "Databases", href: "/dashboard/home/databases" },
+					{ name: activeRecord?.name || "Workspace", href: router.asPath },
+				]}
+			/>
+
+			<div className="w-full">
+				<Card className="h-full bg-sidebar p-2.5 rounded-xl min-h-[85vh]">
+					<div className="rounded-xl bg-background shadow-md p-6 flex flex-col gap-6 h-full">
+						{/* Detail Header */}
+						<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-5">
 					<div className="flex items-center gap-3">
 						<Link href="/dashboard/home/databases">
 							<Button
 								variant="ghost"
-								size="sm"
-								className="text-slate-400 hover:text-white p-2 h-9 w-9"
+								size="icon"
+								className="h-9 w-9 text-muted-foreground"
 							>
-								<ArrowLeft className="w-4 h-4" />
+								<ArrowLeft className="size-4" />
 							</Button>
 						</Link>
 
-						<div
-							className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${meta.color}`}
-						>
-							<meta.icon className="w-5 h-5" />
+						<div className="size-10 rounded-xl border bg-muted flex items-center justify-center shrink-0">
+							<meta.icon className="size-5" />
 						</div>
 
 						<div>
 							<div className="flex items-center gap-2">
-								<h1 className="text-xl font-bold text-white tracking-tight">
+								<h1 className="text-xl font-semibold tracking-tight">
 									{activeRecord?.name || databaseId}
 								</h1>
 								{activeRecord?.status === "done" ? (
@@ -961,19 +971,19 @@ export default function DatabaseManagePage() {
 								)}
 								<Badge
 									variant="outline"
-									className="text-[10px] border-slate-800 text-slate-400 font-mono"
+									className="text-[10px] border-border text-muted-foreground font-mono"
 								>
 									{meta.label}
 								</Badge>
 							</div>
-							<p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
-								<span className="font-mono text-slate-300">
+							<p className="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-2">
+								<span className="font-mono text-foreground">
 									Service: {activeRecord?.appName || "instance"}
 								</span>
 								<span>•</span>
 								<span className="flex items-center gap-1">
 									Database:{" "}
-									<span className="text-indigo-300 font-mono font-semibold">
+									<span className="text-foreground font-mono font-semibold">
 										{selectedDatabase || (activeRecord?.databaseName as string) || "default"}
 									</span>
 								</span>
@@ -995,18 +1005,18 @@ export default function DatabaseManagePage() {
 							variant="outline"
 							size="sm"
 							onClick={() => handleOpenImportModal()}
-							className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-950/30 text-xs gap-1.5 h-8 font-medium"
+							className="text-xs gap-1.5 h-8"
 						>
-							<Upload className="w-3.5 h-3.5 text-indigo-400" /> Import Data
+							<Upload className="size-3.5" /> Import Data
 						</Button>
 
 						<Button
 							variant="outline"
 							size="sm"
 							onClick={() => setIsConnectionModalOpen(true)}
-							className="border-slate-800 text-slate-300 hover:bg-slate-800 text-xs gap-1.5 h-8 font-medium"
+							className="text-xs gap-1.5 h-8"
 						>
-							<Key className="w-3.5 h-3.5 text-cyan-400" /> Connection Details
+							<Key className="size-3.5" /> Connection Details
 						</Button>
 
 						<Button
@@ -1020,9 +1030,9 @@ export default function DatabaseManagePage() {
 								if (databaseEngine === "redis") refetchRedisKeys();
 								else refetchData();
 							}}
-							className="border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 text-xs gap-1.5 h-8"
+							className="text-xs gap-1.5 h-8"
 						>
-							<RefreshCw className="w-3.5 h-3.5" /> Refresh
+							<RefreshCw className="size-3.5" /> Refresh
 						</Button>
 					</div>
 				</div>
@@ -1033,10 +1043,10 @@ export default function DatabaseManagePage() {
 					onValueChange={setActiveTab}
 					className="space-y-6"
 				>
-					<TabsList className="bg-slate-900 border border-slate-800 p-1 rounded-xl">
+					<TabsList className="h-9">
 						<TabsTrigger
 							value="explorer"
-							className="text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white gap-1.5"
+							className="text-xs gap-1.5"
 						>
 							<TableIcon className="w-3.5 h-3.5" />
 							{databaseEngine === "mongo"
@@ -1049,7 +1059,7 @@ export default function DatabaseManagePage() {
 						{meta.isSql && (
 							<TabsTrigger
 								value="sql"
-								className="text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white gap-1.5"
+								className="text-xs gap-1.5"
 							>
 								<Code2 className="w-3.5 h-3.5" /> SQL Editor
 							</TabsTrigger>
@@ -1058,7 +1068,7 @@ export default function DatabaseManagePage() {
 						{databaseEngine !== "redis" && databaseEngine !== "libsql" && (
 							<TabsTrigger
 								value="users"
-								className="text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white gap-1.5"
+								className="text-xs gap-1.5"
 							>
 								<Users className="w-3.5 h-3.5" /> Users & Privileges
 							</TabsTrigger>
@@ -1066,7 +1076,7 @@ export default function DatabaseManagePage() {
 
 						<TabsTrigger
 							value="stats"
-							className="text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white gap-1.5"
+							className="text-xs gap-1.5"
 						>
 							<Activity className="w-3.5 h-3.5" /> Engine Health & Metrics
 						</TabsTrigger>
@@ -1080,9 +1090,9 @@ export default function DatabaseManagePage() {
 						{databaseEngine === "redis" ? (
 							<div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 								{/* Left: Keys List & Search */}
-								<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4 space-y-4">
+								<div className="rounded-xl border bg-card p-4 space-y-4">
 									<div className="flex items-center justify-between">
-										<h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+										<h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
 											<Layers className="w-3.5 h-3.5 text-red-400" /> Keys
 											Explorer
 										</h3>
@@ -1091,14 +1101,14 @@ export default function DatabaseManagePage() {
 												size="sm"
 												variant="outline"
 												onClick={() => handleOpenImportModal()}
-												className="border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 text-[11px] h-7 px-2.5 gap-1"
+												className="hover:bg-muted text-foreground text-[11px] h-7 px-2.5 gap-1"
 											>
 												<Upload className="w-3 h-3 text-red-400" /> Import
 											</Button>
 											<Button
 												size="sm"
 												onClick={() => setIsAddRedisKeyOpen(true)}
-												className="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] h-7 px-2.5 gap-1"
+												className="bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] h-7 px-2.5 gap-1"
 											>
 												<Plus className="w-3 h-3" /> New Key
 											</Button>
@@ -1111,12 +1121,12 @@ export default function DatabaseManagePage() {
 											placeholder="Key pattern (e.g. user:*)"
 											value={redisPattern}
 											onChange={(e) => setRedisPattern(e.target.value)}
-											className="bg-slate-950 border-slate-800 text-xs h-8 text-white font-mono"
+											className="text-xs h-8 font-mono"
 										/>
 										<Button
 											size="sm"
 											onClick={() => refetchRedisKeys()}
-											className="bg-slate-800 text-white text-xs h-8 px-2.5"
+											className="bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs h-8 px-2.5"
 										>
 											Scan
 										</Button>
@@ -1125,11 +1135,11 @@ export default function DatabaseManagePage() {
 									{/* Keys list */}
 									<div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
 										{isRedisScanning ? (
-											<div className="p-4 text-center text-xs text-slate-500">
+											<div className="p-4 text-center text-xs text-muted-foreground">
 												Scanning keyspace...
 											</div>
 										) : redisScanData?.keys?.length === 0 ? (
-											<div className="p-4 text-center text-xs text-slate-500">
+											<div className="p-4 text-center text-xs text-muted-foreground">
 												No keys found matching pattern.
 											</div>
 										) : (
@@ -1139,15 +1149,15 @@ export default function DatabaseManagePage() {
 													onClick={() => setSelectedRedisKey(k.key)}
 													className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
 														selectedRedisKey === k.key
-															? "bg-indigo-950/40 border-indigo-500/60 text-white"
-															: "bg-slate-950/40 border-slate-800/80 text-slate-400 hover:border-slate-700"
+															? "bg-accent border-foreground/30 text-foreground font-medium"
+															: "bg-muted/40 border text-muted-foreground hover:border-foreground/30"
 													}`}
 												>
 													<div className="min-w-0 pr-2">
-														<p className="font-mono truncate font-medium text-slate-200">
+														<p className="font-mono truncate font-medium text-foreground">
 															{k.key}
 														</p>
-														<div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+														<div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
 															<span className="uppercase text-red-400 font-semibold">
 																{k.type}
 															</span>
@@ -1164,7 +1174,7 @@ export default function DatabaseManagePage() {
 															e.stopPropagation();
 															handleDeleteRedisKey(k.key);
 														}}
-														className="text-slate-500 hover:text-red-400 p-1 rounded"
+														className="text-muted-foreground hover:text-red-400 p-1 rounded"
 													>
 														<Trash2 className="w-3.5 h-3.5" />
 													</button>
@@ -1177,13 +1187,13 @@ export default function DatabaseManagePage() {
 								{/* Right: Key Inspector & Safe Console */}
 								<div className="md:col-span-2 space-y-4">
 									{/* Key Value Inspector */}
-									<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4 space-y-3">
-										<div className="flex items-center justify-between border-b border-slate-800 pb-3">
+									<div className="rounded-xl border bg-card p-4 space-y-3">
+										<div className="flex items-center justify-between border-b border-border pb-3">
 											<div>
-												<h3 className="text-xs font-bold text-white uppercase tracking-wider">
+												<h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
 													Key Value Inspector
 												</h3>
-												<p className="text-[11px] text-slate-400 font-mono mt-0.5">
+												<p className="text-[11px] text-muted-foreground font-mono mt-0.5">
 													{selectedRedisKey || "Select a key to view value"}
 												</p>
 											</div>
@@ -1198,23 +1208,23 @@ export default function DatabaseManagePage() {
 										</div>
 
 										{isKeyDetailsLoading ? (
-											<div className="p-8 text-center text-xs text-slate-500">
+											<div className="p-8 text-center text-xs text-muted-foreground">
 												Fetching key payload...
 											</div>
 										) : !selectedRedisKey ? (
-											<div className="p-8 text-center text-xs text-slate-500">
+											<div className="p-8 text-center text-xs text-muted-foreground">
 												Click on any key on the left to inspect its data
 												structure.
 											</div>
 										) : (
 											<div className="space-y-3">
-												<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 font-mono text-xs text-slate-200 max-h-60 overflow-auto whitespace-pre-wrap">
+												<div className="p-3 rounded-lg bg-muted/40 border border-border font-mono text-xs text-foreground max-h-60 overflow-auto whitespace-pre-wrap">
 													{typeof redisKeyDetails?.value === "object"
 														? JSON.stringify(redisKeyDetails?.value, null, 2)
 														: String(redisKeyDetails?.value ?? "")}
 												</div>
 
-												<div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+												<div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
 													<span>
 														TTL:{" "}
 														{redisKeyDetails?.ttl === -1
@@ -1237,20 +1247,20 @@ export default function DatabaseManagePage() {
 									</div>
 
 									{/* Safe Redis Command Console */}
-									<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4 space-y-3">
+									<div className="rounded-xl border bg-card p-4 space-y-3">
 										<div className="flex items-center justify-between">
-											<h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-												<Terminal className="w-3.5 h-3.5 text-indigo-400" />
+											<h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+												<Terminal className="w-3.5 h-3.5 text-primary" />
 												Safe Redis CLI Console
 											</h3>
-											<span className="text-[10px] text-slate-500">
+											<span className="text-[10px] text-muted-foreground">
 												Destructive & admin commands blocked
 											</span>
 										</div>
 
-										<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-400 min-h-[140px] max-h-[220px] overflow-auto space-y-1">
+										<div className="p-3 rounded-lg bg-muted/40 border border-border font-mono text-xs text-emerald-400 min-h-[140px] max-h-[220px] overflow-auto space-y-1">
 											{redisConsoleLogs.length === 0 ? (
-												<p className="text-slate-600">
+												<p className="text-muted-foreground">
 													Type safe Redis commands like &apos;INFO&apos;,
 													&apos;DBSIZE&apos;, &apos;PING&apos;, &apos;TTL
 													key&apos;...
@@ -1264,7 +1274,7 @@ export default function DatabaseManagePage() {
 																? "text-cyan-400 font-semibold"
 																: log.startsWith("ERROR")
 																	? "text-red-400"
-																	: "text-slate-300"
+																	: "text-foreground"
 														}
 													>
 														{log}
@@ -1281,12 +1291,12 @@ export default function DatabaseManagePage() {
 												onKeyDown={(e) => {
 													if (e.key === "Enter") handleExecuteRedisConsole();
 												}}
-												className="bg-slate-950 border-slate-800 text-xs h-8 text-white font-mono"
+												className="text-xs h-8 font-mono"
 											/>
 											<Button
 												size="sm"
 												onClick={handleExecuteRedisConsole}
-												className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-3"
+												className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-3"
 											>
 												Execute
 											</Button>
@@ -1298,18 +1308,18 @@ export default function DatabaseManagePage() {
 							/* MONGODB OR SQL DATA EXPLORER */
 							<div className="grid grid-cols-1 md:grid-cols-4 gap-5">
 								{/* Left: Logical Database & Collections / Tables List */}
-								<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4 space-y-3">
+								<div className="rounded-xl border bg-card p-4 space-y-3">
 									{/* Logical Database Selector - Only for Platform Admins */}
 									{isPlatformAdmin && (
-										<div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/90 space-y-1.5">
+										<div className="p-2.5 rounded-lg bg-muted/40 border space-y-1.5">
 											<div className="flex items-center justify-between text-[11px]">
-												<span className="font-semibold uppercase tracking-wider flex items-center gap-1.5 text-slate-300">
-													<Database className="w-3.5 h-3.5 text-indigo-400" /> Logical DB
+												<span className="font-semibold uppercase tracking-wider flex items-center gap-1.5 text-foreground">
+													<Database className="w-3.5 h-3.5 text-primary" /> Logical DB
 												</span>
 												{isDatabasesLoading ? (
-													<RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
+													<RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />
 												) : (
-													<span className="text-[10px] text-slate-500 font-mono">
+													<span className="text-[10px] text-muted-foreground font-mono">
 														{discoveredDatabases.length} found
 													</span>
 												)}
@@ -1322,10 +1332,10 @@ export default function DatabaseManagePage() {
 													setCurrentPage(1);
 												}}
 											>
-												<SelectTrigger className="w-full bg-slate-900 border-slate-800 text-xs h-8 font-mono text-white">
+												<SelectTrigger className="w-full text-xs h-8 font-mono">
 													<SelectValue placeholder="Select Database" />
 												</SelectTrigger>
-												<SelectContent className="bg-slate-900 border-slate-800 text-white">
+												<SelectContent className="">
 													{discoveredDatabases.map((db) => (
 														<SelectItem key={db.name} value={db.name} className="text-xs font-mono">
 															<div className="flex items-center justify-between gap-2 w-full">
@@ -1337,7 +1347,7 @@ export default function DatabaseManagePage() {
 																		</span>
 																	)}
 																	{db.isDefault && !db.isConfiguredDatabase && (
-																		<span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-sans">
+																		<span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-sans">
 																			Default
 																		</span>
 																	)}
@@ -1347,7 +1357,7 @@ export default function DatabaseManagePage() {
 																		</span>
 																	)}
 																	{(db.uninitialized || db.empty) && (
-																		<span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-sans">
+																		<span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-sans">
 																			Empty
 																		</span>
 																	)}
@@ -1361,8 +1371,8 @@ export default function DatabaseManagePage() {
 									)}
 
 									<div className="flex items-center justify-between pt-1">
-										<h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-											<Layers className="w-3.5 h-3.5 text-indigo-400" />
+										<h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+											<Layers className="w-3.5 h-3.5 text-primary" />
 											{databaseEngine === "mongo" ? "Collections" : "Tables"}
 										</h3>
 
@@ -1370,7 +1380,7 @@ export default function DatabaseManagePage() {
 											<Button
 												size="sm"
 												onClick={() => setIsCreateCollModalOpen(true)}
-												className="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] h-7 px-2 gap-1"
+												className="bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] h-7 px-2 gap-1"
 											>
 												<Plus className="w-3 h-3" /> New
 											</Button>
@@ -1379,11 +1389,11 @@ export default function DatabaseManagePage() {
 
 									<div className="space-y-1 max-h-[500px] overflow-y-auto pr-1">
 										{isListLoading ? (
-											<div className="p-4 text-center text-xs text-slate-500">
+											<div className="p-4 text-center text-xs text-muted-foreground">
 												Loading schema...
 											</div>
 										) : collectionsOrTables.length === 0 ? (
-											<div className="p-4 text-center text-xs text-slate-500">
+											<div className="p-4 text-center text-xs text-muted-foreground">
 												No{" "}
 												{databaseEngine === "mongo" ? "collections" : "tables"}{" "}
 												found in &apos;{selectedDatabase || "current database"}&apos;.
@@ -1398,12 +1408,12 @@ export default function DatabaseManagePage() {
 													}}
 													className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
 														selectedEntity === item.name
-															? "bg-indigo-950/40 border-indigo-500/60 text-white font-medium"
-															: "bg-slate-950/40 border-slate-800/80 text-slate-400 hover:border-slate-700"
+															? "bg-accent border-foreground/30 text-foreground font-medium font-medium"
+															: "bg-muted/40 border text-muted-foreground hover:border-foreground/30"
 													}`}
 												>
 													<div className="flex items-center gap-2 truncate">
-														<TableIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+														<TableIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
 														<span className="font-mono truncate">
 															{item.name}
 														</span>
@@ -1411,7 +1421,7 @@ export default function DatabaseManagePage() {
 
 													<div className="flex items-center gap-1.5">
 														{item.estimatedRows !== undefined && (
-															<span className="text-[10px] text-slate-500 font-mono">
+															<span className="text-[10px] text-muted-foreground font-mono">
 																{item.estimatedRows} rows
 															</span>
 														)}
@@ -1422,7 +1432,7 @@ export default function DatabaseManagePage() {
 																	e.stopPropagation();
 																	handleDropCollection(item.name);
 																}}
-																className="text-slate-600 hover:text-red-400 p-0.5"
+																className="text-muted-foreground hover:text-red-400 p-0.5"
 															>
 																<Trash2 className="w-3 h-3" />
 															</button>
@@ -1435,26 +1445,26 @@ export default function DatabaseManagePage() {
 								</div>
 
 								{/* Right: Records / Documents Data Table */}
-								<div className="md:col-span-3 rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-4">
-									<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+								<div className="md:col-span-3 rounded-xl border bg-card p-5 space-y-4">
+									<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
 										<div>
-											<h2 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+											<h2 className="text-sm font-bold text-foreground font-mono flex items-center gap-2">
 												<span>{selectedEntity || "Select target"}</span>
 												{selectedDatabase && (
 													<Badge
 														variant="outline"
-														className="text-[10px] border-slate-800 text-indigo-300 font-mono"
+														className="text-[10px] border-border text-foreground font-mono"
 													>
 														db: {selectedDatabase}
 													</Badge>
 												)}
 												{entityData?.total !== undefined && (
-													<span className="text-[11px] font-normal text-slate-400">
+													<span className="text-[11px] font-normal text-muted-foreground">
 														({entityData.total} total records)
 													</span>
 												)}
 											</h2>
-											<p className="text-xs text-slate-400 mt-0.5">
+											<p className="text-xs text-muted-foreground mt-0.5">
 												Browse, filter, inspect, and modify live database records.
 											</p>
 										</div>
@@ -1464,9 +1474,9 @@ export default function DatabaseManagePage() {
 												variant="outline"
 												size="sm"
 												onClick={() => handleOpenImportModal(selectedEntity)}
-												className="border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 text-xs h-8 px-3 gap-1.5"
+												className="hover:bg-muted text-foreground text-xs h-8 px-3 gap-1.5"
 											>
-												<Upload className="w-3.5 h-3.5 text-indigo-400" /> Import Data
+												<Upload className="w-3.5 h-3.5 text-primary" /> Import Data
 											</Button>
 
 											<Button
@@ -1479,7 +1489,7 @@ export default function DatabaseManagePage() {
 													);
 													setIsInsertModalOpen(true);
 												}}
-												className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-3 gap-1.5"
+												className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-3 gap-1.5"
 											>
 												<Plus className="w-3.5 h-3.5" /> Insert{" "}
 												{databaseEngine === "mongo" ? "Document" : "Row"}
@@ -1497,12 +1507,12 @@ export default function DatabaseManagePage() {
 												onKeyDown={(e) => {
 													if (e.key === "Enter") handleApplyFilter();
 												}}
-												className="bg-slate-950 border-slate-800 text-xs h-8 text-white font-mono"
+												className="text-xs h-8 font-mono"
 											/>
 											<Button
 												size="sm"
 												onClick={handleApplyFilter}
-												className="bg-slate-800 text-white text-xs h-8 px-3"
+												className="bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs h-8 px-3"
 											>
 												Filter
 											</Button>
@@ -1510,10 +1520,10 @@ export default function DatabaseManagePage() {
 									)}
 
 									{/* Data Table */}
-									<div className="rounded-lg border border-slate-800 overflow-x-auto min-h-[280px]">
+									<div className="rounded-lg border border-border overflow-x-auto min-h-[280px]">
 										{isDataLoading ? (
-											<div className="p-12 text-center text-xs text-slate-500">
-												<RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
+											<div className="p-12 text-center text-xs text-muted-foreground">
+												<RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
 												Querying instance records...
 											</div>
 										) : isDataError || (entityData as any)?.error ? (
@@ -1522,7 +1532,7 @@ export default function DatabaseManagePage() {
 													<AlertTriangle className="w-5 h-5" />
 												</div>
 												<div>
-													<p className="text-sm font-semibold text-white">
+													<p className="text-sm font-semibold text-foreground">
 														Unable to retrieve records from &apos;{selectedEntity}&apos;
 													</p>
 													<p className="text-xs text-red-400 font-mono mt-1 max-w-lg mx-auto break-words">
@@ -1535,16 +1545,16 @@ export default function DatabaseManagePage() {
 													size="sm"
 													variant="outline"
 													onClick={() => refetchData()}
-													className="border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 text-xs h-8 px-4 gap-1.5"
+													className="hover:bg-muted text-foreground text-xs h-8 px-4 gap-1.5"
 												>
 													<RefreshCw className="w-3.5 h-3.5" /> Retry Query
 												</Button>
 											</div>
 										) : (!entityData?.rows && !(entityData as any)?.documents) ||
 										  ((entityData?.rows || (entityData as any)?.documents || []).length === 0) ? (
-											<div className="p-12 text-center text-xs text-slate-500 space-y-2">
-												<TableIcon className="w-8 h-8 text-slate-700 mx-auto" />
-												<p className="text-slate-400 font-medium">
+											<div className="p-12 text-center text-xs text-muted-foreground space-y-2">
+												<TableIcon className="w-8 h-8 text-muted-foreground/50 mx-auto" />
+												<p className="text-muted-foreground font-medium">
 													{filterInput
 														? "No records match the current filter criteria."
 														: "No records in this collection/table."}
@@ -1558,7 +1568,7 @@ export default function DatabaseManagePage() {
 															setActiveFilter({});
 															setCurrentPage(1);
 														}}
-														className="border-slate-800 text-slate-300 text-xs h-7 px-3 mt-2"
+														className="text-foreground text-xs h-7 px-3 mt-2"
 													>
 														Clear Filter
 													</Button>
@@ -1588,12 +1598,12 @@ export default function DatabaseManagePage() {
 
 												return (
 													<table className="w-full text-left text-xs font-mono">
-														<thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
+														<thead className="bg-muted/50 text-muted-foreground border-b uppercase text-[10px]">
 															<tr>
 																{cols.map((col) => (
 																	<th
 																		key={col}
-																		className="px-3 py-2.5 font-semibold text-slate-300"
+																		className="px-3 py-2.5 font-semibold text-foreground"
 																	>
 																		{col}
 																	</th>
@@ -1601,21 +1611,21 @@ export default function DatabaseManagePage() {
 																<th className="px-3 py-2.5 text-right">Actions</th>
 															</tr>
 														</thead>
-														<tbody className="divide-y divide-slate-800/60">
+														<tbody className="divide-y divide-border">
 															{records.map((row: any, rIdx: number) => (
 																<tr
 																	key={row._id || row.id || rIdx}
-																	className="hover:bg-slate-800/40 transition-colors"
+																	className="hover:bg-muted/50 transition-colors"
 																>
 																	{cols.map((col) => (
 																		<td
 																			key={col}
-																			className="px-3 py-2 text-slate-300 truncate max-w-xs"
+																			className="px-3 py-2 text-foreground truncate max-w-xs"
 																		>
 																			{row[col] === null ? (
-																				<span className="text-slate-600 italic">null</span>
+																				<span className="text-muted-foreground italic">null</span>
 																			) : row[col] === undefined ? (
-																				<span className="text-slate-600 italic">undefined</span>
+																				<span className="text-muted-foreground italic">undefined</span>
 																			) : typeof row[col] === "boolean" ? (
 																				<span
 																					className={
@@ -1632,7 +1642,7 @@ export default function DatabaseManagePage() {
 																				</span>
 																			) : typeof row[col] === "object" ? (
 																				<span
-																					className="text-slate-300 truncate block max-w-[200px]"
+																					className="text-foreground truncate block max-w-[200px]"
 																					title={JSON.stringify(row[col])}
 																				>
 																					{JSON.stringify(row[col])}
@@ -1656,7 +1666,7 @@ export default function DatabaseManagePage() {
 																					setViewingDocument(row);
 																					setIsViewDocModalOpen(true);
 																				}}
-																				className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800"
+																				className="p-1 text-muted-foreground hover:text-cyan-300 rounded hover:bg-muted"
 																			>
 																				<Eye className="w-3.5 h-3.5" />
 																			</button>
@@ -1674,7 +1684,7 @@ export default function DatabaseManagePage() {
 																					);
 																					setIsEditModalOpen(true);
 																				}}
-																				className="p-1 text-slate-400 hover:text-indigo-300 rounded hover:bg-slate-800"
+																				className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted"
 																			>
 																				<Edit className="w-3.5 h-3.5" />
 																			</button>
@@ -1682,7 +1692,7 @@ export default function DatabaseManagePage() {
 																				type="button"
 																				title="Delete record"
 																				onClick={() => handleDeleteRecord(row)}
-																				className="p-1 text-slate-500 hover:text-red-400 rounded hover:bg-slate-800"
+																				className="p-1 text-muted-foreground hover:text-red-400 rounded hover:bg-muted"
 																			>
 																				<Trash2 className="w-3.5 h-3.5" />
 																			</button>
@@ -1713,7 +1723,7 @@ export default function DatabaseManagePage() {
 											const end = Math.min(currentPage * 25, totalCount);
 
 											return (
-												<div className="flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-800/80 gap-3">
+												<div className="flex flex-col sm:flex-row items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border gap-3">
 													<span>
 														Showing records {start} to {end} of {totalCount} total
 														{totalPages > 1 &&
@@ -1724,7 +1734,7 @@ export default function DatabaseManagePage() {
 															size="sm"
 															disabled={currentPage <= 1}
 															onClick={() => setCurrentPage(1)}
-															className="bg-slate-800 text-white text-xs h-7 px-2.5 disabled:opacity-40"
+															className="bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs h-7 px-2.5 disabled:opacity-40"
 														>
 															First
 														</Button>
@@ -1734,7 +1744,7 @@ export default function DatabaseManagePage() {
 															onClick={() =>
 																setCurrentPage((p) => Math.max(1, p - 1))
 															}
-															className="bg-slate-800 text-white text-xs h-7 px-3 disabled:opacity-40"
+															className="bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs h-7 px-3 disabled:opacity-40"
 														>
 															Previous
 														</Button>
@@ -1742,7 +1752,7 @@ export default function DatabaseManagePage() {
 															size="sm"
 															disabled={currentPage >= totalPages}
 															onClick={() => setCurrentPage((p) => p + 1)}
-															className="bg-slate-800 text-white text-xs h-7 px-3 disabled:opacity-40"
+															className="bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs h-7 px-3 disabled:opacity-40"
 														>
 															Next
 														</Button>
@@ -1750,7 +1760,7 @@ export default function DatabaseManagePage() {
 															size="sm"
 															disabled={currentPage >= totalPages}
 															onClick={() => setCurrentPage(totalPages)}
-															className="bg-slate-800 text-white text-xs h-7 px-2.5 disabled:opacity-40"
+															className="bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs h-7 px-2.5 disabled:opacity-40"
 														>
 															Last
 														</Button>
@@ -1768,14 +1778,14 @@ export default function DatabaseManagePage() {
 					{/* ========================================================= */}
 					{meta.isSql && (
 						<TabsContent value="sql" className="space-y-4 m-0">
-							<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-4">
-								<div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+							<div className="rounded-xl border bg-card p-5 space-y-4">
+								<div className="flex items-center justify-between border-b border-border pb-3">
 									<div>
-										<h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-											<Code2 className="w-4 h-4 text-indigo-400" /> SQL Query
+										<h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+											<Code2 className="w-4 h-4 text-primary" /> SQL Query
 											Studio
 										</h2>
-										<p className="text-xs text-slate-400 mt-0.5">
+										<p className="text-xs text-muted-foreground mt-0.5">
 											Execute custom queries with parameter protection, syntax
 											highlighting, and execution metrics.
 										</p>
@@ -1785,7 +1795,7 @@ export default function DatabaseManagePage() {
 										size="sm"
 										disabled={isExecutingSql}
 										onClick={() => runSqlQuery(false)}
-										className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 gap-1.5 shadow-sm"
+										className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-4 gap-1.5 shadow-sm"
 									>
 										{isExecutingSql ? (
 											<RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1797,7 +1807,7 @@ export default function DatabaseManagePage() {
 								</div>
 
 								{/* Query Editor */}
-								<div className="border border-slate-800 rounded-lg overflow-hidden min-h-[160px] bg-slate-950">
+								<div className="border rounded-lg overflow-hidden min-h-[160px] bg-background">
 									<CodeEditor
 										value={sqlQuery}
 										onChange={(val) => setSqlQuery(val)}
@@ -1809,8 +1819,8 @@ export default function DatabaseManagePage() {
 								{/* SQL Results view */}
 								{sqlResult && (
 									<div className="space-y-2 pt-2">
-										<div className="flex items-center justify-between text-xs text-slate-400">
-											<span className="font-semibold text-white">
+										<div className="flex items-center justify-between text-xs text-muted-foreground">
+											<span className="font-semibold text-foreground">
 												Query Results
 											</span>
 											{sqlResult.durationMs !== undefined && (
@@ -1826,32 +1836,32 @@ export default function DatabaseManagePage() {
 												{sqlResult.error}
 											</div>
 										) : sqlResult.rows?.length === 0 ? (
-											<div className="p-4 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-400">
+											<div className="p-4 rounded-lg bg-muted/40 border border-border text-xs text-muted-foreground">
 												{sqlResult.statusMessage ||
 													"Query executed successfully with 0 rows returned."}
 											</div>
 										) : (
-											<div className="rounded-lg border border-slate-800 overflow-x-auto max-h-96">
+											<div className="rounded-lg border border-border overflow-x-auto max-h-96">
 												<table className="w-full text-left text-xs font-mono">
-													<thead className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
+													<thead className="bg-muted/50 text-muted-foreground border-b uppercase text-[10px]">
 														<tr>
 															{sqlResult.columns?.map((col: string) => (
 																<th
 																	key={col}
-																	className="px-3 py-2.5 font-semibold text-slate-300"
+																	className="px-3 py-2.5 font-semibold text-foreground"
 																>
 																	{col}
 																</th>
 															))}
 														</tr>
 													</thead>
-													<tbody className="divide-y divide-slate-800/60 bg-slate-950/60">
+													<tbody className="divide-y divide-border bg-background">
 														{sqlResult.rows?.map((row: any, rIdx: number) => (
-															<tr key={rIdx} className="hover:bg-slate-800/40">
+															<tr key={rIdx} className="hover:bg-muted/50">
 																{sqlResult.columns?.map((col: string) => (
 																	<td
 																		key={col}
-																		className="px-3 py-2 text-slate-300 truncate max-w-xs"
+																		className="px-3 py-2 text-foreground truncate max-w-xs"
 																	>
 																		{typeof row[col] === "object"
 																			? JSON.stringify(row[col])
@@ -1874,14 +1884,14 @@ export default function DatabaseManagePage() {
 					{/* TAB 3: USERS & PRIVILEGES                                 */}
 					{/* ========================================================= */}
 					<TabsContent value="users" className="space-y-4 m-0">
-						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-4">
-							<div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+						<div className="rounded-xl border bg-card p-5 space-y-4">
+							<div className="flex items-center justify-between border-b border-border pb-3">
 								<div>
-									<h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-										<Users className="w-4 h-4 text-indigo-400" /> Database Users
+									<h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+										<Users className="w-4 h-4 text-primary" /> Database Users
 										& Roles
 									</h2>
-									<p className="text-xs text-slate-400 mt-0.5">
+									<p className="text-xs text-muted-foreground mt-0.5">
 										Manage least-privilege credentials scoped directly to this
 										customer database.
 									</p>
@@ -1890,15 +1900,15 @@ export default function DatabaseManagePage() {
 								<Button
 									size="sm"
 									onClick={() => setIsCreateUserOpen(true)}
-									className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-3 gap-1.5"
+									className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-3 gap-1.5"
 								>
 									<Plus className="w-3.5 h-3.5" /> Add Database User
 								</Button>
 							</div>
 
-							<div className="rounded-lg border border-slate-800 overflow-x-auto">
+							<div className="rounded-lg border border-border overflow-x-auto">
 								<table className="w-full text-left text-xs font-mono">
-									<thead className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
+									<thead className="bg-muted/50 text-muted-foreground border-b uppercase text-[10px]">
 										<tr>
 											<th className="px-4 py-3">Username</th>
 											<th className="px-4 py-3">Database / AuthSource</th>
@@ -1906,12 +1916,12 @@ export default function DatabaseManagePage() {
 											<th className="px-4 py-3 text-right">Actions</th>
 										</tr>
 									</thead>
-									<tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
+									<tbody className="divide-y divide-border bg-background">
 										{isUsersLoading ? (
 											<tr>
 												<td
 													colSpan={4}
-													className="p-8 text-center text-slate-500"
+													className="p-8 text-center text-muted-foreground"
 												>
 													Loading database users...
 												</td>
@@ -1920,7 +1930,7 @@ export default function DatabaseManagePage() {
 											<tr>
 												<td
 													colSpan={4}
-													className="p-8 text-center text-slate-500"
+													className="p-8 text-center text-muted-foreground"
 												>
 													No extra database users found.
 												</td>
@@ -1929,12 +1939,12 @@ export default function DatabaseManagePage() {
 											dbUsers.map((u: any) => (
 												<tr
 													key={u.user}
-													className="hover:bg-slate-800/30 transition-colors"
+													className="hover:bg-muted/50 transition-colors"
 												>
-													<td className="px-4 py-3 font-bold text-white">
+													<td className="px-4 py-3 font-bold text-foreground">
 														{u.user}
 													</td>
-													<td className="px-4 py-3 text-slate-300">
+													<td className="px-4 py-3 text-foreground">
 														{u.db || activeRecord?.databaseName || "app"}
 													</td>
 													<td className="px-4 py-3">
@@ -1943,7 +1953,7 @@ export default function DatabaseManagePage() {
 																<Badge
 																	key={i}
 																	variant="outline"
-																	className="text-[10px] bg-slate-900 border-slate-800 text-indigo-300"
+																	className="text-[10px] bg-muted/40 border-border text-foreground"
 																>
 																	{r}
 																</Badge>
@@ -1955,7 +1965,7 @@ export default function DatabaseManagePage() {
 															variant="ghost"
 															size="sm"
 															onClick={() => handleDropUser(u.user)}
-															className="text-slate-500 hover:text-red-400 h-7 w-7 p-0"
+															className="text-muted-foreground hover:text-red-400 h-7 w-7 p-0"
 														>
 															<Trash2 className="w-3.5 h-3.5" />
 														</Button>
@@ -1974,34 +1984,34 @@ export default function DatabaseManagePage() {
 					{/* ========================================================= */}
 					<TabsContent value="stats" className="space-y-4 m-0">
 						<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-							<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-1">
-								<span className="text-slate-500 text-xs uppercase tracking-wider font-semibold">
+							<div className="rounded-xl border bg-card p-5 space-y-1">
+								<span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">
 									Engine Version
 								</span>
-								<p className="text-xl font-bold text-white">
+								<p className="text-xl font-bold text-foreground">
 									{engineStats?.version || meta.label}
 								</p>
-								<span className="text-[11px] text-slate-400 block pt-1">
+								<span className="text-[11px] text-muted-foreground block pt-1">
 									Managed Database Runtime
 								</span>
 							</div>
 
-							<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-1">
-								<span className="text-slate-500 text-xs uppercase tracking-wider font-semibold">
+							<div className="rounded-xl border bg-card p-5 space-y-1">
+								<span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">
 									Storage Allocation
 								</span>
-								<p className="text-xl font-bold text-indigo-400">
+								<p className="text-xl font-bold text-primary">
 									{engineStats?.dataSize ||
 										engineStats?.usedMemory ||
 										"Managed Volume"}
 								</p>
-								<span className="text-[11px] text-slate-400 block pt-1">
+								<span className="text-[11px] text-muted-foreground block pt-1">
 									Encrypted Persistent Storage
 								</span>
 							</div>
 
-							<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-1">
-								<span className="text-slate-500 text-xs uppercase tracking-wider font-semibold">
+							<div className="rounded-xl border bg-card p-5 space-y-1">
+								<span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">
 									Schema Objects
 								</span>
 								<p className="text-xl font-bold text-emerald-400">
@@ -2010,7 +2020,7 @@ export default function DatabaseManagePage() {
 										engineStats?.totalKeys ??
 										collectionsOrTables.length}
 								</p>
-								<span className="text-[11px] text-slate-400 block pt-1">
+								<span className="text-[11px] text-muted-foreground block pt-1">
 									{databaseEngine === "mongo"
 										? "Collections"
 										: databaseEngine === "redis"
@@ -2021,27 +2031,27 @@ export default function DatabaseManagePage() {
 						</div>
 
 						{/* Security & Access Overview */}
-						<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-3">
-							<h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+						<div className="rounded-xl border bg-card p-5 space-y-3">
+							<h3 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
 								<Shield className="w-4 h-4 text-emerald-400" /> Isolation
 								Architecture
 							</h3>
-							<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-300">
-								<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
-									<span className="text-slate-500 font-semibold block text-[10px]">
+							<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-foreground">
+								<div className="p-3 rounded-lg bg-muted/40 border border-border space-y-1">
+									<span className="text-muted-foreground font-semibold block text-[10px]">
 										AUTHENTICATION PROTOCOL
 									</span>
-									<p className="font-mono text-slate-200">
+									<p className="font-mono text-foreground">
 										{databaseEngine === "mongo"
 											? "SCRAM-SHA-256 (authSource: admin)"
 											: "Native Handshake & Password Auth"}
 									</p>
 								</div>
-								<div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
-									<span className="text-slate-500 font-semibold block text-[10px]">
+								<div className="p-3 rounded-lg bg-muted/40 border border-border space-y-1">
+									<span className="text-muted-foreground font-semibold block text-[10px]">
 										NETWORK BOUNDARY
 									</span>
-									<p className="font-mono text-slate-200">
+									<p className="font-mono text-foreground">
 										Isolated Private VPC + Edge Routing
 									</p>
 								</div>
@@ -2049,6 +2059,8 @@ export default function DatabaseManagePage() {
 						</div>
 					</TabsContent>
 				</Tabs>
+					</div>
+				</Card>
 			</div>
 
 			{/* ========================================================= */}
@@ -2061,10 +2073,10 @@ export default function DatabaseManagePage() {
 					open={isConnectionModalOpen}
 					onOpenChange={setIsConnectionModalOpen}
 				>
-					<DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-950 border-slate-800 text-white">
+					<DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
 						<DialogHeader>
 							<DialogTitle className="flex items-center gap-2">
-								<Key className="w-5 h-5 text-indigo-400" />
+								<Key className="w-5 h-5 text-primary" />
 								<span>Connection Information: {activeRecord.name}</span>
 							</DialogTitle>
 						</DialogHeader>
@@ -2082,12 +2094,12 @@ export default function DatabaseManagePage() {
 
 			{/* Insert Document / Row Modal */}
 			<Dialog open={isInsertModalOpen} onOpenChange={setIsInsertModalOpen}>
-				<DialogContent className="max-w-xl bg-slate-950 border-slate-800 text-white">
+				<DialogContent className="max-w-xl">
 					<DialogHeader>
 						<DialogTitle>
 							Insert New {databaseEngine === "mongo" ? "Document" : "Row"}
 						</DialogTitle>
-						<DialogDescription className="text-xs text-slate-400">
+						<DialogDescription className="text-xs text-muted-foreground">
 							Enter valid JSON record payload for &apos;{selectedEntity}&apos;.
 						</DialogDescription>
 					</DialogHeader>
@@ -2097,7 +2109,7 @@ export default function DatabaseManagePage() {
 							value={insertPayload}
 							onChange={(e) => setInsertPayload(e.target.value)}
 							rows={8}
-							className="font-mono text-xs bg-slate-900 border-slate-800 text-white"
+							className="font-mono text-xs "
 						/>
 					</div>
 
@@ -2106,14 +2118,14 @@ export default function DatabaseManagePage() {
 							variant="ghost"
 							size="sm"
 							onClick={() => setIsInsertModalOpen(false)}
-							className="text-xs text-slate-400"
+							className="text-xs text-muted-foreground"
 						>
 							Cancel
 						</Button>
 						<Button
 							size="sm"
 							onClick={handleInsertSubmit}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs px-4"
 						>
 							Insert Record
 						</Button>
@@ -2123,12 +2135,12 @@ export default function DatabaseManagePage() {
 
 			{/* Edit Document / Row Modal */}
 			<Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-				<DialogContent className="max-w-xl bg-slate-950 border-slate-800 text-white">
+				<DialogContent className="max-w-xl">
 					<DialogHeader>
 						<DialogTitle>
 							Edit {databaseEngine === "mongo" ? "Document" : "Row"}
 						</DialogTitle>
-						<DialogDescription className="text-xs text-slate-400">
+						<DialogDescription className="text-xs text-muted-foreground">
 							Update JSON payload for record ID {String(editRowId)}.
 						</DialogDescription>
 					</DialogHeader>
@@ -2138,7 +2150,7 @@ export default function DatabaseManagePage() {
 							value={editPayload}
 							onChange={(e) => setEditPayload(e.target.value)}
 							rows={8}
-							className="font-mono text-xs bg-slate-900 border-slate-800 text-white"
+							className="font-mono text-xs "
 						/>
 					</div>
 
@@ -2147,14 +2159,14 @@ export default function DatabaseManagePage() {
 							variant="ghost"
 							size="sm"
 							onClick={() => setIsEditModalOpen(false)}
-							className="text-xs text-slate-400"
+							className="text-xs text-muted-foreground"
 						>
 							Cancel
 						</Button>
 						<Button
 							size="sm"
 							onClick={handleUpdateSubmit}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs px-4"
 						>
 							Save Changes
 						</Button>
@@ -2164,28 +2176,28 @@ export default function DatabaseManagePage() {
 
 			{/* View Document Details Modal */}
 			<Dialog open={isViewDocModalOpen} onOpenChange={setIsViewDocModalOpen}>
-				<DialogContent className="max-w-2xl bg-slate-950 border-slate-800 text-white max-h-[85vh] flex flex-col">
-					<DialogHeader className="border-b border-slate-800 pb-3">
+				<DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+					<DialogHeader className="border-b border-border pb-3">
 						<div className="flex items-center justify-between pr-6">
 							<DialogTitle className="flex items-center gap-2 text-sm font-bold font-mono">
-								<FileText className="w-4 h-4 text-indigo-400" />
+								<FileText className="w-4 h-4 text-primary" />
 								<span>Document Details: {selectedEntity}</span>
 							</DialogTitle>
 							<Badge
 								variant="outline"
-								className="text-[10px] border-slate-800 font-mono text-slate-400"
+								className="text-[10px] border-border font-mono text-muted-foreground"
 							>
 								ID: {String(viewingDocument?._id || viewingDocument?.id || "N/A")}
 							</Badge>
 						</div>
-						<DialogDescription className="text-xs text-slate-400 mt-1">
+						<DialogDescription className="text-xs text-muted-foreground mt-1">
 							Structured document inspection with preserved BSON types, dates, and nested structures.
 						</DialogDescription>
 					</DialogHeader>
 
 					<div className="flex-1 overflow-y-auto py-3 space-y-4">
 						{/* Field Breakdown */}
-						<div className="rounded-lg border border-slate-800/80 divide-y divide-slate-800/60 bg-slate-900/40 text-xs font-mono">
+						<div className="rounded-lg border border-border divide-y divide-border bg-background text-xs font-mono">
 							{viewingDocument &&
 								Object.entries(viewingDocument).map(([key, value]) => {
 									const valType =
@@ -2197,19 +2209,19 @@ export default function DatabaseManagePage() {
 									return (
 										<div
 											key={key}
-											className="p-3 flex flex-col sm:flex-row sm:items-start justify-between gap-2 hover:bg-slate-800/30 transition-colors"
+											className="p-3 flex flex-col sm:flex-row sm:items-start justify-between gap-2 hover:bg-muted/50 transition-colors"
 										>
 											<div className="flex items-center gap-2 shrink-0 sm:w-1/3">
-												<span className="font-semibold text-indigo-300">
+												<span className="font-semibold text-foreground">
 													{key}
 												</span>
-												<span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-sans">
+												<span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-sans">
 													{valType}
 												</span>
 											</div>
-											<div className="sm:w-2/3 break-all text-slate-200">
+											<div className="sm:w-2/3 break-all text-foreground">
 												{typeof value === "object" && value !== null ? (
-													<pre className="p-2 rounded bg-slate-950 border border-slate-800/80 text-[11px] overflow-x-auto whitespace-pre-wrap max-h-48 text-emerald-300 font-mono">
+													<pre className="p-2 rounded bg-muted/40 border border-border text-[11px] overflow-x-auto whitespace-pre-wrap max-h-48 text-emerald-300 font-mono">
 														{JSON.stringify(value, null, 2)}
 													</pre>
 												) : typeof value === "boolean" ? (
@@ -2225,9 +2237,9 @@ export default function DatabaseManagePage() {
 												) : typeof value === "number" ? (
 													<span className="text-cyan-400">{value}</span>
 												) : value === null ? (
-													<span className="text-slate-500 italic">null</span>
+													<span className="text-muted-foreground italic">null</span>
 												) : (
-													<span className="text-slate-100">
+													<span className="text-foreground">
 														{String(value)}
 													</span>
 												)}
@@ -2239,7 +2251,7 @@ export default function DatabaseManagePage() {
 
 						{/* Raw JSON */}
 						<div className="space-y-1.5">
-							<div className="flex items-center justify-between text-xs text-slate-400">
+							<div className="flex items-center justify-between text-xs text-muted-foreground">
 								<span className="font-semibold uppercase tracking-wider text-[10px]">
 									Raw JSON Representation
 								</span>
@@ -2252,23 +2264,23 @@ export default function DatabaseManagePage() {
 										);
 										toast.success("Document JSON copied to clipboard");
 									}}
-									className="h-6 text-[11px] text-slate-400 hover:text-white gap-1 px-2"
+									className="h-6 text-[11px] text-muted-foreground hover:text-foreground gap-1 px-2"
 								>
 									<Copy className="w-3 h-3" /> Copy JSON
 								</Button>
 							</div>
-							<pre className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 max-h-60 overflow-y-auto whitespace-pre-wrap">
+							<pre className="p-3 rounded-lg bg-muted/40 border border-border text-[11px] font-mono text-foreground max-h-60 overflow-y-auto whitespace-pre-wrap">
 								{JSON.stringify(viewingDocument, null, 2)}
 							</pre>
 						</div>
 					</div>
 
-					<DialogFooter className="border-t border-slate-800 pt-3">
+					<DialogFooter className="border-t border-border pt-3">
 						<Button
 							variant="ghost"
 							size="sm"
 							onClick={() => setIsViewDocModalOpen(false)}
-							className="text-xs text-slate-400"
+							className="text-xs text-muted-foreground"
 						>
 							Close
 						</Button>
@@ -2284,7 +2296,7 @@ export default function DatabaseManagePage() {
 								setEditPayload(JSON.stringify(viewingDocument, null, 2));
 								setIsEditModalOpen(true);
 							}}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3.5 gap-1.5"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs px-3.5 gap-1.5"
 						>
 							<Edit className="w-3.5 h-3.5" /> Edit Record
 						</Button>
@@ -2297,10 +2309,10 @@ export default function DatabaseManagePage() {
 				open={isCreateCollModalOpen}
 				onOpenChange={setIsCreateCollModalOpen}
 			>
-				<DialogContent className="max-w-md bg-slate-950 border-slate-800 text-white">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Create MongoDB Collection</DialogTitle>
-						<DialogDescription className="text-xs text-slate-400">
+						<DialogDescription className="text-xs text-muted-foreground">
 							Add a new collection namespace to this database.
 						</DialogDescription>
 					</DialogHeader>
@@ -2310,7 +2322,7 @@ export default function DatabaseManagePage() {
 							placeholder="Collection name (e.g. orders, users)"
 							value={newCollName}
 							onChange={(e) => setNewCollName(e.target.value)}
-							className="bg-slate-900 border-slate-800 text-xs text-white"
+							className="text-xs"
 						/>
 					</div>
 
@@ -2319,14 +2331,14 @@ export default function DatabaseManagePage() {
 							variant="ghost"
 							size="sm"
 							onClick={() => setIsCreateCollModalOpen(false)}
-							className="text-xs text-slate-400"
+							className="text-xs text-muted-foreground"
 						>
 							Cancel
 						</Button>
 						<Button
 							size="sm"
 							onClick={handleCreateCollection}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs px-4"
 						>
 							Create
 						</Button>
@@ -2336,42 +2348,42 @@ export default function DatabaseManagePage() {
 
 			{/* Add Redis Key Modal */}
 			<Dialog open={isAddRedisKeyOpen} onOpenChange={setIsAddRedisKeyOpen}>
-				<DialogContent className="max-w-md bg-slate-950 border-slate-800 text-white">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Add Redis Key</DialogTitle>
 					</DialogHeader>
 
 					<div className="space-y-3 py-2">
 						<div>
-							<span className="block text-xs text-slate-400">Key Name</span>
+							<span className="block text-xs text-muted-foreground">Key Name</span>
 							<Input
 								placeholder="e.g. session:user_123"
 								value={newRedisKey}
 								onChange={(e) => setNewRedisKey(e.target.value)}
-								className="bg-slate-900 border-slate-800 text-xs text-white font-mono mt-1"
+								className="text-xs font-mono mt-1"
 							/>
 						</div>
 
 						<div>
-							<span className="block text-xs text-slate-400">String Value</span>
+							<span className="block text-xs text-muted-foreground">String Value</span>
 							<Textarea
 								placeholder="Value payload"
 								value={newRedisVal}
 								onChange={(e) => setNewRedisVal(e.target.value)}
-								className="bg-slate-900 border-slate-800 text-xs text-white font-mono mt-1"
+								className="text-xs font-mono mt-1"
 								rows={4}
 							/>
 						</div>
 
 						<div>
-							<span className="block text-xs text-slate-400">
+							<span className="block text-xs text-muted-foreground">
 								TTL in seconds (optional)
 							</span>
 							<Input
 								placeholder="e.g. 3600 (leave blank for persistent)"
 								value={newRedisTtl}
 								onChange={(e) => setNewRedisTtl(e.target.value)}
-								className="bg-slate-900 border-slate-800 text-xs text-white mt-1"
+								className="text-xs mt-1"
 							/>
 						</div>
 					</div>
@@ -2381,14 +2393,14 @@ export default function DatabaseManagePage() {
 							variant="ghost"
 							size="sm"
 							onClick={() => setIsAddRedisKeyOpen(false)}
-							className="text-xs text-slate-400"
+							className="text-xs text-muted-foreground"
 						>
 							Cancel
 						</Button>
 						<Button
 							size="sm"
 							onClick={handleAddRedisKey}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs px-4"
 						>
 							Save Key
 						</Button>
@@ -2398,46 +2410,46 @@ export default function DatabaseManagePage() {
 
 			{/* Create Database User Modal */}
 			<Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
-				<DialogContent className="max-w-md bg-slate-950 border-slate-800 text-white">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Add Dedicated Database User</DialogTitle>
-						<DialogDescription className="text-xs text-slate-400">
+						<DialogDescription className="text-xs text-muted-foreground">
 							Create credentials restricted solely to this database.
 						</DialogDescription>
 					</DialogHeader>
 
 					<div className="space-y-3 py-2">
 						<div>
-							<span className="block text-xs text-slate-400">Username</span>
+							<span className="block text-xs text-muted-foreground">Username</span>
 							<Input
 								placeholder="e.g. report_worker"
 								value={newDbUser}
 								onChange={(e) => setNewDbUser(e.target.value)}
-								className="bg-slate-900 border-slate-800 text-xs text-white mt-1"
+								className="text-xs mt-1"
 							/>
 						</div>
 
 						<div>
-							<span className="block text-xs text-slate-400">Password</span>
+							<span className="block text-xs text-muted-foreground">Password</span>
 							<Input
 								type="text"
 								placeholder="Secure password"
 								value={newDbUserPass}
 								onChange={(e) => setNewDbUserPass(e.target.value)}
-								className="bg-slate-900 border-slate-800 text-xs text-white font-mono mt-1"
+								className="text-xs font-mono mt-1"
 							/>
 						</div>
 
 						<div>
-							<span className="block text-xs text-slate-400">Role Privilege</span>
+							<span className="block text-xs text-muted-foreground">Role Privilege</span>
 							<Select
 								value={newDbUserRoles}
 								onValueChange={(val) => setNewDbUserRoles(val)}
 							>
-								<SelectTrigger className="bg-slate-900 border-slate-800 text-xs text-white mt-1">
+								<SelectTrigger className="text-xs mt-1">
 									<SelectValue />
 								</SelectTrigger>
-								<SelectContent className="bg-slate-900 border-slate-800 text-white">
+								<SelectContent className="">
 									<SelectItem value="readWrite">
 										Read & Write (readWrite)
 									</SelectItem>
@@ -2455,14 +2467,14 @@ export default function DatabaseManagePage() {
 							variant="ghost"
 							size="sm"
 							onClick={() => setIsCreateUserOpen(false)}
-							className="text-xs text-slate-400"
+							className="text-xs text-muted-foreground"
 						>
 							Cancel
 						</Button>
 						<Button
 							size="sm"
 							onClick={handleCreateUser}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4"
+							className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs px-4"
 						>
 							Create User
 						</Button>
@@ -2474,24 +2486,24 @@ export default function DatabaseManagePage() {
 			{/* UNIVERSAL DATA IMPORT DIALOG (ALL 6 ENGINES)               */}
 			{/* ========================================================= */}
 			<Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
-				<DialogContent className="max-w-3xl bg-slate-950 border-slate-800 text-white p-6 max-h-[90vh] overflow-y-auto">
+				<DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
 					<DialogHeader>
 						<div className="flex items-center justify-between">
 							<div className="flex items-center gap-2.5">
-								<div className="p-2 rounded-lg bg-indigo-950/60 border border-indigo-500/30 text-indigo-400">
+								<div className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary">
 									<Upload className="w-5 h-5" />
 								</div>
 								<div>
-									<DialogTitle className="text-base font-bold text-white flex items-center gap-2">
+									<DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
 										<span>Import Data into {meta.label}</span>
 										<Badge
 											variant="outline"
-											className="text-[10px] uppercase font-mono border-slate-700"
+											className="text-[10px] uppercase font-mono border-border"
 										>
 											{databaseEngine}
 										</Badge>
 									</DialogTitle>
-									<DialogDescription className="text-xs text-slate-400 mt-0.5">
+									<DialogDescription className="text-xs text-muted-foreground mt-0.5">
 										Upload CSV or JSON records with schema-aware mapping, type
 										validation, and duplicate handling.
 									</DialogDescription>
@@ -2500,76 +2512,76 @@ export default function DatabaseManagePage() {
 						</div>
 
 						{/* Step indicator bar */}
-						<div className="flex items-center justify-between border-t border-b border-slate-800/80 py-2.5 my-3 text-xs">
+						<div className="flex items-center justify-between border-t border-b border-border py-2.5 my-3 text-xs">
 							<div
 								className={`flex items-center gap-1.5 font-medium ${
 									importStep === "upload"
-										? "text-indigo-400"
-										: "text-slate-400"
+										? "text-primary"
+										: "text-muted-foreground"
 								}`}
 							>
 								<span
 									className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
 										importStep === "upload"
-											? "bg-indigo-600 text-white"
-											: "bg-slate-800 text-slate-400"
+											? "bg-primary text-primary-foreground"
+											: "bg-muted text-muted-foreground"
 									}`}
 								>
 									1
 								</span>
 								<span>Select Source</span>
 							</div>
-							<ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+							<ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
 							<div
 								className={`flex items-center gap-1.5 font-medium ${
 									importStep === "mapping"
-										? "text-indigo-400"
-										: "text-slate-400"
+										? "text-primary"
+										: "text-muted-foreground"
 								}`}
 							>
 								<span
 									className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
 										importStep === "mapping"
-											? "bg-indigo-600 text-white"
-											: "bg-slate-800 text-slate-400"
+											? "bg-primary text-primary-foreground"
+											: "bg-muted text-muted-foreground"
 									}`}
 								>
 									2
 								</span>
 								<span>Configure & Map</span>
 							</div>
-							<ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+							<ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
 							<div
 								className={`flex items-center gap-1.5 font-medium ${
 									importStep === "preview"
-										? "text-indigo-400"
-										: "text-slate-400"
+										? "text-primary"
+										: "text-muted-foreground"
 								}`}
 							>
 								<span
 									className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
 										importStep === "preview"
-											? "bg-indigo-600 text-white"
-											: "bg-slate-800 text-slate-400"
+											? "bg-primary text-primary-foreground"
+											: "bg-muted text-muted-foreground"
 									}`}
 								>
 									3
 								</span>
 								<span>Preview</span>
 							</div>
-							<ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+							<ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
 							<div
 								className={`flex items-center gap-1.5 font-medium ${
 									importStep === "result" || importStep === "importing"
-										? "text-indigo-400"
-										: "text-slate-400"
+										? "text-primary"
+										: "text-muted-foreground"
 								}`}
 							>
 								<span
 									className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
 										importStep === "result"
-											? "bg-emerald-600 text-white"
-											: "bg-slate-800 text-slate-400"
+											? "bg-emerald-600 text-foreground"
+											: "bg-muted text-muted-foreground"
 									}`}
 								>
 									4
@@ -2583,13 +2595,13 @@ export default function DatabaseManagePage() {
 					{importStep === "upload" && (
 						<div className="space-y-4 py-2">
 							{/* Engine Support Summary Banner */}
-							<div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
-								<Database className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+							<div className="p-3 rounded-lg bg-muted/40/80 border border-border text-xs text-foreground flex items-start gap-2.5">
+								<Database className="w-4 h-4 text-primary shrink-0 mt-0.5" />
 								<div>
-									<p className="font-semibold text-white">
+									<p className="font-semibold text-foreground">
 										Supported Format for {meta.label}
 									</p>
-									<p className="text-[11px] text-slate-400 mt-0.5">
+									<p className="text-[11px] text-muted-foreground mt-0.5">
 										{meta.isSql
 											? "CSV and JSON records imported into any selected table with schema-aware type conversion (integers, floats, booleans, timestamps, JSON)."
 											: databaseEngine === "mongo"
@@ -2600,7 +2612,7 @@ export default function DatabaseManagePage() {
 							</div>
 
 							{/* File Dropzone / Selector */}
-							<div className="border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-xl p-8 text-center transition-all bg-slate-900/30">
+							<div className="border-2 border-dashed hover:border-primary/50 rounded-xl p-8 text-center transition-all bg-muted/20">
 								<input
 									type="file"
 									id="import-file-input"
@@ -2612,14 +2624,14 @@ export default function DatabaseManagePage() {
 									htmlFor="import-file-input"
 									className="cursor-pointer flex flex-col items-center gap-2.5"
 								>
-									<div className="w-12 h-12 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-indigo-400">
+									<div className="w-12 h-12 rounded-xl bg-muted/80 border border-border/60 flex items-center justify-center text-primary">
 										<Upload className="w-6 h-6" />
 									</div>
 									<div>
-										<p className="text-sm font-semibold text-white">
+										<p className="text-sm font-semibold text-foreground">
 											Click to upload or drag and drop
 										</p>
-										<p className="text-xs text-slate-400 mt-0.5">
+										<p className="text-xs text-muted-foreground mt-0.5">
 											CSV or JSON files up to 10MB
 										</p>
 									</div>
@@ -2627,7 +2639,7 @@ export default function DatabaseManagePage() {
 										type="button"
 										variant="outline"
 										size="sm"
-										className="border-slate-700 text-xs text-slate-300 pointer-events-none mt-1"
+										className="border-border text-xs text-foreground pointer-events-none mt-1"
 									>
 										Browse Files
 									</Button>
@@ -2637,21 +2649,21 @@ export default function DatabaseManagePage() {
 							{/* Or Direct Paste Toggle */}
 							<div className="space-y-2">
 								<div className="flex items-center justify-between">
-									<span className="text-xs font-semibold text-slate-300">
+									<span className="text-xs font-semibold text-foreground">
 										Or Paste Raw CSV / JSON Data Directly:
 									</span>
 									<div className="flex items-center gap-2">
-										<span className="text-[11px] text-slate-400">Format:</span>
+										<span className="text-[11px] text-muted-foreground">Format:</span>
 										<Select
 											value={importFileType}
 											onValueChange={(val: "csv" | "json") =>
 												setImportFileType(val)
 											}
 										>
-											<SelectTrigger className="bg-slate-900 border-slate-800 text-[11px] h-7 w-24 text-white">
+											<SelectTrigger className="bg-muted/40 border-border text-[11px] h-7 w-24 text-foreground">
 												<SelectValue />
 											</SelectTrigger>
-											<SelectContent className="bg-slate-900 border-slate-800 text-white">
+											<SelectContent className="">
 												<SelectItem value="csv">CSV</SelectItem>
 												<SelectItem value="json">JSON</SelectItem>
 											</SelectContent>
@@ -2672,7 +2684,7 @@ export default function DatabaseManagePage() {
 										setImportFileSize(e.target.value.length);
 									}}
 									rows={4}
-									className="bg-slate-900/60 border-slate-800 text-xs font-mono text-slate-200"
+									className="bg-muted/40/60 border-border text-xs font-mono text-foreground"
 								/>
 
 								{importFileContent.trim() && (
@@ -2683,7 +2695,7 @@ export default function DatabaseManagePage() {
 												processFileContent(importFileContent, importFileType)
 											}
 											disabled={previewMutation.isPending}
-											className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 gap-1.5"
+											className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-4 gap-1.5"
 										>
 											{previewMutation.isPending ? (
 												<>
@@ -2707,10 +2719,10 @@ export default function DatabaseManagePage() {
 					{importStep === "mapping" && (
 						<div className="space-y-4 py-2">
 							{/* Destination Target & Duplicate Policy Controls */}
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-card">
 								{/* Target Entity */}
 								<div>
-									<span className="text-xs font-semibold text-slate-300 block mb-1.5">
+									<span className="text-xs font-semibold text-foreground block mb-1.5">
 										{meta.isSql
 											? "Target Table"
 											: databaseEngine === "mongo"
@@ -2726,7 +2738,7 @@ export default function DatabaseManagePage() {
 												setImportTargetEntity(e.target.value);
 												setRedisKeyPrefix(e.target.value);
 											}}
-											className="bg-slate-950 border-slate-800 text-xs text-white font-mono h-8"
+											className="text-xs font-mono h-8"
 										/>
 									) : (
 										<div className="flex items-center gap-2">
@@ -2734,10 +2746,10 @@ export default function DatabaseManagePage() {
 												value={importTargetEntity}
 												onValueChange={(val) => setImportTargetEntity(val)}
 											>
-												<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white font-mono h-8">
+												<SelectTrigger className="text-xs font-mono h-8">
 													<SelectValue placeholder="Select target" />
 												</SelectTrigger>
-												<SelectContent className="bg-slate-900 border-slate-800 text-white">
+												<SelectContent className="">
 													{collectionsOrTables.map((item: any) => (
 														<SelectItem key={item.name} value={item.name}>
 															{item.name}
@@ -2750,7 +2762,7 @@ export default function DatabaseManagePage() {
 												placeholder="Or type new name"
 												value={importTargetEntity}
 												onChange={(e) => setImportTargetEntity(e.target.value)}
-												className="bg-slate-950 border-slate-800 text-xs text-white font-mono h-8 w-44 shrink-0"
+												className="text-xs font-mono h-8 w-44 shrink-0"
 											/>
 										</div>
 									)}
@@ -2758,7 +2770,7 @@ export default function DatabaseManagePage() {
 
 								{/* Duplicate Policy */}
 								<div>
-									<span className="text-xs font-semibold text-slate-300 block mb-1.5">
+									<span className="text-xs font-semibold text-foreground block mb-1.5">
 										Duplicate Record Handling Policy
 									</span>
 									<Select
@@ -2767,10 +2779,10 @@ export default function DatabaseManagePage() {
 											setImportDuplicatePolicy(val)
 										}
 									>
-										<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-8">
+										<SelectTrigger className="text-xs h-8">
 											<SelectValue />
 										</SelectTrigger>
-										<SelectContent className="bg-slate-900 border-slate-800 text-white">
+										<SelectContent className="">
 											<SelectItem value="skip">
 												Skip Duplicates (Ignore conflict, preserve existing)
 											</SelectItem>
@@ -2796,17 +2808,17 @@ export default function DatabaseManagePage() {
 
 									<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 										<div>
-											<span className="text-[11px] text-slate-300 block mb-1">
+											<span className="text-[11px] text-foreground block mb-1">
 												Redis Data Structure
 											</span>
 											<Select
 												value={redisStructure}
 												onValueChange={(val: any) => setRedisStructure(val)}
 											>
-												<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-8">
+												<SelectTrigger className="text-xs h-8">
 													<SelectValue />
 												</SelectTrigger>
-												<SelectContent className="bg-slate-900 border-slate-800 text-white">
+												<SelectContent className="">
 													<SelectItem value="hash">
 														Hash (Recommended)
 													</SelectItem>
@@ -2825,17 +2837,17 @@ export default function DatabaseManagePage() {
 										</div>
 
 										<div>
-											<span className="text-[11px] text-slate-300 block mb-1">
+											<span className="text-[11px] text-foreground block mb-1">
 												Key Identifier Column
 											</span>
 											<Select
 												value={redisKeyField}
 												onValueChange={(val) => setRedisKeyField(val)}
 											>
-												<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-8 font-mono">
+												<SelectTrigger className="text-xs h-8 font-mono">
 													<SelectValue placeholder="Choose key field" />
 												</SelectTrigger>
-												<SelectContent className="bg-slate-900 border-slate-800 text-white font-mono">
+												<SelectContent className="font-mono">
 													{previewData?.headers.map((h) => (
 														<SelectItem key={h} value={h}>
 															{h}
@@ -2847,17 +2859,17 @@ export default function DatabaseManagePage() {
 
 										{redisStructure === "zset" ? (
 											<div>
-												<span className="text-[11px] text-slate-300 block mb-1">
+												<span className="text-[11px] text-foreground block mb-1">
 													Score Column
 												</span>
 												<Select
 													value={redisScoreField}
 													onValueChange={(val) => setRedisScoreField(val)}
 												>
-													<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-8 font-mono">
+													<SelectTrigger className="text-xs h-8 font-mono">
 														<SelectValue placeholder="Score field" />
 													</SelectTrigger>
-													<SelectContent className="bg-slate-900 border-slate-800 text-white font-mono">
+													<SelectContent className="font-mono">
 														{previewData?.headers.map((h) => (
 															<SelectItem key={h} value={h}>
 																{h}
@@ -2868,14 +2880,14 @@ export default function DatabaseManagePage() {
 											</div>
 										) : (
 											<div>
-												<span className="text-[11px] text-slate-300 block mb-1">
+												<span className="text-[11px] text-foreground block mb-1">
 													TTL in seconds (optional)
 												</span>
 												<Input
 													placeholder="e.g. 86400 (blank = persistent)"
 													value={redisTtl}
 													onChange={(e) => setRedisTtl(e.target.value)}
-													className="bg-slate-950 border-slate-800 text-xs text-white h-8 font-mono"
+													className="text-xs h-8 font-mono"
 												/>
 											</div>
 										)}
@@ -2886,25 +2898,25 @@ export default function DatabaseManagePage() {
 							{/* Field to Column Mapping Section */}
 							<div className="space-y-2">
 								<div className="flex items-center justify-between">
-									<h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-										<TableIcon className="w-3.5 h-3.5 text-indigo-400" /> Field
+									<h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+										<TableIcon className="w-3.5 h-3.5 text-primary" /> Field
 										to Column Mappings
 									</h4>
-									<span className="text-[11px] text-slate-400">
+									<span className="text-[11px] text-muted-foreground">
 										{previewData?.headers.length || 0} fields detected in source
 									</span>
 								</div>
 
-								<div className="rounded-xl border border-slate-800 overflow-hidden max-h-56 overflow-y-auto">
+								<div className="rounded-xl border border-border overflow-hidden max-h-56 overflow-y-auto">
 									<table className="w-full text-left text-xs font-mono">
-										<thead className="bg-slate-950 text-slate-400 border-b border-slate-800 text-[10px] uppercase">
+										<thead className="bg-muted/50 text-muted-foreground border-b text-[10px] uppercase">
 											<tr>
 												<th className="px-3 py-2">Source Field</th>
 												<th className="px-3 py-2">Detected Type</th>
 												<th className="px-3 py-2">Target Column / Field</th>
 											</tr>
 										</thead>
-										<tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+										<tbody className="divide-y divide-border bg-background">
 											{previewData?.headers.map((header) => {
 												const detectedType =
 													previewData.sampleInferredTypes?.[header] || "string";
@@ -2912,12 +2924,12 @@ export default function DatabaseManagePage() {
 													importFieldMappings[header] ?? header;
 
 												return (
-													<tr key={header} className="hover:bg-slate-800/30">
-														<td className="px-3 py-2 text-white font-semibold">
+													<tr key={header} className="hover:bg-muted/50">
+														<td className="px-3 py-2 text-foreground font-semibold">
 															{header}
 														</td>
 														<td className="px-3 py-2">
-															<span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-cyan-300 border border-slate-700">
+															<span className="px-1.5 py-0.5 rounded text-[10px] bg-muted text-cyan-300 border border-border">
 																{detectedType}
 															</span>
 														</td>
@@ -2934,10 +2946,10 @@ export default function DatabaseManagePage() {
 																			}));
 																		}}
 																	>
-																		<SelectTrigger className="bg-slate-950 border-slate-800 text-xs text-white h-7 font-mono w-48">
+																		<SelectTrigger className="text-xs font-mono h-7 w-48">
 																			<SelectValue />
 																		</SelectTrigger>
-																		<SelectContent className="bg-slate-900 border-slate-800 text-white font-mono">
+																		<SelectContent className="font-mono">
 																			<SelectItem value="__ignore__">
 																				[ Skip / Ignore ]
 																			</SelectItem>
@@ -2969,7 +2981,7 @@ export default function DatabaseManagePage() {
 																				[header]: val,
 																			}));
 																		}}
-																		className="bg-slate-950 border-slate-800 text-xs text-white font-mono h-7 w-48"
+																		className="text-xs font-mono h-7 w-48"
 																	/>
 																)}
 
@@ -2989,19 +3001,19 @@ export default function DatabaseManagePage() {
 							</div>
 
 							{/* Actions */}
-							<div className="flex items-center justify-between pt-2 border-t border-slate-800">
+							<div className="flex items-center justify-between pt-2 border-t border-border">
 								<Button
 									variant="ghost"
 									size="sm"
 									onClick={() => setImportStep("upload")}
-									className="text-xs text-slate-400"
+									className="text-xs text-muted-foreground"
 								>
 									Back
 								</Button>
 								<Button
 									size="sm"
 									onClick={() => setImportStep("preview")}
-									className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 gap-1.5"
+									className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-4 gap-1.5"
 								>
 									Review Data Preview
 									<ArrowRight className="w-3.5 h-3.5" />
@@ -3015,35 +3027,35 @@ export default function DatabaseManagePage() {
 						<div className="space-y-4 py-2">
 							{/* Summary metrics header */}
 							<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+								<div className="p-3 rounded-xl border bg-card">
+									<span className="text-[10px] text-muted-foreground uppercase tracking-wider block">
 										Engine & Target
 									</span>
-									<span className="text-xs font-mono font-bold text-white mt-0.5 truncate block">
+									<span className="text-xs font-mono font-bold text-foreground mt-0.5 truncate block">
 										{meta.label} • {importTargetEntity}
 									</span>
 								</div>
-								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+								<div className="p-3 rounded-xl border bg-card">
+									<span className="text-[10px] text-muted-foreground uppercase tracking-wider block">
 										Total Records
 									</span>
-									<span className="text-xs font-mono font-bold text-indigo-400 mt-0.5 block">
+									<span className="text-xs font-mono font-bold text-primary mt-0.5 block">
 										{previewData?.totalRecords || 0} rows
 									</span>
 								</div>
-								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+								<div className="p-3 rounded-xl border bg-card">
+									<span className="text-[10px] text-muted-foreground uppercase tracking-wider block">
 										Duplicate Policy
 									</span>
 									<span className="text-xs font-mono font-bold text-emerald-400 mt-0.5 uppercase block">
 										{importDuplicatePolicy}
 									</span>
 								</div>
-								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+								<div className="p-3 rounded-xl border bg-card">
+									<span className="text-[10px] text-muted-foreground uppercase tracking-wider block">
 										Format & Size
 									</span>
-									<span className="text-xs font-mono font-bold text-slate-300 mt-0.5 uppercase block">
+									<span className="text-xs font-mono font-bold text-foreground mt-0.5 uppercase block">
 										{importFileType} • {(importFileSize / 1024).toFixed(1)} KB
 									</span>
 								</div>
@@ -3051,25 +3063,25 @@ export default function DatabaseManagePage() {
 
 							{/* Preview table */}
 							<div className="space-y-2">
-								<span className="text-xs font-semibold text-slate-300 block">
+								<span className="text-xs font-semibold text-foreground block">
 									Sample Record Preview (First 5 Rows)
 								</span>
-								<div className="rounded-xl border border-slate-800 overflow-x-auto max-h-60">
+								<div className="rounded-xl border border-border overflow-x-auto max-h-60">
 									<table className="w-full text-left text-xs font-mono">
-										<thead className="bg-slate-950 text-slate-400 border-b border-slate-800 text-[10px] uppercase">
+										<thead className="bg-muted/50 text-muted-foreground border-b text-[10px] uppercase">
 											<tr>
 												{previewData?.headers
 													.filter((h) => importFieldMappings[h] !== "__ignore__")
 													.map((h) => (
-														<th key={h} className="px-3 py-2 text-slate-300">
+														<th key={h} className="px-3 py-2 text-foreground">
 															{importFieldMappings[h] || h}
 														</th>
 													))}
 											</tr>
 										</thead>
-										<tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+										<tbody className="divide-y divide-border bg-background">
 											{previewData?.previewRows?.map((row, idx) => (
-												<tr key={idx} className="hover:bg-slate-800/30">
+												<tr key={idx} className="hover:bg-muted/50">
 													{previewData.headers
 														.filter(
 															(h) => importFieldMappings[h] !== "__ignore__",
@@ -3077,7 +3089,7 @@ export default function DatabaseManagePage() {
 														.map((h) => (
 															<td
 																key={h}
-																className="px-3 py-2 text-slate-300 truncate max-w-xs"
+																className="px-3 py-2 text-foreground truncate max-w-xs"
 															>
 																{typeof row[h] === "object"
 																	? JSON.stringify(row[h])
@@ -3092,12 +3104,12 @@ export default function DatabaseManagePage() {
 							</div>
 
 							{/* Actions */}
-							<div className="flex items-center justify-between pt-2 border-t border-slate-800">
+							<div className="flex items-center justify-between pt-2 border-t border-border">
 								<Button
 									variant="ghost"
 									size="sm"
 									onClick={() => setImportStep("mapping")}
-									className="text-xs text-slate-400"
+									className="text-xs text-muted-foreground"
 								>
 									Back to Mapping
 								</Button>
@@ -3105,7 +3117,7 @@ export default function DatabaseManagePage() {
 									size="sm"
 									onClick={handleExecuteImport}
 									disabled={importMutation.isPending}
-									className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-5 gap-1.5 font-semibold"
+									className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-5 gap-1.5 font-semibold"
 								>
 									<Upload className="w-3.5 h-3.5" />
 									Execute Universal Import
@@ -3117,12 +3129,12 @@ export default function DatabaseManagePage() {
 					{/* STEP: IMPORTING IN PROGRESS */}
 					{importStep === "importing" && (
 						<div className="py-12 text-center space-y-4">
-							<RefreshCw className="w-8 h-8 animate-spin mx-auto text-indigo-400" />
+							<RefreshCw className="w-8 h-8 animate-spin mx-auto text-primary" />
 							<div>
-								<h3 className="text-sm font-bold text-white">
+								<h3 className="text-sm font-bold text-foreground">
 									Persisting Records to {meta.label}...
 								</h3>
-								<p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+								<p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
 									Validating constraints, executing schema conversions, and
 									writing to database safely in bounded batches.
 								</p>
@@ -3150,7 +3162,7 @@ export default function DatabaseManagePage() {
 									<AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-400" />
 								)}
 								<div>
-									<h4 className="text-sm font-bold text-white">
+									<h4 className="text-sm font-bold text-foreground">
 										{(importResult.failed ?? importResult.failedCount ?? 0) === 0
 											? "Data Import Succeeded"
 											: (importResult.inserted ?? importResult.insertedCount ?? 0) > 0 ||
@@ -3158,7 +3170,7 @@ export default function DatabaseManagePage() {
 												? "Data Import Completed with Partial Warnings"
 												: "Data Import Failed"}
 									</h4>
-									<p className="text-xs text-slate-300 mt-0.5">
+									<p className="text-xs text-foreground mt-0.5">
 										Processed {importResult.totalRows ?? importResult.totalRecords ?? 0} records in{" "}
 										{importResult.durationMs ?? 0}ms into &apos;{importTargetEntity}&apos;.
 									</p>
@@ -3167,8 +3179,8 @@ export default function DatabaseManagePage() {
 
 							{/* Metric Cards */}
 							<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
-									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+								<div className="p-3 rounded-xl border bg-card text-center">
+									<span className="text-[10px] text-muted-foreground uppercase tracking-wider block">
 										Inserted
 									</span>
 									<span className="text-lg font-mono font-bold text-emerald-400 mt-0.5 block">
@@ -3176,8 +3188,8 @@ export default function DatabaseManagePage() {
 									</span>
 								</div>
 
-								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
-									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+								<div className="p-3 rounded-xl border bg-card text-center">
+									<span className="text-[10px] text-muted-foreground uppercase tracking-wider block">
 										Updated
 									</span>
 									<span className="text-lg font-mono font-bold text-cyan-400 mt-0.5 block">
@@ -3185,17 +3197,17 @@ export default function DatabaseManagePage() {
 									</span>
 								</div>
 
-								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
-									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+								<div className="p-3 rounded-xl border bg-card text-center">
+									<span className="text-[10px] text-muted-foreground uppercase tracking-wider block">
 										Skipped
 									</span>
-									<span className="text-lg font-mono font-bold text-slate-400 mt-0.5 block">
+									<span className="text-lg font-mono font-bold text-muted-foreground mt-0.5 block">
 										{importResult.skipped ?? importResult.skippedCount ?? 0}
 									</span>
 								</div>
 
-								<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
-									<span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+								<div className="p-3 rounded-xl border bg-card text-center">
+									<span className="text-[10px] text-muted-foreground uppercase tracking-wider block">
 										Failed
 									</span>
 									<span className="text-lg font-mono font-bold text-red-400 mt-0.5 block">
@@ -3231,13 +3243,13 @@ export default function DatabaseManagePage() {
 													<th className="px-3 py-1.5">Error Message</th>
 												</tr>
 											</thead>
-											<tbody className="divide-y divide-red-500/10 text-slate-300">
+											<tbody className="divide-y divide-red-500/10 text-foreground">
 												{importResult.errors.slice(0, 50).map((err, idx) => (
 													<tr key={idx}>
 														<td className="px-3 py-1.5 text-red-400 font-bold">
 															{err.row ?? err.rowNumber ?? idx + 1}
 														</td>
-														<td className="px-3 py-1.5 text-slate-400 truncate max-w-[120px]">
+														<td className="px-3 py-1.5 text-muted-foreground truncate max-w-[120px]">
 															{err.identifier ?? err.keyOrId ?? "-"}
 														</td>
 														<td className="px-3 py-1.5 text-red-300">
@@ -3252,19 +3264,19 @@ export default function DatabaseManagePage() {
 							)}
 
 							{/* Result Actions */}
-							<DialogFooter className="gap-2 pt-2 border-t border-slate-800">
+							<DialogFooter className="gap-2 pt-2 border-t border-border">
 								<Button
 									variant="ghost"
 									size="sm"
 									onClick={() => handleOpenImportModal(importTargetEntity)}
-									className="text-xs text-slate-400"
+									className="text-xs text-muted-foreground"
 								>
 									Import Another File
 								</Button>
 								<Button
 									size="sm"
 									onClick={handleViewInExplorer}
-									className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 gap-1.5 font-semibold"
+									className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs px-4 gap-1.5 font-semibold"
 								>
 									<TableIcon className="w-3.5 h-3.5" />
 									View In Data Explorer
@@ -3280,13 +3292,13 @@ export default function DatabaseManagePage() {
 				open={destructiveConfirmOpen}
 				onOpenChange={setDestructiveConfirmOpen}
 			>
-				<DialogContent className="max-w-md bg-slate-950 border-red-500/40 text-white">
+				<DialogContent className="max-w-md border-destructive/40 text-foreground">
 					<DialogHeader>
 						<DialogTitle className="flex items-center gap-2 text-red-400">
 							<AlertTriangle className="w-5 h-5" />
 							<span>Potentially Destructive Operation</span>
 						</DialogTitle>
-						<DialogDescription className="text-xs text-slate-300">
+						<DialogDescription className="text-xs text-foreground">
 							This query contains structural or mass-deletion keywords (DROP,
 							TRUNCATE, ALTER, or DELETE without WHERE).
 						</DialogDescription>
@@ -3301,7 +3313,7 @@ export default function DatabaseManagePage() {
 							variant="ghost"
 							size="sm"
 							onClick={() => setDestructiveConfirmOpen(false)}
-							className="text-xs text-slate-400"
+							className="text-xs text-muted-foreground"
 						>
 							Cancel
 						</Button>
@@ -3311,7 +3323,7 @@ export default function DatabaseManagePage() {
 								setDestructiveConfirmOpen(false);
 								runSqlQuery(true);
 							}}
-							className="bg-red-600 hover:bg-red-500 text-white text-xs px-4 font-semibold"
+							className="bg-red-600 hover:bg-red-500 text-foreground text-xs px-4 font-semibold"
 						>
 							I Understand, Execute Query
 						</Button>

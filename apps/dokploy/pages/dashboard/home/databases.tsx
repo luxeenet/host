@@ -42,8 +42,10 @@ import {
 	RedisIcon,
 } from "@/components/icons/data-tools-icons";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
+import { BreadcrumbSidebar } from "@/components/shared/breadcrumb-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -61,8 +63,33 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { appRouter } from "@/server/api/root";
 import { api } from "@/utils/api";
+
+function StatCard({
+	label,
+	value,
+	delta,
+}: {
+	label: string;
+	value: string;
+	delta?: string;
+}) {
+	return (
+		<div className="rounded-xl border bg-background p-5 min-h-[140px] flex flex-col justify-between">
+			<span className="text-xs uppercase tracking-wider text-muted-foreground">
+				{label}
+			</span>
+			<div className="flex flex-col gap-1">
+				<span className="text-3xl font-semibold tracking-tight">{value}</span>
+				{delta && (
+					<span className="text-xs text-muted-foreground">{delta}</span>
+				)}
+			</div>
+		</div>
+	);
+}
 
 type SupportedEngine =
 	| "mongo"
@@ -350,372 +377,336 @@ export default function ManagedDatabasesPage() {
 			<Head>
 				<title>Managed Databases - {brand.APP_NAME}</title>
 			</Head>
-			<div className="space-y-8 pb-12">
-				{/* Header Section */}
-				<div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
-					<div>
-						<div className="flex items-center gap-3">
-							<div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-cyan-500/20 border border-indigo-500/30 flex items-center justify-center">
-								<Database className="w-5 h-5 text-indigo-400" />
-							</div>
+			<BreadcrumbSidebar
+				list={[
+					{ name: "Home", href: "/dashboard/home" },
+					{ name: "Databases", href: "/dashboard/home/databases" },
+				]}
+			/>
+			<div className="w-full">
+				<Card className="h-full bg-sidebar p-2.5 rounded-xl min-h-[85vh]">
+					<div className="rounded-xl bg-background shadow-md p-6 flex flex-col gap-6 h-full">
+						{/* Header Section */}
+						<div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
 							<div>
-								<h1 className="text-2xl font-bold text-white tracking-tight">
+								<h1 className="text-3xl font-semibold tracking-tight">
 									Databases
 								</h1>
-								<p className="text-slate-400 text-sm mt-0.5">
+								<p className="text-sm text-muted-foreground mt-1">
 									Manage your MongoDB, PostgreSQL, MySQL, MariaDB, Redis, and LibSQL databases.
 								</p>
 							</div>
-						</div>
-					</div>
 
-					<div className="flex items-center gap-3">
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => refetchOverview()}
-							className="border-slate-800 text-slate-300 hover:bg-slate-800 text-xs gap-1.5 h-9"
-						>
-							<RefreshCw
-								className={`w-3.5 h-3.5 ${isOverviewLoading ? "animate-spin text-indigo-400" : ""}`}
-							/>
-							Refresh
-						</Button>
-
-						<Button
-							onClick={handleOpenProvisionModal}
-							className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-medium text-xs px-4 h-9 rounded-lg shadow-lg shadow-indigo-600/20 gap-1.5"
-						>
-							<Plus className="w-4 h-4" /> New Database
-						</Button>
-					</div>
-				</div>
-
-				{/* Summary Metrics */}
-				<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4">
-						<div className="flex items-center justify-between text-slate-400 text-xs">
-							<span>Total Databases</span>
-							<Layers className="w-4 h-4 text-indigo-400" />
-						</div>
-						<p className="text-2xl font-bold text-white mt-2">{stats.total}</p>
-						<span className="text-[11px] text-slate-500 mt-1 block">
-							Active databases in your account
-						</span>
-					</div>
-
-					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4">
-						<div className="flex items-center justify-between text-slate-400 text-xs">
-							<span>Running Status</span>
-							<Activity className="w-4 h-4 text-emerald-400" />
-						</div>
-						<p className="text-2xl font-bold text-white mt-2">
-							{stats.running}
-						</p>
-						<span className="text-[11px] text-slate-500 mt-1 block">
-							Healthy & running
-						</span>
-					</div>
-
-					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4">
-						<div className="flex items-center justify-between text-slate-400 text-xs">
-							<span>External Access</span>
-							<Radio className="w-4 h-4 text-cyan-400" />
-						</div>
-						<p className="text-2xl font-bold text-white mt-2">
-							{stats.publicCount}
-						</p>
-						<span className="text-[11px] text-slate-500 mt-1 block">
-							Available for external connections
-						</span>
-					</div>
-
-					<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-4">
-						<div className="flex items-center justify-between text-slate-400 text-xs">
-							<span>Engines in Use</span>
-							<Zap className="w-4 h-4 text-purple-400" />
-						</div>
-						<p className="text-2xl font-bold text-white mt-2">
-							{stats.distinctEngines}
-						</p>
-						<span className="text-[11px] text-slate-500 mt-1 block">
-							Across 6 supported types
-						</span>
-					</div>
-				</div>
-
-				{/* Search & Engine Filter Tabs */}
-				<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-					<div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-						{[
-							{ id: "all", label: "All Engines" },
-							{ id: "mongo", label: "MongoDB" },
-							{ id: "postgres", label: "PostgreSQL" },
-							{ id: "mysql", label: "MySQL" },
-							{ id: "mariadb", label: "MariaDB" },
-							{ id: "redis", label: "Redis" },
-							{ id: "libsql", label: "LibSQL" },
-						].map((tab) => (
-							<button
-								key={tab.id}
-								type="button"
-								onClick={() => setSelectedEngineFilter(tab.id)}
-								className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-									selectedEngineFilter === tab.id
-										? "bg-indigo-600 text-white shadow-sm"
-										: "bg-slate-900/60 text-slate-400 hover:text-white border border-slate-800 hover:bg-slate-800"
-								}`}
-							>
-								{tab.label}
-							</button>
-						))}
-					</div>
-
-					<div className="relative w-full sm:w-64">
-						<Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-						<Input
-							placeholder="Search databases..."
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-							className="pl-9 bg-slate-900/70 border-slate-800 text-xs h-9 text-white placeholder:text-slate-500"
-						/>
-					</div>
-				</div>
-
-				{/* Database Instances List */}
-				{isOverviewLoading && databases.length === 0 ? (
-					<div className="flex flex-col items-center justify-center p-16 rounded-xl border border-slate-800 bg-slate-900/30 text-center space-y-3">
-						<RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
-						<p className="text-sm text-slate-400">
-							Loading databases...
-						</p>
-					</div>
-				) : filteredDatabases.length === 0 ? (
-					<div className="flex flex-col items-center justify-center p-16 rounded-xl border border-slate-800 bg-slate-900/30 text-center space-y-4">
-						<div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
-							<Database className="w-6 h-6" />
-						</div>
-						<div>
-							<h3 className="text-base font-semibold text-white">
-								No databases found
-							</h3>
-							<p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-								{searchQuery || selectedEngineFilter !== "all"
-									? "No databases match the selected filters. Try clearing your search query."
-									: "Launch your first dedicated MongoDB, PostgreSQL, MySQL, Redis, or LibSQL database in seconds."}
-							</p>
-						</div>
-						<Button
-							onClick={handleOpenProvisionModal}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5 h-8 px-4"
-						>
-							<Plus className="w-3.5 h-3.5" /> Create Database
-						</Button>
-					</div>
-				) : (
-					<div className="grid grid-cols-1 gap-4">
-						{filteredDatabases.map((db) => {
-							const cfg =
-								ENGINE_CONFIG[db.engine as SupportedEngine] ||
-								ENGINE_CONFIG.postgres;
-							const isRunning = db.status === "done" || db.status === "running";
-
-							// Display URI preview
-							const internalHost = `${db.appName}:${cfg.defaultPort}`;
-							const externalHost = db.externalPort
-								? `db.hatdot.cloud:${db.externalPort}`
-								: "Not exposed";
-
-							const authSourceInfo =
-								db.engine === "mongo"
-									? `auth: ${db.authSource || db.databaseName || "admin"}`
-									: `db: ${db.databaseName || "default"}`;
-
-							return (
-								<div
-									key={db.id}
-									className="rounded-xl bg-slate-900/70 border border-slate-800 p-5 space-y-4 hover:border-slate-700 transition-all shadow-sm"
+							<div className="flex items-center gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => refetchOverview()}
+									disabled={isOverviewLoading}
 								>
-									{/* Top Bar: Icon, Name, Status, Action Buttons */}
-									<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
-										<div className="flex items-center gap-3.5">
-											<div
-												className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${cfg.color}`}
-											>
-												<cfg.icon className="w-6 h-6" />
-											</div>
+									<RefreshCw
+										className={`size-4 mr-1.5 ${isOverviewLoading ? "animate-spin" : ""}`}
+									/>
+									Refresh
+								</Button>
 
-											<div>
-												<div className="flex items-center gap-2.5">
-													<h3 className="text-base font-bold text-white tracking-tight">
-														{db.name}
-													</h3>
-													{db.status === "done" ? (
-														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
-															<span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-															READY
-														</span>
-													) : db.status === "running" ? (
-														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30 flex items-center gap-1.5">
-															<span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-															STARTING
-														</span>
-													) : db.status === "error" ? (
-														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center gap-1.5">
-															<span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-															FAILED
-														</span>
-													) : (
-														<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1.5">
-															<span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-															PENDING
-														</span>
-													)}
-													<Badge
-														variant="outline"
-														className="text-[10px] border-slate-800 text-slate-400 font-mono"
-													>
-														{cfg.label} {cfg.version}
-													</Badge>
-												</div>
-												<div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-													<span className="font-mono text-slate-300">
-														{db.appName}
-													</span>
-													<span>•</span>
-													<span>{cfg.badge}</span>
-													<span>•</span>
-													<span>
-														Created{" "}
-														{new Date(db.createdAt).toLocaleDateString()}
-													</span>
-												</div>
-											</div>
-										</div>
+								<Button
+									onClick={handleOpenProvisionModal}
+									size="sm"
+								>
+									<Plus className="size-4 mr-1.5" /> New Database
+								</Button>
+							</div>
+						</div>
 
-										{/* Quick Management Buttons */}
-										<div className="flex items-center gap-2 shrink-0">
-											<Link
-												href={`/dashboard/home/databases/manage?id=${db.id}&engine=${db.engine}`}
-											>
-												<Button
-													size="sm"
-													className="bg-indigo-600/90 hover:bg-indigo-600 text-white text-xs gap-1.5 h-8 font-medium shadow-sm"
-												>
-													<Wrench className="w-3.5 h-3.5" /> Manage Workspace
-												</Button>
-											</Link>
+						{/* Summary Metrics */}
+						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+							<StatCard
+								label="Total Databases"
+								value={String(stats.total)}
+								delta="Active databases in your account"
+							/>
+							<StatCard
+								label="Running Status"
+								value={String(stats.running)}
+								delta="Healthy & running"
+							/>
+							<StatCard
+								label="External Access"
+								value={String(stats.publicCount)}
+								delta="Available for external connections"
+							/>
+							<StatCard
+								label="Engines in Use"
+								value={String(stats.distinctEngines)}
+								delta="Across 6 supported types"
+							/>
+						</div>
 
-											<Button
-												variant="outline"
-												size="sm"
-												onClick={() =>
-													setActiveConnectionDb({
-														id: db.id,
-														engine: db.engine as SupportedEngine,
-														record: db,
-													})
-												}
-												className="border-slate-800 text-slate-300 hover:bg-slate-800 text-xs gap-1.5 h-8"
-											>
-												<Key className="w-3.5 h-3.5 text-cyan-400" /> Connection
-												Details
-											</Button>
-										</div>
-									</div>
+						{/* Search & Engine Filter Tabs */}
+						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+							<Tabs
+								value={selectedEngineFilter}
+								onValueChange={setSelectedEngineFilter}
+								className="w-full sm:w-auto"
+							>
+								<TabsList className="h-9">
+									<TabsTrigger value="all">All Engines</TabsTrigger>
+									<TabsTrigger value="mongo">MongoDB</TabsTrigger>
+									<TabsTrigger value="postgres">PostgreSQL</TabsTrigger>
+									<TabsTrigger value="mysql">MySQL</TabsTrigger>
+									<TabsTrigger value="mariadb">MariaDB</TabsTrigger>
+									<TabsTrigger value="redis">Redis</TabsTrigger>
+									<TabsTrigger value="libsql">LibSQL</TabsTrigger>
+								</TabsList>
+							</Tabs>
 
-									{/* Endpoints & Security Grid */}
-									<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-										{/* Public Endpoint */}
-										<div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-1">
-											<div className="flex items-center justify-between text-slate-500 text-[10px]">
-												<span className="flex items-center gap-1 font-semibold uppercase tracking-wider">
-													<Radio className="w-3 h-3 text-cyan-400" /> Public
-													Endpoint
-												</span>
-												{db.externalPort && (
-													<button
-														type="button"
-														onClick={() =>
-															copyToClipboard(externalHost, `ext-${db.id}`)
-														}
-														className="text-slate-500 hover:text-white"
-													>
-														{copiedKey === `ext-${db.id}` ? (
-															<Check className="w-3 h-3 text-emerald-400" />
-														) : (
-															<Copy className="w-3 h-3" />
-														)}
-													</button>
-												)}
-											</div>
-											<p className="text-slate-200 font-mono truncate">
-												{externalHost}
-											</p>
-										</div>
+							<div className="relative w-full sm:w-64">
+								<Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									placeholder="Search databases..."
+									value={searchQuery}
+									onChange={(e) => setSearchQuery(e.target.value)}
+									className="pl-9 h-9"
+								/>
+							</div>
+						</div>
 
-										{/* Internal Endpoint */}
-										<div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-1">
-											<div className="flex items-center justify-between text-slate-500 text-[10px]">
-												<span className="flex items-center gap-1 font-semibold uppercase tracking-wider">
-													<Server className="w-3 h-3 text-indigo-400" />{" "}
-													Internal Address
-												</span>
-												<button
-													type="button"
-													onClick={() =>
-														copyToClipboard(internalHost, `int-${db.id}`)
-													}
-													className="text-slate-500 hover:text-white"
-												>
-													{copiedKey === `int-${db.id}` ? (
-														<Check className="w-3 h-3 text-emerald-400" />
-													) : (
-														<Copy className="w-3 h-3" />
-													)}
-												</button>
-											</div>
-											<p className="text-slate-200 font-mono truncate">
-												{internalHost}
-											</p>
-										</div>
-
-										{/* Restricted User & Auth Source */}
-										<div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-1">
-											<div className="flex items-center justify-between text-slate-500 text-[10px]">
-												<span className="flex items-center gap-1 font-semibold uppercase tracking-wider">
-													<Shield className="w-3 h-3 text-emerald-400" />{" "}
-													Identity & Auth
-												</span>
-											</div>
-											<div className="flex items-center gap-2">
-												<span className="text-slate-200 font-mono truncate">
-													{db.databaseUser || "default"}
-												</span>
-												<span className="text-[10px] text-slate-500 bg-slate-800/60 px-1 rounded font-mono">
-													{authSourceInfo}
-												</span>
-											</div>
-										</div>
-
-										{/* Target Application DB */}
-										<div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-1">
-											<div className="flex items-center justify-between text-slate-500 text-[10px]">
-												<span className="flex items-center gap-1 font-semibold uppercase tracking-wider">
-													<Database className="w-3 h-3 text-purple-400" />{" "}
-													Database Name
-												</span>
-											</div>
-											<p className="text-slate-200 font-mono truncate">
-												{db.databaseName || "default"}
-											</p>
-										</div>
-									</div>
+						{/* Database Instances List */}
+						{isOverviewLoading && databases.length === 0 ? (
+							<div className="flex flex-col items-center justify-center p-16 rounded-xl border border-dashed text-center space-y-3">
+								<RefreshCw className="size-8 text-muted-foreground animate-spin" />
+								<p className="text-sm text-muted-foreground">
+									Loading databases...
+								</p>
+							</div>
+						) : filteredDatabases.length === 0 ? (
+							<div className="flex flex-col items-center justify-center p-16 rounded-xl border border-dashed text-center space-y-4">
+								<div className="size-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+									<Database className="size-6" />
 								</div>
-							);
-						})}
+								<div>
+									<h3 className="text-base font-semibold">
+										No databases found
+									</h3>
+									<p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1">
+										{searchQuery || selectedEngineFilter !== "all"
+											? "No databases match the selected filters. Try clearing your search query."
+											: "Launch your first dedicated MongoDB, PostgreSQL, MySQL, Redis, or LibSQL database in seconds."}
+									</p>
+								</div>
+								<Button
+									onClick={handleOpenProvisionModal}
+									size="sm"
+								>
+									<Plus className="size-3.5 mr-1.5" /> Create Database
+								</Button>
+							</div>
+						) : (
+							<div className="grid grid-cols-1 gap-4">
+								{filteredDatabases.map((db) => {
+									const cfg =
+										ENGINE_CONFIG[db.engine as SupportedEngine] ||
+										ENGINE_CONFIG.postgres;
+
+									// Display URI preview
+									const internalHost = `${db.appName}:${cfg.defaultPort}`;
+									const externalHost = db.externalPort
+										? `db.hatdot.cloud:${db.externalPort}`
+										: "Not exposed";
+
+									const authSourceInfo =
+										db.engine === "mongo"
+											? `auth: ${db.authSource || db.databaseName || "admin"}`
+											: `db: ${db.databaseName || "default"}`;
+
+									return (
+										<div
+											key={db.id}
+											className="rounded-xl border bg-card p-5 space-y-4 hover:border-border transition-all shadow-sm"
+										>
+											{/* Top Bar: Icon, Name, Status, Action Buttons */}
+											<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+												<div className="flex items-center gap-3.5">
+													<div className="size-10 rounded-xl border flex items-center justify-center shrink-0 bg-muted">
+														<cfg.icon className="size-5" />
+													</div>
+
+													<div>
+														<div className="flex items-center gap-2.5">
+															<h3 className="text-base font-semibold tracking-tight">
+																{db.name}
+															</h3>
+															{db.status === "done" ? (
+																<Badge
+																	variant="outline"
+																	className="text-[11px] gap-1.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+																>
+																	<span className="size-1.5 rounded-full bg-emerald-500" />
+																	READY
+																</Badge>
+															) : db.status === "running" ? (
+																<Badge
+																	variant="outline"
+																	className="text-[11px] gap-1.5 border-sky-500/30 text-sky-600 dark:text-sky-400 bg-sky-500/10"
+																>
+																	<span className="size-1.5 rounded-full bg-sky-500 animate-pulse" />
+																	STARTING
+																</Badge>
+															) : db.status === "error" ? (
+																<Badge
+																	variant="destructive"
+																	className="text-[11px]"
+																>
+																	FAILED
+																</Badge>
+															) : (
+																<Badge
+																	variant="outline"
+																	className="text-[11px] gap-1.5 border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/10"
+																>
+																	<span className="size-1.5 rounded-full bg-amber-500" />
+																	PENDING
+																</Badge>
+															)}
+															<Badge
+																variant="secondary"
+																className="text-[11px] font-mono"
+															>
+																{cfg.label} {cfg.version}
+															</Badge>
+														</div>
+														<div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+															<span className="font-mono text-foreground">
+																{db.appName}
+															</span>
+															<span>•</span>
+															<span>{cfg.badge}</span>
+															<span>•</span>
+															<span>
+																Created{" "}
+																{new Date(db.createdAt).toLocaleDateString()}
+															</span>
+														</div>
+													</div>
+												</div>
+
+												{/* Quick Management Buttons */}
+												<div className="flex items-center gap-2 shrink-0">
+													<Button size="sm" asChild>
+														<Link
+															href={`/dashboard/home/databases/manage?id=${db.id}&engine=${db.engine}`}
+														>
+															<Wrench className="size-3.5 mr-1.5" /> Manage Workspace
+														</Link>
+													</Button>
+
+													<Button
+														variant="outline"
+														size="sm"
+														onClick={() =>
+															setActiveConnectionDb({
+																id: db.id,
+																engine: db.engine as SupportedEngine,
+																record: db,
+															})
+														}
+													>
+														<Key className="size-3.5 mr-1.5 text-muted-foreground" /> Connection Details
+													</Button>
+												</div>
+											</div>
+
+											{/* Endpoints & Security Grid */}
+											<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+												{/* Public Endpoint */}
+												<div className="p-3 rounded-lg bg-muted/40 border space-y-1">
+													<div className="flex items-center justify-between text-muted-foreground text-[10px]">
+														<span className="flex items-center gap-1 font-semibold uppercase tracking-wider">
+															<Radio className="size-3" /> Public Endpoint
+														</span>
+														{db.externalPort && (
+															<button
+																type="button"
+																onClick={() =>
+																	copyToClipboard(externalHost, `ext-${db.id}`)
+																}
+																className="text-muted-foreground hover:text-foreground"
+															>
+																{copiedKey === `ext-${db.id}` ? (
+																	<Check className="size-3 text-emerald-500" />
+																) : (
+																	<Copy className="size-3" />
+																)}
+															</button>
+														)}
+													</div>
+													<p className="text-foreground font-mono truncate">
+														{externalHost}
+													</p>
+												</div>
+
+												{/* Internal Endpoint */}
+												<div className="p-3 rounded-lg bg-muted/40 border space-y-1">
+													<div className="flex items-center justify-between text-muted-foreground text-[10px]">
+														<span className="flex items-center gap-1 font-semibold uppercase tracking-wider">
+															<Server className="size-3" /> Internal Address
+														</span>
+														<button
+															type="button"
+															onClick={() =>
+																copyToClipboard(internalHost, `int-${db.id}`)
+															}
+															className="text-muted-foreground hover:text-foreground"
+														>
+															{copiedKey === `int-${db.id}` ? (
+																<Check className="size-3 text-emerald-500" />
+															) : (
+																<Copy className="size-3" />
+															)}
+														</button>
+													</div>
+													<p className="text-foreground font-mono truncate">
+														{internalHost}
+													</p>
+												</div>
+
+												{/* Restricted User & Auth Source */}
+												<div className="p-3 rounded-lg bg-muted/40 border space-y-1">
+													<div className="flex items-center justify-between text-muted-foreground text-[10px]">
+														<span className="flex items-center gap-1 font-semibold uppercase tracking-wider">
+															<Shield className="size-3" /> Identity & Auth
+														</span>
+													</div>
+													<div className="flex items-center gap-2">
+														<span className="text-foreground font-mono truncate">
+															{db.databaseUser || "default"}
+														</span>
+														<span className="text-[10px] text-muted-foreground bg-muted px-1 rounded font-mono">
+															{authSourceInfo}
+														</span>
+													</div>
+												</div>
+
+												{/* Target Application DB */}
+												<div className="p-3 rounded-lg bg-muted/40 border space-y-1">
+													<div className="flex items-center justify-between text-muted-foreground text-[10px]">
+														<span className="flex items-center gap-1 font-semibold uppercase tracking-wider">
+															<Database className="size-3" /> Database Name
+														</span>
+													</div>
+													<p className="text-foreground font-mono truncate">
+														{db.databaseName || "default"}
+													</p>
+												</div>
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						)}
 					</div>
-				)}
+				</Card>
 			</div>
 
 			{/* Connection Details Modal */}
@@ -726,15 +717,15 @@ export default function ManagedDatabasesPage() {
 						if (!open) setActiveConnectionDb(null);
 					}}
 				>
-					<DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-950 border-slate-800 text-white">
+					<DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
 						<DialogHeader>
 							<DialogTitle className="flex items-center gap-2">
-								<Key className="w-5 h-5 text-indigo-400" />
+								<Key className="size-5" />
 								<span>
 									Connection Information: {activeConnectionDb.record?.name}
 								</span>
 							</DialogTitle>
-							<DialogDescription className="text-slate-400 text-xs">
+							<DialogDescription className="text-xs">
 								Connection details and credentials for your database.
 								External connections are routed via db.hatdot.cloud with direct
 								connection support.
@@ -755,13 +746,13 @@ export default function ManagedDatabasesPage() {
 
 			{/* Provision New Database Guided Modal */}
 			<Dialog open={isProvisionOpen} onOpenChange={setIsProvisionOpen}>
-				<DialogContent className="max-w-2xl bg-slate-950 border-slate-800 text-white">
+				<DialogContent className="max-w-2xl">
 					<DialogHeader>
 						<DialogTitle className="flex items-center gap-2">
-							<Plus className="w-5 h-5 text-indigo-400" />
+							<Plus className="size-5" />
 							<span>Create Database</span>
 						</DialogTitle>
-						<DialogDescription className="text-slate-400 text-xs">
+						<DialogDescription className="text-xs">
 							Set up a database with secure credentials and optional external connection.
 						</DialogDescription>
 					</DialogHeader>
@@ -769,7 +760,7 @@ export default function ManagedDatabasesPage() {
 					<div className="space-y-5 py-3">
 						{/* Step 1: Select Engine */}
 						<div className="space-y-2">
-							<label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+							<label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
 								1. Select Database Engine
 							</label>
 							<div className="grid grid-cols-3 gap-2.5">
@@ -796,21 +787,21 @@ export default function ManagedDatabasesPage() {
 											}}
 											className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
 												isSelected
-													? "bg-indigo-950/60 border-indigo-500 text-indigo-200 shadow-md shadow-indigo-500/10"
-													: "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700"
+													? "border-primary bg-primary/10 text-primary shadow-sm"
+													: "border hover:bg-muted/50 text-muted-foreground"
 											}`}
 										>
 											<div className="flex items-center justify-between">
-												<cfg.icon className="w-5 h-5" />
-												<span className="text-[10px] text-slate-400 font-mono">
+												<cfg.icon className="size-5" />
+												<span className="text-[10px] text-muted-foreground font-mono">
 													v{cfg.version}
 												</span>
 											</div>
 											<div className="mt-2.5">
-												<p className="text-xs font-bold text-white">
+												<p className="text-xs font-bold text-foreground">
 													{cfg.label}
 												</p>
-												<p className="text-[10px] text-slate-400">
+												<p className="text-[10px] text-muted-foreground">
 													{cfg.badge}
 												</p>
 											</div>
@@ -823,29 +814,28 @@ export default function ManagedDatabasesPage() {
 						{/* Step 2: Name & Target Project */}
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 							<div className="space-y-1.5">
-								<label className="text-xs font-semibold text-slate-300">
+								<label className="text-xs font-semibold text-muted-foreground">
 									Database Instance Name
 								</label>
 								<Input
 									placeholder="e.g. production-mongo-cluster"
 									value={provName}
 									onChange={(e) => setProvName(e.target.value)}
-									className="bg-slate-900 border-slate-800 text-xs text-white"
 								/>
 							</div>
 
 							<div className="space-y-1.5">
-								<label className="text-xs font-semibold text-slate-300">
+								<label className="text-xs font-semibold text-muted-foreground">
 									Target Project
 								</label>
 								<Select
 									value={provProjectId}
 									onValueChange={(val) => setProvProjectId(val)}
 								>
-									<SelectTrigger className="bg-slate-900 border-slate-800 text-xs text-white">
+									<SelectTrigger>
 										<SelectValue placeholder="Select target project" />
 									</SelectTrigger>
-									<SelectContent className="bg-slate-900 border-slate-800 text-white">
+									<SelectContent>
 										{allProjects?.map((p) => (
 											<SelectItem key={p.projectId} value={p.projectId}>
 												{p.name}
@@ -859,31 +849,29 @@ export default function ManagedDatabasesPage() {
 						{/* Step 3: Credentials */}
 						<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 							<div className="space-y-1.5">
-								<label className="text-xs font-semibold text-slate-300">
+								<label className="text-xs font-semibold text-muted-foreground">
 									Target Database Name
 								</label>
 								<Input
 									placeholder="e.g. app"
 									value={provDbName}
 									onChange={(e) => setProvDbName(e.target.value)}
-									className="bg-slate-900 border-slate-800 text-xs text-white"
 								/>
 							</div>
 
 							<div className="space-y-1.5">
-								<label className="text-xs font-semibold text-slate-300">
+								<label className="text-xs font-semibold text-muted-foreground">
 									Restricted Username
 								</label>
 								<Input
 									placeholder="e.g. app_user"
 									value={provUser}
 									onChange={(e) => setProvUser(e.target.value)}
-									className="bg-slate-900 border-slate-800 text-xs text-white"
 								/>
 							</div>
 
 							<div className="space-y-1.5">
-								<label className="text-xs font-semibold text-slate-300">
+								<label className="text-xs font-semibold text-muted-foreground">
 									Secure Password
 								</label>
 								<Input
@@ -891,18 +879,18 @@ export default function ManagedDatabasesPage() {
 									placeholder="Secure password"
 									value={provPassword}
 									onChange={(e) => setProvPassword(e.target.value)}
-									className="bg-slate-900 border-slate-800 text-xs text-white font-mono"
+									className="font-mono"
 								/>
 							</div>
 						</div>
 
 						{/* Step 4: Security & Networking Info */}
-						<div className="rounded-lg bg-indigo-950/30 border border-indigo-500/20 p-3 text-xs text-indigo-300 space-y-1">
-							<div className="flex items-center gap-1.5 font-semibold text-white">
-								<Shield className="w-3.5 h-3.5 text-indigo-400" />
+						<div className="rounded-lg bg-muted/50 border p-3 text-xs space-y-1">
+							<div className="flex items-center gap-1.5 font-semibold text-foreground">
+								<Shield className="size-3.5 text-primary" />
 								<span>Automated Isolation & AuthSource Handling</span>
 							</div>
-							<p className="text-[11px] text-slate-300">
+							<p className="text-[11px] text-muted-foreground">
 								HatDot automatically isolates customer databases, registers
 								credentials with standard SCRAM-SHA / native protocols, sets the
 								correct authSource, and allocates external port routing via
@@ -913,10 +901,9 @@ export default function ManagedDatabasesPage() {
 
 					<DialogFooter className="gap-2">
 						<Button
-							variant="ghost"
+							variant="outline"
 							size="sm"
 							onClick={() => setIsProvisionOpen(false)}
-							className="text-slate-400 hover:text-white text-xs"
 						>
 							Cancel
 						</Button>
@@ -924,16 +911,15 @@ export default function ManagedDatabasesPage() {
 							size="sm"
 							disabled={isProvisioning || !provName.trim()}
 							onClick={handleProvisionSubmit}
-							className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5 px-5"
 						>
 							{isProvisioning ? (
 								<>
-									<RefreshCw className="w-3.5 h-3.5 animate-spin" />{" "}
+									<RefreshCw className="size-3.5 mr-1.5 animate-spin" />{" "}
 									Provisioning...
 								</>
 							) : (
 								<>
-									<Zap className="w-3.5 h-3.5" /> Launch Database
+									<Zap className="size-3.5 mr-1.5" /> Launch Database
 								</>
 							)}
 						</Button>

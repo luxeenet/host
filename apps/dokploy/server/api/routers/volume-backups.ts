@@ -100,6 +100,23 @@ export const volumeBackupsRouter = createTRPCRouter({
 					volumeBackup: ["create"],
 				});
 			}
+			if (
+				input.destinationId &&
+				ctx.session.activeOrganizationId &&
+				!(ctx.user as any)?.isPlatformAdmin
+			) {
+				const dest = await findDestinationById(input.destinationId);
+				if (
+					dest.organizationId &&
+					dest.organizationId !== ctx.session.activeOrganizationId
+				) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "Unauthorized access to destination",
+					});
+				}
+			}
+
 			if (IS_CLOUD && serviceType && serviceId) {
 				const existingVolumeBackups = await db.query.volumeBackups.findMany({
 					where: eq(volumeBackups[`${serviceType}Id`], serviceId),
@@ -200,6 +217,23 @@ export const volumeBackupsRouter = createTRPCRouter({
 				await checkServicePermissionAndAccess(ctx, serviceId, {
 					volumeBackup: ["update"],
 				});
+			}
+
+			if (
+				input.destinationId &&
+				ctx.session.activeOrganizationId &&
+				!(ctx.user as any)?.isPlatformAdmin
+			) {
+				const dest = await findDestinationById(input.destinationId);
+				if (
+					dest.organizationId &&
+					dest.organizationId !== ctx.session.activeOrganizationId
+				) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "Unauthorized access to destination",
+					});
+				}
 			}
 			const updatedVolumeBackup = await updateVolumeBackup(
 				input.volumeBackupId,

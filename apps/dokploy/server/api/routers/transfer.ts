@@ -21,6 +21,13 @@ export const transferRouter = createTRPCRouter({
 		})
 		.input(apiTransferService)
 		.subscription(async function* ({ input, ctx, signal }) {
+			if (IS_CLOUD && !(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Service transfer across servers is restricted to platform administrators.",
+				});
+			}
+
 			await checkServicePermissionAndAccess(ctx, input.serviceId, {
 				service: ["create"],
 				deployment: ["create"],

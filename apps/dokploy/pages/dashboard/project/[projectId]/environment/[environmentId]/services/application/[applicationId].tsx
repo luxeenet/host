@@ -169,9 +169,11 @@ const Service = (
 									<CardDescription>{data?.description}</CardDescription>
 								)}
 
-								<span className="text-sm text-muted-foreground">
-									{data?.appName}
-								</span>
+								{isPlatformAdmin && data?.appName && (
+									<span className="text-sm text-muted-foreground font-mono">
+										{data?.appName}
+									</span>
+								)}
 							</div>
 							<div className="flex flex-col h-fit w-fit gap-2">
 								<div className="flex flex-row h-fit w-fit gap-2 flex-wrap items-center">
@@ -191,26 +193,36 @@ const Service = (
 											</Badge>
 										</Link>
 									)}
-									<Badge
-										className="cursor-pointer"
-										onClick={() => {
-											const ip = data?.server?.ipAddress || serverIp;
-											if (ip) {
-												copy(ip);
-												toast.success("IP Address Copied!");
-											}
-										}}
-										variant={
-											!data?.serverId
-												? "default"
-												: data?.server?.serverStatus === "active"
+									{isPlatformAdmin ? (
+										<Badge
+											className="cursor-pointer"
+											onClick={() => {
+												const ip = data?.server?.ipAddress || serverIp;
+												if (ip) {
+													copy(ip);
+													toast.success("IP Address Copied!");
+												}
+											}}
+											variant={
+												!data?.serverId
 													? "default"
-													: "destructive"
-										}
-									>
-										{data?.server?.name || "Primary Server"}
-									</Badge>
-									{data?.server?.serverStatus === "inactive" && (
+													: data?.server?.serverStatus === "active"
+														? "default"
+														: "destructive"
+											}
+										>
+											{data?.server?.name || "Primary Server"}
+										</Badge>
+									) : (
+										<Badge
+											variant="outline"
+											className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-medium text-xs flex items-center gap-1.5"
+										>
+											<span className="size-1.5 rounded-full bg-emerald-500" />
+											Cloud Runtime
+										</Badge>
+									)}
+									{isPlatformAdmin && data?.server?.serverStatus === "inactive" && (
 										<TooltipProvider delayDuration={0}>
 											<Tooltip>
 												<TooltipTrigger asChild>
@@ -224,7 +236,7 @@ const Service = (
 													side="top"
 												>
 													<span>
-														You cannot, deploy this application because the
+														You cannot deploy this application because the
 														server is inactive, please upgrade your plan to add
 														more servers.
 													</span>
@@ -257,10 +269,9 @@ const Service = (
 									<div className="max-w-3xl mx-auto flex flex-col items-center justify-center self-center gap-3">
 										<ServerOff className="size-10 text-muted-foreground self-center" />
 										<span className="text-center text-base text-muted-foreground">
-											This service is hosted on the server {data.server.name},
-											but this server has been disabled because your current
-											plan doesn't include enough servers. Please purchase more
-											servers to regain access to this application.
+											{isPlatformAdmin
+												? `This service is hosted on the server ${data?.server?.name}, but this server has been disabled because your current plan doesn't include enough servers. Please purchase more servers to regain access to this application.`
+												: "This service runtime is currently inactive. Please check your plan limits in Billing or contact support to reactivate your deployment resources."}
 										</span>
 										<span className="text-center text-base text-muted-foreground">
 											Go to{" "}

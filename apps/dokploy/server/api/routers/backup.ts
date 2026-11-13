@@ -97,6 +97,23 @@ export const backupRouter = createTRPCRouter({
 					});
 				}
 
+				if (
+					input.destinationId &&
+					ctx.session.activeOrganizationId &&
+					!(ctx.user as any)?.isPlatformAdmin
+				) {
+					const dest = await findDestinationById(input.destinationId);
+					if (
+						dest.organizationId &&
+						dest.organizationId !== ctx.session.activeOrganizationId
+					) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: "Unauthorized access to destination",
+						});
+					}
+				}
+
 				if (IS_CLOUD) {
 					const dbType = (
 						["postgres", "mysql", "mariadb", "mongo", "libsql"] as const
@@ -206,6 +223,23 @@ export const backupRouter = createTRPCRouter({
 					await checkServicePermissionAndAccess(ctx, serviceId, {
 						backup: ["update"],
 					});
+				}
+
+				if (
+					input.destinationId &&
+					ctx.session.activeOrganizationId &&
+					!(ctx.user as any)?.isPlatformAdmin
+				) {
+					const dest = await findDestinationById(input.destinationId);
+					if (
+						dest.organizationId &&
+						dest.organizationId !== ctx.session.activeOrganizationId
+					) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: "Unauthorized access to destination",
+						});
+					}
 				}
 
 				await updateBackupById(input.backupId, input);

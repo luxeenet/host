@@ -301,6 +301,9 @@ const EnvironmentPage = (
 	const [isBulkActionLoading, setIsBulkActionLoading] = useState(false);
 	const { projectId, environmentId } = props;
 	const { data: auth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(auth as any)?.user?.isPlatformAdmin || (auth as any)?.isPlatformAdmin,
+	);
 	const { data: permissions } = api.user.getPermissions.useQuery();
 
 	const { data: environments } = api.environment.byProjectId.useQuery({
@@ -1567,8 +1570,9 @@ const EnvironmentPage = (
 												</Command>
 											</PopoverContent>
 										</Popover>
-										{(availableServers.length > 0 ||
-											hasServicesWithoutServer) && (
+										{isPlatformAdmin &&
+											(availableServers.length > 0 ||
+												hasServicesWithoutServer) && (
 											<Select
 												value={selectedServerId || "all"}
 												onValueChange={setSelectedServerId}
@@ -1632,7 +1636,7 @@ const EnvironmentPage = (
 																className="block h-full"
 															>
 																<Card className="flex flex-col h-full group relative cursor-pointer bg-transparent transition-colors hover:bg-border">
-																	{service.serverId && (
+																	{isPlatformAdmin && service.serverId && (
 																		<div className="absolute -left-1 -top-2">
 																			<ServerIcon className="size-4 text-muted-foreground" />
 																		</div>
@@ -1723,7 +1727,7 @@ const EnvironmentPage = (
 																	</CardHeader>
 																	<CardFooter className="mt-auto">
 																		<div className="space-y-1 text-sm w-full">
-																			{service.serverName && (
+																			{isPlatformAdmin && service.serverName && (
 																				<div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
 																					<ServerIcon className="size-3" />
 																					<span className="truncate">

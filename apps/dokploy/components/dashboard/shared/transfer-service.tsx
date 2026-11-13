@@ -53,6 +53,10 @@ interface Props {
 
 export const TransferService = ({ id, type, serverId }: Props) => {
 	const utils = api.useUtils();
+	const { data: auth } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(auth as any)?.user?.isPlatformAdmin || (auth as any)?.isPlatformAdmin,
+	);
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { data: servers } = api.server.withSSHKey.useQuery();
 	const [isOpen, setIsOpen] = useState(false);
@@ -63,6 +67,10 @@ export const TransferService = ({ id, type, serverId }: Props) => {
 		targetServerId: string | null;
 		removeSourceData: boolean;
 	} | null>(null);
+
+	if (!isPlatformAdmin) {
+		return null;
+	}
 
 	const targets = [
 		...(!isCloud && serverId

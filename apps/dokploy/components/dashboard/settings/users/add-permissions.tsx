@@ -222,6 +222,9 @@ export const AddUserPermissions = ({ userId, role }: Props) => {
 		},
 	);
 
+	const { data: authUser } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean((authUser?.user as any)?.isPlatformAdmin);
+
 	const { mutateAsync, isError, error, isPending } =
 		api.user.assignPermissions.useMutation();
 
@@ -451,46 +454,50 @@ export const AddUserPermissions = ({ userId, role }: Props) => {
 										</FormItem>
 									)}
 								/>
-								<FormField
-									control={form.control}
-									name="canAccessToTraefikFiles"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-xs">
-											<div className="space-y-0.5">
-												<FormLabel>Access to Traefik Files</FormLabel>
-												<FormDescription>
-													Allow the user to access to the Traefik Tab Files
-												</FormDescription>
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value}
-													onCheckedChange={field.onChange}
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
-								<FormField
-									control={form.control}
-									name="canAccessToDocker"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-xs">
-											<div className="space-y-0.5">
-												<FormLabel>Access to Docker</FormLabel>
-												<FormDescription>
-													Allow the user to access to the Docker Tab
-												</FormDescription>
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value}
-													onCheckedChange={field.onChange}
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
+								{isPlatformAdmin && (
+									<>
+										<FormField
+											control={form.control}
+											name="canAccessToTraefikFiles"
+											render={({ field }) => (
+												<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-xs">
+													<div className="space-y-0.5">
+														<FormLabel>Access to Traefik Files</FormLabel>
+														<FormDescription>
+															Allow the user to access to the Traefik Tab Files
+														</FormDescription>
+													</div>
+													<FormControl>
+														<Switch
+															checked={field.value}
+															onCheckedChange={field.onChange}
+														/>
+													</FormControl>
+												</FormItem>
+											)}
+										/>
+										<FormField
+											control={form.control}
+											name="canAccessToDocker"
+											render={({ field }) => (
+												<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-xs">
+													<div className="space-y-0.5">
+														<FormLabel>Access to Docker</FormLabel>
+														<FormDescription>
+															Allow the user to access to the Docker Tab
+														</FormDescription>
+													</div>
+													<FormControl>
+														<Switch
+															checked={field.value}
+															onCheckedChange={field.onChange}
+														/>
+													</FormControl>
+												</FormItem>
+											)}
+										/>
+									</>
+								)}
 								<FormField
 									control={form.control}
 									name="canAccessToAPI"
@@ -511,26 +518,28 @@ export const AddUserPermissions = ({ userId, role }: Props) => {
 										</FormItem>
 									)}
 								/>
-								<FormField
-									control={form.control}
-									name="canAccessToSSHKeys"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-xs">
-											<div className="space-y-0.5">
-												<FormLabel>Access to SSH Keys</FormLabel>
-												<FormDescription>
-													Allow to users to access to the SSH Keys section
-												</FormDescription>
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value}
-													onCheckedChange={field.onChange}
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
+								{isPlatformAdmin && (
+									<FormField
+										control={form.control}
+										name="canAccessToSSHKeys"
+										render={({ field }) => (
+											<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-xs">
+												<div className="space-y-0.5">
+													<FormLabel>Access to SSH Keys</FormLabel>
+													<FormDescription>
+														Allow to users to access to the SSH Keys section
+													</FormDescription>
+												</div>
+												<FormControl>
+													<Switch
+														checked={field.value}
+														onCheckedChange={field.onChange}
+													/>
+												</FormControl>
+											</FormItem>
+										)}
+									/>
+								)}
 								<FormField
 									control={form.control}
 									name="canAccessToGitProviders"

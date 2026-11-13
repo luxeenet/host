@@ -367,6 +367,7 @@ export const MENU: Menu = {
 			title: "DNS Providers",
 			url: "/dashboard/settings/dns",
 			icon: Globe,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,
@@ -391,15 +392,7 @@ export const MENU: Menu = {
 		{
 			isSingle: true,
 			title: "Billing",
-			url: "/dashboard/settings/billing",
-			icon: CreditCard,
-			// Only enabled for owners in cloud environments
-			isEnabled: ({ auth, isCloud }) => !!(auth?.role === "owner" && isCloud),
-		},
-		{
-			isSingle: true,
-			title: "Invoices",
-			url: "/dashboard/settings/invoices",
+			url: "/dashboard/billing",
 			icon: CreditCard,
 			// Only enabled for owners in cloud environments
 			isEnabled: ({ auth, isCloud }) => !!(auth?.role === "owner" && isCloud),

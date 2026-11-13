@@ -21,19 +21,25 @@ Page.getLayout = (page: ReactElement) => {
 	return <DashboardLayout metaName="DNS Providers">{page}</DashboardLayout>;
 };
 
+import { requirePlatformAdminSession } from "@/utils/server-auth-guards";
+
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ dnsProviderId: string }>,
 ) {
 	const { req, res, params } = ctx;
-	const { user, session } = await validateRequest(req);
-	if (!user || user.role === "member" || !params?.dnsProviderId) {
+	const authGuard = await requirePlatformAdminSession(ctx);
+	if ("redirect" in authGuard) {
+		return { redirect: authGuard.redirect };
+	}
+	if (!params?.dnsProviderId) {
 		return {
 			redirect: {
 				permanent: false,
-				destination: "/",
+				destination: "/dashboard/home",
 			},
 		};
 	}
+	const { user, session } = authGuard;
 	const helpers = createServerSideHelpers({
 		router: appRouter,
 		ctx: {

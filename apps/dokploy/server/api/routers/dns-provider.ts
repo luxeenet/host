@@ -27,10 +27,10 @@ import {
 	apiUpdateDnsProvider,
 	apiUpdateDnsRecord,
 } from "@/server/db/schema";
-import { createTRPCRouter, withPermission } from "../trpc";
+import { createTRPCRouter, platformAdminProcedure, protectedProcedure } from "../trpc";
 
 export const dnsProviderRouter = createTRPCRouter({
-	create: withPermission("dnsProvider", "create")
+	create: platformAdminProcedure
 		.input(apiCreateDnsProvider)
 		.mutation(async ({ ctx, input }) => {
 			const provider = await createDnsProvider(
@@ -46,7 +46,7 @@ export const dnsProviderRouter = createTRPCRouter({
 			return { ...provider, config: maskDnsProviderConfig(provider.config) };
 		}),
 
-	update: withPermission("dnsProvider", "update")
+	update: platformAdminProcedure
 		.input(apiUpdateDnsProvider)
 		.mutation(async ({ ctx, input }) => {
 			await findDnsProviderInOrganization(
@@ -67,7 +67,7 @@ export const dnsProviderRouter = createTRPCRouter({
 			return { ...updated, config: maskDnsProviderConfig(updated.config) };
 		}),
 
-	remove: withPermission("dnsProvider", "delete")
+	remove: platformAdminProcedure
 		.input(apiRemoveDnsProvider)
 		.mutation(async ({ ctx, input }) => {
 			const provider = await findDnsProviderInOrganization(
@@ -84,7 +84,11 @@ export const dnsProviderRouter = createTRPCRouter({
 			return true;
 		}),
 
-	all: withPermission("dnsProvider", "read").query(async ({ ctx }) => {
+	all: protectedProcedure.query(async ({ ctx }) => {
+		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+		if (!isPlatformAdmin) {
+			return [];
+		}
 		const providers = await findDnsProvidersByOrganizationId(
 			ctx.session.activeOrganizationId,
 		);
@@ -94,7 +98,7 @@ export const dnsProviderRouter = createTRPCRouter({
 		}));
 	}),
 
-	one: withPermission("dnsProvider", "read")
+	one: platformAdminProcedure
 		.input(apiFindOneDnsProvider)
 		.query(async ({ ctx, input }) => {
 			const provider = await findDnsProviderInOrganization(
@@ -104,7 +108,7 @@ export const dnsProviderRouter = createTRPCRouter({
 			return { ...provider, config: maskDnsProviderConfig(provider.config) };
 		}),
 
-	testConnection: withPermission("dnsProvider", "create")
+	testConnection: platformAdminProcedure
 		.input(apiTestDnsProvider)
 		.mutation(async ({ ctx, input }) => {
 			if (!input.config && !input.dnsProviderId) {
@@ -129,7 +133,7 @@ export const dnsProviderRouter = createTRPCRouter({
 			return true;
 		}),
 
-	listZones: withPermission("dnsProvider", "read")
+	listZones: platformAdminProcedure
 		.input(apiListDnsZones)
 		.query(async ({ ctx, input }) => {
 			const provider = await findDnsProviderInOrganization(
@@ -139,7 +143,7 @@ export const dnsProviderRouter = createTRPCRouter({
 			return await listDnsProviderZones(provider.config);
 		}),
 
-	listRecords: withPermission("dnsProvider", "read")
+	listRecords: platformAdminProcedure
 		.input(apiListDnsRecords)
 		.query(async ({ ctx, input }) => {
 			const provider = await findDnsProviderInOrganization(
@@ -149,7 +153,7 @@ export const dnsProviderRouter = createTRPCRouter({
 			return await listDnsProviderRecords(provider.config, input.zoneId);
 		}),
 
-	createRecord: withPermission("dnsProvider", "update")
+	createRecord: platformAdminProcedure
 		.input(apiCreateDnsRecord)
 		.mutation(async ({ ctx, input }) => {
 			const provider = await findDnsProviderInOrganization(
@@ -173,7 +177,7 @@ export const dnsProviderRouter = createTRPCRouter({
 			return record;
 		}),
 
-	updateRecord: withPermission("dnsProvider", "update")
+	updateRecord: platformAdminProcedure
 		.input(apiUpdateDnsRecord)
 		.mutation(async ({ ctx, input }) => {
 			const provider = await findDnsProviderInOrganization(
@@ -201,7 +205,7 @@ export const dnsProviderRouter = createTRPCRouter({
 			return record;
 		}),
 
-	deleteRecord: withPermission("dnsProvider", "delete")
+	deleteRecord: platformAdminProcedure
 		.input(apiDeleteDnsRecord)
 		.mutation(async ({ ctx, input }) => {
 			const provider = await findDnsProviderInOrganization(

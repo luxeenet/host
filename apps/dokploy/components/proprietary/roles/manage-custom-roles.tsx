@@ -480,6 +480,23 @@ const ACTION_META: Record<
 /** Resources that should be hidden from the custom role editor (better-auth internals) */
 const HIDDEN_RESOURCES = ["organization", "invitation", "team", "ac"];
 
+/** Infrastructure/platform admin resources hidden from customer custom roles */
+const ADMIN_ONLY_RESOURCES = [
+	"docker",
+	"traefikFiles",
+	"sshKeys",
+	"server",
+	"registry",
+	"certificate",
+	"volumeBackup",
+	"schedule",
+	"cluster",
+	"notification",
+	"settings",
+	"ai",
+	"auditLog",
+];
+
 /** Predefined role presets with sensible permission defaults */
 const ROLE_PRESETS: {
 	name: string;
@@ -666,9 +683,14 @@ function HandleCustomRole({
 	const { mutateAsync: updateRole, isPending: isUpdating } =
 		api.customRole.update.useMutation();
 
+	const { data: authUser } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean((authUser?.user as any)?.isPlatformAdmin);
+
 	const visibleResources = statements
 		? Object.entries(statements).filter(
-				([key]) => !HIDDEN_RESOURCES.includes(key),
+				([key]) =>
+					!HIDDEN_RESOURCES.includes(key) &&
+					(isPlatformAdmin || !ADMIN_ONLY_RESOURCES.includes(key)),
 			)
 		: [];
 
@@ -784,7 +806,12 @@ function HandleCustomRole({
 									className="rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors cursor-pointer space-y-1"
 									onClick={() => {
 										form.setValue("roleName", preset.name);
-										setPermissions({ ...preset.permissions });
+										const sanitizedPermissions = Object.fromEntries(
+											Object.entries(preset.permissions).filter(
+												([key]) => isPlatformAdmin || !ADMIN_ONLY_RESOURCES.includes(key),
+											),
+										);
+										setPermissions(sanitizedPermissions);
 									}}
 								>
 									<p className="text-sm font-medium">{preset.label}</p>

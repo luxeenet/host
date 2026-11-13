@@ -18,6 +18,19 @@ vi.mock("@dokploy/server", () => ({
 	safeDockerLoginCommand: vi.fn(),
 	execAsyncRemote: vi.fn(),
 	execFileAsync: vi.fn(),
+	createDnsProvider: vi.fn(),
+	findDnsProviderInOrganization: vi.fn(),
+	findDnsProvidersByOrganizationId: vi.fn().mockResolvedValue([]),
+	removeDnsProvider: vi.fn(),
+	updateDnsProvider: vi.fn(),
+	testDnsProviderConnection: vi.fn(),
+	maskDnsProviderConfig: vi.fn((c) => c),
+	mergeDnsProviderConfig: vi.fn((a, b) => ({ ...b, ...a })),
+	listDnsProviderZones: vi.fn().mockResolvedValue([]),
+	listDnsProviderRecords: vi.fn().mockResolvedValue([]),
+	createDnsProviderRecord: vi.fn(),
+	updateDnsProviderRecord: vi.fn(),
+	deleteDnsProviderRecord: vi.fn(),
 	IS_CLOUD: false,
 }));
 
@@ -61,7 +74,9 @@ import { aiRouter } from "../../server/api/routers/ai";
 import { auditLogRouter } from "../../server/api/routers/proprietary/audit-log";
 import { certificateRouter } from "../../server/api/routers/certificate";
 import { registryRouter } from "../../server/api/routers/registry";
+import { dnsProviderRouter } from "../../server/api/routers/dns-provider";
 import { requirePlatformAdminSession } from "../../utils/server-auth-guards";
+import { MENU } from "../../components/layouts/side";
 
 describe("Admin-Only Settings Tabs (AI, SSH Keys, Audit Logs)", () => {
 	const customerCtx = {
@@ -314,6 +329,95 @@ describe("Admin-Only Settings Tabs (AI, SSH Keys, Audit Logs)", () => {
 			const caller = registryRouter.createCaller(adminCtx as any);
 			const result = await caller.all();
 			expect(result).toEqual([]);
+		});
+	});
+
+	describe("DNS Provider Router (dnsProviderRouter) Access Control", () => {
+		it("returns empty array for non-platform admin when listing DNS providers", async () => {
+			const caller = dnsProviderRouter.createCaller(customerCtx as any);
+			const result = await caller.all();
+			expect(result).toEqual([]);
+		});
+
+		it("strictly denies non-platform admin from creating a DNS provider", async () => {
+			const caller = dnsProviderRouter.createCaller(customerCtx as any);
+			await expect(
+				caller.create({
+					name: "My Cloudflare",
+					config: {
+						providerType: "cloudflare",
+						apiToken: "cf-token",
+					},
+				}),
+			).rejects.toThrowError(TRPCError);
+			await expect(
+				caller.create({
+					name: "My Cloudflare",
+					config: {
+						providerType: "cloudflare",
+						apiToken: "cf-token",
+					},
+				}),
+			).rejects.toMatchObject({
+				code: "FORBIDDEN",
+				message: "Platform administrator access required.",
+			});
+		});
+
+		it("strictly denies non-platform admin from testing a DNS provider connection", async () => {
+			const caller = dnsProviderRouter.createCaller(customerCtx as any);
+			await expect(
+				caller.testConnection({
+					config: {
+						providerType: "cloudflare",
+						apiToken: "cf-token",
+					},
+				}),
+			).rejects.toThrowError(TRPCError);
+		});
+
+		it("strictly denies non-platform admin from creating a DNS record", async () => {
+			const caller = dnsProviderRouter.createCaller(customerCtx as any);
+			await expect(
+				caller.createRecord({
+					dnsProviderId: "dns-1",
+					zoneId: "zone-1",
+					name: "app.example.com",
+					type: "A",
+					content: "1.2.3.4",
+					ttl: 300,
+				}),
+			).rejects.toThrowError(TRPCError);
+		});
+
+		it("allows platform admin to list DNS providers", async () => {
+			const caller = dnsProviderRouter.createCaller(adminCtx as any);
+			const result = await caller.all();
+			expect(result).toEqual([]);
+		});
+	});
+
+	describe("Settings Menu Security & Hygiene", () => {
+		it("does not expose DNS Providers tab to regular customers", () => {
+			const dnsItem = MENU.settings.find((item) => item.title === "DNS Providers");
+			expect(dnsItem).toBeDefined();
+			expect(dnsItem?.isEnabled?.({ isPlatformAdmin: false, isCloud: true })).toBe(false);
+			expect(dnsItem?.isEnabled?.({ isPlatformAdmin: true, isCloud: true })).toBe(true);
+		});
+
+		it("does not expose Registry tab to regular customers", () => {
+			const regItem = MENU.settings.find((item) => item.title === "Registry");
+			expect(regItem).toBeDefined();
+			expect(regItem?.isEnabled?.({ isPlatformAdmin: false, isCloud: true })).toBe(false);
+			expect(regItem?.isEnabled?.({ isPlatformAdmin: true, isCloud: true })).toBe(true);
+		});
+
+		it("points Billing to canonical /dashboard/billing without obsolete separate Invoices tab", () => {
+			const billingItem = MENU.settings.find((item) => item.title === "Billing");
+			expect(billingItem && "url" in billingItem ? billingItem.url : "").toBe("/dashboard/billing");
+
+			const invoicesItem = MENU.settings.find((item) => item.title === "Invoices");
+			expect(invoicesItem).toBeUndefined();
 		});
 	});
 });

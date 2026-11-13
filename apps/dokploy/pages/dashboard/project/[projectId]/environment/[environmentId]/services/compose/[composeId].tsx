@@ -7,6 +7,7 @@ import type {
 	GetServerSidePropsContext,
 	InferGetServerSidePropsType,
 } from "next";
+import dynamic from "next/dynamic";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -14,7 +15,6 @@ import { type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 import superjson from "superjson";
 import { ShowImport } from "@/components/dashboard/application/advanced/import/show-import";
-import { ShowVolumes } from "@/components/dashboard/application/advanced/volumes/show-volumes";
 import { ShowDeployments } from "@/components/dashboard/application/deployments/show-deployments";
 import { ShowDomains } from "@/components/dashboard/application/domains/show-domains";
 import { ShowEnvironment } from "@/components/dashboard/application/environment/show-environment";
@@ -24,7 +24,6 @@ import { ShowSchedules } from "@/components/dashboard/application/schedules/show
 import { ShowVolumeBackups } from "@/components/dashboard/application/volume-backups/show-volume-backups";
 import { AddCommandCompose } from "@/components/dashboard/compose/advanced/add-command";
 import { IsolatedDeploymentTab } from "@/components/dashboard/compose/advanced/add-isolation";
-import { FreshVolumes } from "@/components/dashboard/compose/advanced/fresh-volumes";
 import { ShowComposeContainers } from "@/components/dashboard/compose/containers/show-compose-containers";
 import { DeleteService } from "@/components/dashboard/compose/delete-service";
 import { ShowGeneralCompose } from "@/components/dashboard/compose/general/show";
@@ -34,8 +33,29 @@ import { UpdateCompose } from "@/components/dashboard/compose/update-compose";
 import { ShowBackups } from "@/components/dashboard/database/backups/show-backups";
 import { ComposeFreeMonitoring } from "@/components/dashboard/monitoring/free/container/show-free-compose-monitoring";
 import { ComposePaidMonitoring } from "@/components/dashboard/monitoring/paid/container/show-paid-compose-monitoring";
-import { AssignComposeNetworks } from "@/components/dashboard/networks/assign-compose-networks";
 import { TransferService } from "@/components/dashboard/shared/transfer-service";
+
+const ShowVolumes = dynamic(
+	() =>
+		import(
+			"@/components/dashboard/application/advanced/volumes/show-volumes"
+		).then((m) => m.ShowVolumes),
+	{ ssr: false },
+);
+const AssignComposeNetworks = dynamic(
+	() =>
+		import(
+			"@/components/dashboard/networks/assign-compose-networks"
+		).then((m) => m.AssignComposeNetworks),
+	{ ssr: false },
+);
+const FreshVolumes = dynamic(
+	() =>
+		import(
+			"@/components/dashboard/compose/advanced/fresh-volumes"
+		).then((m) => m.FreshVolumes),
+	{ ssr: false },
+);
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { AdvanceBreadcrumb } from "@/components/shared/advance-breadcrumb";
 import { StatusTooltip } from "@/components/shared/status-tooltip";

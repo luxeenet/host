@@ -6,6 +6,12 @@
 /** @type {import("next").NextConfig} */
 const nextConfig = {
 	reactStrictMode: true,
+	productionBrowserSourceMaps: false,
+	poweredByHeader: false,
+	compiler: {
+		removeConsole:
+			process.env.NODE_ENV === "production" ? { exclude: ["error"] } : false,
+	},
 	typescript: {
 		ignoreBuildErrors: true,
 	},

@@ -7,21 +7,19 @@ import type {
 	GetServerSidePropsContext,
 	InferGetServerSidePropsType,
 } from "next";
+import dynamic from "next/dynamic";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 import superjson from "superjson";
-import { ShowClusterSettings } from "@/components/dashboard/application/advanced/cluster/show-cluster-settings";
 import { AddCommand } from "@/components/dashboard/application/advanced/general/add-command";
 import { ShowPorts } from "@/components/dashboard/application/advanced/ports/show-port";
 import { ShowRedirects } from "@/components/dashboard/application/advanced/redirects/show-redirects";
 import { ShowSecurity } from "@/components/dashboard/application/advanced/security/show-security";
-import { ShowBuildServer } from "@/components/dashboard/application/advanced/show-build-server";
 import { ShowResources } from "@/components/dashboard/application/advanced/show-resources";
 import { RunContainerCommand } from "@/components/dashboard/application/advanced/general/run-container-command";
-import { ShowVolumes } from "@/components/dashboard/application/advanced/volumes/show-volumes";
 import { ShowDeployments } from "@/components/dashboard/application/deployments/show-deployments";
 import { ShowDomains } from "@/components/dashboard/application/domains/show-domains";
 import { ShowEnvironment } from "@/components/dashboard/application/environment/show";
@@ -36,8 +34,36 @@ import { ShowVolumeBackups } from "@/components/dashboard/application/volume-bac
 import { DeleteService } from "@/components/dashboard/compose/delete-service";
 import { ContainerFreeMonitoring } from "@/components/dashboard/monitoring/free/container/show-free-container-monitoring";
 import { ContainerPaidMonitoring } from "@/components/dashboard/monitoring/paid/container/show-paid-container-monitoring";
-import { AssignNetworks } from "@/components/dashboard/networks/assign-networks";
 import { TransferService } from "@/components/dashboard/shared/transfer-service";
+
+const ShowClusterSettings = dynamic(
+	() =>
+		import(
+			"@/components/dashboard/application/advanced/cluster/show-cluster-settings"
+		).then((m) => m.ShowClusterSettings),
+	{ ssr: false },
+);
+const ShowBuildServer = dynamic(
+	() =>
+		import(
+			"@/components/dashboard/application/advanced/show-build-server"
+		).then((m) => m.ShowBuildServer),
+	{ ssr: false },
+);
+const ShowVolumes = dynamic(
+	() =>
+		import(
+			"@/components/dashboard/application/advanced/volumes/show-volumes"
+		).then((m) => m.ShowVolumes),
+	{ ssr: false },
+);
+const AssignNetworks = dynamic(
+	() =>
+		import("@/components/dashboard/networks/assign-networks").then(
+			(m) => m.AssignNetworks,
+		),
+	{ ssr: false },
+);
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { AdvanceBreadcrumb } from "@/components/shared/advance-breadcrumb";
 import { StatusTooltip } from "@/components/shared/status-tooltip";

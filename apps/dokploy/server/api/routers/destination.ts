@@ -74,7 +74,8 @@ export const destinationRouter = createTRPCRouter({
 					rcloneFlags.unshift(`--s3-provider=${quote([provider])}`);
 				}
 				if (additionalFlags?.length) {
-					rcloneFlags.push(...additionalFlags);
+					const safeFlags = additionalFlags.map((flag) => quote([flag]));
+					rcloneFlags.push(...safeFlags);
 				}
 				const rcloneDestination = `:s3:${bucket}`;
 				const rcloneCommand = `rclone ls ${rcloneFlags.join(" ")} ${quote([rcloneDestination])}`;

@@ -31,6 +31,7 @@ vi.mock("@dokploy/server", () => ({
 	createDnsProviderRecord: vi.fn(),
 	updateDnsProviderRecord: vi.fn(),
 	deleteDnsProviderRecord: vi.fn(),
+	hasValidLicense: vi.fn().mockResolvedValue(true),
 	IS_CLOUD: false,
 }));
 
@@ -44,6 +45,10 @@ vi.mock("@dokploy/server/db", () => ({
 				findMany: vi.fn().mockResolvedValue([]),
 			},
 			registry: {
+				findMany: vi.fn().mockResolvedValue([]),
+				findFirst: vi.fn().mockResolvedValue(null),
+			},
+			organizationRole: {
 				findMany: vi.fn().mockResolvedValue([]),
 				findFirst: vi.fn().mockResolvedValue(null),
 			},
@@ -75,6 +80,7 @@ import { auditLogRouter } from "../../server/api/routers/proprietary/audit-log";
 import { certificateRouter } from "../../server/api/routers/certificate";
 import { registryRouter } from "../../server/api/routers/registry";
 import { dnsProviderRouter } from "../../server/api/routers/dns-provider";
+import { customRoleRouter } from "../../server/api/routers/proprietary/custom-role";
 import { requirePlatformAdminSession } from "../../utils/server-auth-guards";
 import { MENU } from "../../components/layouts/side";
 
@@ -418,6 +424,53 @@ describe("Admin-Only Settings Tabs (AI, SSH Keys, Audit Logs)", () => {
 
 			const invoicesItem = MENU.settings.find((item) => item.title === "Invoices");
 			expect(invoicesItem).toBeUndefined();
+		});
+	});
+
+	describe("Custom Roles & Member Permissions Tenant Isolation", () => {
+		it("strictly sanitizes getStatements for non-platform admin, omitting infrastructure resources", async () => {
+			const caller = customRoleRouter.createCaller(customerCtx as any);
+			const statements = await caller.getStatements();
+			expect(statements).not.toHaveProperty("docker");
+			expect(statements).not.toHaveProperty("traefikFiles");
+			expect(statements).not.toHaveProperty("sshKeys");
+			expect(statements).not.toHaveProperty("server");
+			expect(statements).not.toHaveProperty("registry");
+			expect(statements).not.toHaveProperty("certificate");
+		});
+
+		it("allows platform admin to see all statements including infrastructure resources", async () => {
+			const caller = customRoleRouter.createCaller(adminCtx as any);
+			const statements = await caller.getStatements();
+			expect(statements).toHaveProperty("docker");
+			expect(statements).toHaveProperty("traefikFiles");
+			expect(statements).toHaveProperty("sshKeys");
+			expect(statements).toHaveProperty("server");
+			expect(statements).toHaveProperty("registry");
+			expect(statements).toHaveProperty("certificate");
+		});
+
+		it("strictly denies non-platform admin from creating a role with docker or server infrastructure permissions", async () => {
+			const caller = customRoleRouter.createCaller(customerCtx as any);
+			await expect(
+				caller.create({
+					roleName: "hacker-role",
+					permissions: {
+						docker: ["read"],
+					},
+				}),
+			).rejects.toThrowError(TRPCError);
+			await expect(
+				caller.create({
+					roleName: "hacker-role",
+					permissions: {
+						docker: ["read"],
+					},
+				}),
+			).rejects.toMatchObject({
+				code: "BAD_REQUEST",
+				message: 'Resource "docker" cannot be assigned to custom roles',
+			});
 		});
 	});
 });

@@ -485,14 +485,24 @@ export const userRouter = createTRPCRouter({
 					ctx.session?.activeOrganizationId || "",
 				);
 
+				const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+				const sanitizedRest = isPlatformAdmin
+					? rest
+					: {
+							...rest,
+							canAccessToDocker: false,
+							canAccessToTraefikFiles: false,
+							canAccessToSSHKeys: false,
+						};
+
 				await db
 					.update(member)
 					.set({
-						...rest,
+						...sanitizedRest,
 						...(licensed && accessedGitProviders !== undefined
 							? { accessedGitProviders }
 							: {}),
-						...(licensed && accessedServers !== undefined
+						...(licensed && isPlatformAdmin && accessedServers !== undefined
 							? { accessedServers }
 							: {}),
 					})

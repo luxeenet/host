@@ -112,7 +112,8 @@ export const customRoleRouter = createTRPCRouter({
 				});
 			}
 
-			validatePermissions(input.permissions);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			validatePermissions(input.permissions, isPlatformAdmin);
 
 			const [created] = await db
 				.insert(organizationRole)
@@ -185,7 +186,8 @@ export const customRoleRouter = createTRPCRouter({
 					);
 			}
 
-			validatePermissions(input.permissions);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			validatePermissions(input.permissions, isPlatformAdmin);
 
 			const [updated] = await db
 				.update(organizationRole)
@@ -300,19 +302,50 @@ export const customRoleRouter = createTRPCRouter({
 			return members;
 		}),
 
-	getStatements: protectedProcedure.query(() => {
-		return statements;
+	getStatements: protectedProcedure.query(({ ctx }) => {
+		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+		if (isPlatformAdmin) {
+			return statements;
+		}
+		return Object.fromEntries(
+			Object.entries(statements).filter(
+				([key]) =>
+					!INTERNAL_RESOURCES.includes(key) &&
+					!ADMIN_ONLY_RESOURCES.includes(key),
+			),
+		);
 	}),
 });
 
 const INTERNAL_RESOURCES = ["organization", "invitation", "team", "ac"];
+const ADMIN_ONLY_RESOURCES = [
+	"docker",
+	"traefikFiles",
+	"sshKeys",
+	"server",
+	"registry",
+	"certificate",
+	"volumeBackup",
+	"schedule",
+	"cluster",
+	"notification",
+	"settings",
+	"ai",
+	"auditLog",
+];
 
-function validatePermissions(permissions: Record<string, string[]>) {
+function validatePermissions(
+	permissions: Record<string, string[]>,
+	isPlatformAdmin = false,
+) {
 	for (const [resource, actions] of Object.entries(permissions)) {
-		if (INTERNAL_RESOURCES.includes(resource)) {
+		if (
+			INTERNAL_RESOURCES.includes(resource) ||
+			(!isPlatformAdmin && ADMIN_ONLY_RESOURCES.includes(resource))
+		) {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: `Resource "${resource}" is managed internally and cannot be assigned to custom roles`,
+				message: `Resource "${resource}" cannot be assigned to custom roles`,
 			});
 		}
 

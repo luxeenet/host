@@ -1,8 +1,9 @@
 import { db } from "@dokploy/server/db";
-import { member, organizationRole } from "@dokploy/server/db/schema";
+import { environments, member, organizationRole, projects } from "@dokploy/server/db/schema";
 import { hasValidLicense } from "@dokploy/server/services/proprietary/license-key";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
+import { findServiceById } from "./service-lookup";
 import {
 	ac,
 	adminRole,
@@ -226,6 +227,21 @@ export const checkProjectAccess = async (
 
 	await checkPermission(ctx, { project: [action] });
 
+	const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+
+	if (action !== "create" && projectId && !isPlatformAdmin) {
+		const proj = await db.query?.projects?.findFirst?.({
+			where: eq(projects.projectId, projectId),
+			columns: { organizationId: true },
+		});
+		if (proj && proj.organizationId !== organizationId) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: "You are not authorized to access this project.",
+			});
+		}
+	}
+
 	if (
 		action !== "create" &&
 		projectId &&
@@ -250,6 +266,18 @@ export const checkServicePermissionAndAccess = async (
 	const organizationId = ctx.session.activeOrganizationId;
 	const memberRecord = await findMemberByUserId(userId, organizationId);
 	await checkPermission(ctx, permissions);
+
+	const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+	if (serviceId && !isPlatformAdmin) {
+		const service = await findServiceById(serviceId);
+		if (service && service.organizationId && service.organizationId !== organizationId) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: "You are not authorized to access this service.",
+			});
+		}
+	}
+
 	if (memberRecord.role !== "owner" && memberRecord.role !== "admin") {
 		if (!memberRecord.accessedServices.includes(serviceId)) {
 			throw new TRPCError({
@@ -271,15 +299,42 @@ export const checkServiceAccess = async (
 
 	await checkPermission(ctx, { service: [action] });
 
-	if (memberRecord.role !== "owner" && memberRecord.role !== "admin") {
-		if (action === "create") {
+	const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+
+	if (action === "create") {
+		if (serviceId && !isPlatformAdmin) {
+			const proj = await db.query?.projects?.findFirst?.({
+				where: eq(projects.projectId, serviceId),
+				columns: { organizationId: true },
+			});
+			if (proj && proj.organizationId !== organizationId) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "You are not authorized to access this project.",
+				});
+			}
+		}
+
+		if (memberRecord.role !== "owner" && memberRecord.role !== "admin") {
 			if (!memberRecord.accessedProjects.includes(serviceId)) {
 				throw new TRPCError({
 					code: "UNAUTHORIZED",
 					message: "You don't have access to this project",
 				});
 			}
-		} else {
+		}
+	} else {
+		if (serviceId && !isPlatformAdmin) {
+			const service = await findServiceById(serviceId);
+			if (service && service.organizationId && service.organizationId !== organizationId) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "You are not authorized to access this service.",
+				});
+			}
+		}
+
+		if (memberRecord.role !== "owner" && memberRecord.role !== "admin") {
 			if (!memberRecord.accessedServices.includes(serviceId)) {
 				throw new TRPCError({
 					code: "UNAUTHORIZED",
@@ -300,6 +355,21 @@ export const checkEnvironmentAccess = async (
 	const memberRecord = await findMemberByUserId(userId, organizationId);
 
 	await checkPermission(ctx, { environment: [action] });
+
+	const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+
+	if (action !== "create" && environmentId && !isPlatformAdmin) {
+		const env = await db.query?.environments?.findFirst?.({
+			where: eq(environments.environmentId, environmentId),
+			with: { project: { columns: { organizationId: true } } },
+		});
+		if (env && env.project && env.project.organizationId !== organizationId) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: "You are not authorized to access this environment.",
+			});
+		}
+	}
 
 	if (
 		action !== "create" &&
@@ -325,6 +395,20 @@ export const checkEnvironmentCreationPermission = async (
 
 	await checkPermission(ctx, { environment: ["create"] });
 
+	const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+	if (projectId && !isPlatformAdmin) {
+		const proj = await db.query?.projects?.findFirst?.({
+			where: eq(projects.projectId, projectId),
+			columns: { organizationId: true },
+		});
+		if (proj && proj.organizationId !== organizationId) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: "You are not authorized to access this project.",
+			});
+		}
+	}
+
 	if (memberRecord.role !== "owner" && memberRecord.role !== "admin") {
 		if (!memberRecord.accessedProjects.includes(projectId)) {
 			throw new TRPCError({
@@ -344,6 +428,20 @@ export const checkEnvironmentDeletionPermission = async (
 	const memberRecord = await findMemberByUserId(userId, organizationId);
 
 	await checkPermission(ctx, { environment: ["delete"] });
+
+	const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+	if (projectId && !isPlatformAdmin) {
+		const proj = await db.query?.projects?.findFirst?.({
+			where: eq(projects.projectId, projectId),
+			columns: { organizationId: true },
+		});
+		if (proj && proj.organizationId !== organizationId) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: "You are not authorized to access this project.",
+			});
+		}
+	}
 
 	if (memberRecord.role !== "owner" && memberRecord.role !== "admin") {
 		if (!memberRecord.accessedProjects.includes(projectId)) {

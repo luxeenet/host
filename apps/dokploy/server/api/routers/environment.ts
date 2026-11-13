@@ -290,6 +290,13 @@ export const environmentRouter = createTRPCRouter({
 					});
 				}
 
+				if (IS_CLOUD) {
+					await assertEnvironmentLimit(
+						ctx.session.activeOrganizationId,
+						environment.projectId,
+					);
+				}
+
 				if (ctx.user.role !== "owner" && ctx.user.role !== "admin") {
 					const { accessedEnvironments } = await findMemberByUserId(
 						ctx.user.id,

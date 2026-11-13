@@ -889,14 +889,13 @@ export const projectRouter = createTRPCRouter({
 			try {
 				await checkProjectAccess(ctx, "create");
 
-				const sourceEnvironment = input.duplicateInSameProject
-					? await findEnvironmentById(input.sourceEnvironmentId)
-					: null;
+				const sourceEnvironment = await findEnvironmentById(
+					input.sourceEnvironmentId,
+				);
 
 				if (
-					input.duplicateInSameProject &&
 					sourceEnvironment?.project.organizationId !==
-						ctx.session.activeOrganizationId
+					ctx.session.activeOrganizationId
 				) {
 					throw new TRPCError({
 						code: "UNAUTHORIZED",
@@ -904,20 +903,36 @@ export const projectRouter = createTRPCRouter({
 					});
 				}
 
-				if (
-					input.duplicateInSameProject &&
-					sourceEnvironment &&
-					ctx.user.role !== "owner" &&
-					ctx.user.role !== "admin"
-				) {
-					const { accessedProjects } = await findMemberByUserId(
-						ctx.user.id,
-						ctx.session.activeOrganizationId,
-					);
-					if (!accessedProjects.includes(sourceEnvironment.project.projectId)) {
+				if (ctx.user.role !== "owner" && ctx.user.role !== "admin") {
+					const { accessedProjects, accessedEnvironments } =
+						await findMemberByUserId(
+							ctx.user.id,
+							ctx.session.activeOrganizationId,
+						);
+					if (
+						!accessedProjects.includes(sourceEnvironment.project.projectId) ||
+						!accessedEnvironments.includes(sourceEnvironment.environmentId)
+					) {
 						throw new TRPCError({
 							code: "UNAUTHORIZED",
-							message: "You don't have access to this project",
+							message: "You don't have access to this project or environment",
+						});
+					}
+				}
+
+				if (!input.duplicateInSameProject) {
+					await assertEntitlement(
+						PlanEntitlementService.checkCanCreateProject(
+							ctx.session.activeOrganizationId,
+						),
+					);
+
+					const admin = await findUserById(ctx.user.ownerId);
+
+					if (admin.serversQuantity === 0 && IS_CLOUD) {
+						throw new TRPCError({
+							code: "NOT_FOUND",
+							message: "No servers available, Please subscribe to a plan",
 						});
 					}
 				}
@@ -937,6 +952,32 @@ export const projectRouter = createTRPCRouter({
 					const servicesToDuplicate = input.selectedServices || [];
 
 					const duplicateService = async (id: string, type: string) => {
+						const { findServiceById } = await import("@dokploy/server");
+						const serviceLookup = await findServiceById(id);
+						if (
+							!serviceLookup ||
+							serviceLookup.organizationId !==
+								ctx.session.activeOrganizationId
+						) {
+							throw new TRPCError({
+								code: "UNAUTHORIZED",
+								message: "You are not authorized to duplicate this service",
+							});
+						}
+
+						if (ctx.user.role !== "owner" && ctx.user.role !== "admin") {
+							const { accessedServices } = await findMemberByUserId(
+								ctx.user.id,
+								ctx.session.activeOrganizationId,
+							);
+							if (!accessedServices.includes(id)) {
+								throw new TRPCError({
+									code: "UNAUTHORIZED",
+									message: "You don't have access to this service",
+								});
+							}
+						}
+
 						switch (type) {
 							case "application": {
 								const {

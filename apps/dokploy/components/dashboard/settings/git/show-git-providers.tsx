@@ -59,6 +59,7 @@ export const ShowGitProviders = () => {
 	const url = useUrl();
 	const isOrgAdmin =
 		currentMember?.role === "owner" || currentMember?.role === "admin";
+	const isPlatformAdmin = Boolean((currentMember?.user as any)?.isPlatformAdmin);
 
 	const isProviderAvailable = (providerId: string) => {
 		if (!availability) return false;
@@ -134,11 +135,17 @@ export const ShowGitProviders = () => {
 											</div>
 										) : isGithubAvailable && !installInfo?.url ? (
 											<div className="space-y-2">
-												<h4 className="text-base font-semibold">GitHub Platform App Not Configured</h4>
+												<h4 className="text-base font-semibold">
+													{isPlatformAdmin
+														? "GitHub Platform App Not Configured"
+														: "GitHub App Connection"}
+												</h4>
 												<p className="text-sm text-muted-foreground">
-													GitHub integration is enabled, but the platform GitHub App credentials or App Slug have not been configured by the administrator.
+													{isPlatformAdmin
+														? "GitHub integration is enabled, but the platform GitHub App credentials or App Slug have not been configured by the administrator."
+														: "The official GitHub connection is currently being initialized. You can connect your repository using a custom Git provider connection below."}
 												</p>
-												{isOrgAdmin && (
+												{isPlatformAdmin && (
 													<Button variant="outline" asChild size="sm">
 														<Link href="/dashboard/settings/integrations">
 															Configure in Platform Integrations

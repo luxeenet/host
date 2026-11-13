@@ -11,6 +11,13 @@ vi.mock("@dokploy/server", () => ({
 	findCertificateById: vi.fn(),
 	removeCertificateById: vi.fn(),
 	updateCertificate: vi.fn(),
+	createRegistry: vi.fn(),
+	findRegistryById: vi.fn(),
+	removeRegistry: vi.fn(),
+	updateRegistry: vi.fn(),
+	safeDockerLoginCommand: vi.fn(),
+	execAsyncRemote: vi.fn(),
+	execFileAsync: vi.fn(),
 	IS_CLOUD: false,
 }));
 
@@ -22,6 +29,10 @@ vi.mock("@dokploy/server/db", () => ({
 			},
 			certificates: {
 				findMany: vi.fn().mockResolvedValue([]),
+			},
+			registry: {
+				findMany: vi.fn().mockResolvedValue([]),
+				findFirst: vi.fn().mockResolvedValue(null),
 			},
 		},
 	},
@@ -49,6 +60,7 @@ import { sshRouter } from "../../server/api/routers/ssh-key";
 import { aiRouter } from "../../server/api/routers/ai";
 import { auditLogRouter } from "../../server/api/routers/proprietary/audit-log";
 import { certificateRouter } from "../../server/api/routers/certificate";
+import { registryRouter } from "../../server/api/routers/registry";
 import { requirePlatformAdminSession } from "../../utils/server-auth-guards";
 
 describe("Admin-Only Settings Tabs (AI, SSH Keys, Audit Logs)", () => {
@@ -238,6 +250,68 @@ describe("Admin-Only Settings Tabs (AI, SSH Keys, Audit Logs)", () => {
 
 		it("allows platform admin to list certificates", async () => {
 			const caller = certificateRouter.createCaller(adminCtx as any);
+			const result = await caller.all();
+			expect(result).toEqual([]);
+		});
+	});
+
+	describe("Registry Router (registryRouter) Access Control", () => {
+		it("returns empty array for non-platform admin when listing registries", async () => {
+			const caller = registryRouter.createCaller(customerCtx as any);
+			const result = await caller.all();
+			expect(result).toEqual([]);
+		});
+
+		it("strictly denies non-platform admin from creating a registry (docker login on host)", async () => {
+			const caller = registryRouter.createCaller(customerCtx as any);
+			await expect(
+				caller.create({
+					registryName: "Docker Hub",
+					username: "myuser",
+					password: "mypassword",
+					registryUrl: "docker.io",
+					registryType: "cloud",
+					imagePrefix: null,
+				}),
+			).rejects.toThrowError(TRPCError);
+			await expect(
+				caller.create({
+					registryName: "Docker Hub",
+					username: "myuser",
+					password: "mypassword",
+					registryUrl: "docker.io",
+					registryType: "cloud",
+					imagePrefix: null,
+				}),
+			).rejects.toMatchObject({
+				code: "FORBIDDEN",
+				message: "Platform administrator access required.",
+			});
+		});
+
+		it("strictly denies non-platform admin from removing a registry (docker logout on host)", async () => {
+			const caller = registryRouter.createCaller(customerCtx as any);
+			await expect(
+				caller.remove({
+					registryId: "reg-1",
+				}),
+			).rejects.toThrowError(TRPCError);
+		});
+
+		it("strictly denies non-platform admin from testing a registry", async () => {
+			const caller = registryRouter.createCaller(customerCtx as any);
+			await expect(
+				caller.testRegistry({
+					username: "myuser",
+					password: "mypassword",
+					registryUrl: "docker.io",
+					registryType: "cloud",
+				}),
+			).rejects.toThrowError(TRPCError);
+		});
+
+		it("allows platform admin to list registries", async () => {
+			const caller = registryRouter.createCaller(adminCtx as any);
 			const result = await caller.all();
 			expect(result).toEqual([]);
 		});

@@ -75,6 +75,8 @@ export const ShowRollbackSettings = ({ applicationId, children }: Props) => {
 		api.application.update.useMutation();
 
 	const { data: registries } = api.registry.all.useQuery();
+	const { data: authUser } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean((authUser?.user as any)?.isPlatformAdmin);
 
 	const form = useForm<FormValues>({
 		resolver: zodResolver(formSchema),
@@ -193,12 +195,16 @@ export const ShowRollbackSettings = ({ applicationId, children }: Props) => {
 										{!registries || registries.length === 0 ? (
 											<FormDescription className="text-amber-600 dark:text-amber-500">
 												No registries available. Please{" "}
-												<Link
-													href="/dashboard/settings/registry"
-													className="underline font-medium hover:text-amber-700 dark:hover:text-amber-400"
-												>
-													configure a registry
-												</Link>{" "}
+												{isPlatformAdmin ? (
+													<Link
+														href="/dashboard/settings/registry"
+														className="underline font-medium hover:text-amber-700 dark:hover:text-amber-400"
+													>
+														configure a registry
+													</Link>
+												) : (
+													<span>contact your system administrator</span>
+												)}{" "}
 												first to enable rollbacks.
 											</FormDescription>
 										) : (

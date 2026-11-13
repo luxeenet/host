@@ -25,10 +25,10 @@ export const ShowRegistry = () => {
 					<CardHeader className="">
 						<CardTitle className="text-xl flex flex-row gap-2">
 							<Package className="size-6 text-muted-foreground self-center" />
-							Docker Registry
+							Container Registry
 						</CardTitle>
 						<CardDescription>
-							Manage your Docker Registry configurations
+							Manage container registry configurations for private image distribution
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-2 py-8 border-t">

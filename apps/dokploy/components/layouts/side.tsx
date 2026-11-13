@@ -354,6 +354,7 @@ export const MENU: Menu = {
 			title: "Registry",
 			url: "/dashboard/settings/registry",
 			icon: Package,
+			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},
 		{
 			isSingle: true,

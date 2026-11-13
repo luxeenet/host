@@ -21,9 +21,9 @@ import {
 	apiUpdateRegistry,
 	registry,
 } from "@/server/db/schema";
-import { createTRPCRouter, withPermission } from "../trpc";
+import { createTRPCRouter, platformAdminProcedure, protectedProcedure } from "../trpc";
 export const registryRouter = createTRPCRouter({
-	create: withPermission("registry", "create")
+	create: platformAdminProcedure
 		.input(apiCreateRegistry)
 		.mutation(async ({ ctx, input }) => {
 			const reg = await createRegistry(input, ctx.session.activeOrganizationId);
@@ -35,7 +35,7 @@ export const registryRouter = createTRPCRouter({
 			});
 			return reg;
 		}),
-	remove: withPermission("registry", "delete")
+	remove: platformAdminProcedure
 		.input(apiRemoveRegistry)
 		.mutation(async ({ ctx, input }) => {
 			const registry = await findRegistryById(input.registryId);
@@ -53,7 +53,7 @@ export const registryRouter = createTRPCRouter({
 			});
 			return await removeRegistry(input.registryId);
 		}),
-	update: withPermission("registry", "create")
+	update: platformAdminProcedure
 		.input(apiUpdateRegistry)
 		.mutation(async ({ input, ctx }) => {
 			const { registryId, ...rest } = input;
@@ -83,13 +83,17 @@ export const registryRouter = createTRPCRouter({
 			});
 			return true;
 		}),
-	all: withPermission("registry", "read").query(async ({ ctx }) => {
+	all: protectedProcedure.query(async ({ ctx }) => {
+		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+		if (!isPlatformAdmin) {
+			return [];
+		}
 		const registryResponse = await db.query.registry.findMany({
 			where: eq(registry.organizationId, ctx.session.activeOrganizationId),
 		});
 		return registryResponse;
 	}),
-	one: withPermission("registry", "read")
+	one: platformAdminProcedure
 		.input(apiFindOneRegistry)
 		.query(async ({ input, ctx }) => {
 			const registry = await findRegistryById(input.registryId);
@@ -101,7 +105,7 @@ export const registryRouter = createTRPCRouter({
 			}
 			return registry;
 		}),
-	testRegistry: withPermission("registry", "read")
+	testRegistry: platformAdminProcedure
 		.input(apiTestRegistry)
 		.mutation(async ({ input }) => {
 			try {
@@ -147,7 +151,7 @@ export const registryRouter = createTRPCRouter({
 				});
 			}
 		}),
-	testRegistryById: withPermission("registry", "read")
+	testRegistryById: platformAdminProcedure
 		.input(apiTestRegistryById)
 		.mutation(async ({ input, ctx }) => {
 			try {

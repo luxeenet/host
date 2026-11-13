@@ -151,14 +151,24 @@ export default function BillingPage() {
 			<Head>
 				<title>Billing & Invoices - {brand.APP_NAME}</title>
 			</Head>
-			<div className="space-y-8">
-				{/* Page Header */}
-				<div>
-					<h1 className="text-2xl font-bold text-foreground tracking-tight">Billing & Subscriptions</h1>
-					<p className="text-muted-foreground text-sm mt-1">
-						Manage your {brand.APP_NAME} subscription plan, pay invoices via SonicPesa Mobile Money (M-Pesa, Tigo, Airtel, Halopesa), and download receipts.
-					</p>
-				</div>
+
+			<BreadcrumbSidebar
+				list={[
+					{ name: "Home", href: "/dashboard/home" },
+					{ name: "Billing", href: "/dashboard/billing" },
+				]}
+			/>
+
+			<div className="w-full">
+				<Card className="h-full bg-sidebar p-2.5 rounded-xl min-h-[85vh]">
+					<div className="rounded-xl bg-background shadow-md p-6 flex flex-col gap-6 h-full">
+						{/* Page Header */}
+						<div>
+							<h1 className="text-3xl font-semibold tracking-tight">Billing & Subscriptions</h1>
+							<p className="text-sm text-muted-foreground mt-1">
+								Manage your {brand.APP_NAME} subscription plan, pay invoices via SonicPesa Mobile Money (M-Pesa, Tigo, Airtel, Halopesa), and download receipts.
+							</p>
+						</div>
 
 				{/* Active Subscription Banner */}
 				<div className="rounded-xl border bg-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm">
@@ -251,13 +261,13 @@ export default function BillingPage() {
 										onClick={() => setSelectedPlanId(p.id)}
 										className={`p-3 rounded-lg border text-left transition-all ${
 											selectedPlanId === p.id
-												? "bg-accent border-foreground/30 font-medium text-foreground shadow-sm"
-												: "bg-muted/40/60 border text-muted-foreground hover:border"
+												? "bg-accent border-primary font-medium text-foreground shadow-sm"
+												: "bg-muted/40 border text-muted-foreground hover:border-foreground/30"
 										}`}
 									>
 										<div className="flex justify-between items-center">
 											<span className="text-xs font-bold text-foreground">{p.name}</span>
-											{selectedPlanId === p.id && <CheckCircle className="w-3.5 h-3.5 text-foreground font-semibold" />}
+											{selectedPlanId === p.id && <CheckCircle className="size-3.5 text-emerald-500" />}
 										</div>
 										<p className="text-sm font-bold text-foreground mt-1">
 											{Number(p.price).toLocaleString()} <span className="text-[10px] text-muted-foreground font-normal">TZS</span>
@@ -271,12 +281,12 @@ export default function BillingPage() {
 						{/* Mobile Money Operator selection */}
 						<div className="space-y-2 pt-2">
 							<label className="text-xs font-medium text-foreground block">Mobile Network Operator</label>
-							<div className="grid grid-cols-4 gap-2">
+							<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
 								{[
-									{ id: "mpesa", name: "Vodacom M-Pesa", color: "text-red-400" },
-									{ id: "tigopesa", name: "Tigo Pesa", color: "text-blue-400" },
-									{ id: "airtel", name: "Airtel Money", color: "text-red-500" },
-									{ id: "halopesa", name: "Halopesa", color: "text-amber-400" },
+									{ id: "mpesa", name: "Vodacom M-Pesa" },
+									{ id: "tigopesa", name: "Tigo Pesa" },
+									{ id: "airtel", name: "Airtel Money" },
+									{ id: "halopesa", name: "Halopesa" },
 								].map((net) => (
 									<button
 										key={net.id}
@@ -284,8 +294,8 @@ export default function BillingPage() {
 										onClick={() => setPaymentMethod(net.id as any)}
 										className={`p-2.5 rounded-lg border text-center transition-all ${
 											paymentMethod === net.id
-												? "bg-secondary border-foreground/30 text-foreground"
-												: "bg-muted/40 border text-muted-foreground hover:border"
+												? "bg-accent border-primary text-foreground font-medium shadow-sm"
+												: "bg-muted/40 border text-muted-foreground hover:border-foreground/30"
 										}`}
 									>
 										<p className="text-xs font-semibold">{net.name}</p>
@@ -369,9 +379,9 @@ export default function BillingPage() {
 							variant="outline"
 							size="sm"
 							onClick={() => utils.subscription.getInvoices.invalidate()}
-							className="text-xs border text-foreground"
+							className="text-xs"
 						>
-							<RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
+							<RefreshCw className="size-3.5 mr-1.5" /> Refresh
 						</Button>
 					</div>
 
@@ -391,7 +401,7 @@ export default function BillingPage() {
 								{invoicesLoading ? (
 									<tr>
 										<td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
-											<RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-foreground font-semibold" />
+											<RefreshCw className="size-5 animate-spin mx-auto mb-2 text-muted-foreground" />
 											Loading invoices...
 										</td>
 									</tr>
@@ -425,10 +435,10 @@ export default function BillingPage() {
 													<span
 														className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase ${
 															inv.status === "paid"
-																? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+																? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
 																: inv.status === "open"
-																	? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-																	: "bg-secondary text-muted-foreground border"
+																	? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+																	: "bg-muted text-muted-foreground border"
 														}`}
 													>
 														{inv.status}
@@ -451,6 +461,8 @@ export default function BillingPage() {
 						</table>
 					</div>
 				</div>
+					</div>
+				</Card>
 			</div>
 
 			{/* SonicPesa Live USSD Push Dialog */}
@@ -505,7 +517,7 @@ export default function BillingPage() {
 								</div>
 								<Button
 									onClick={() => setIsModalOpen(false)}
-									className="bg-emerald-600 hover:bg-emerald-500 text-foreground text-xs px-6 mt-2"
+									className="text-xs px-6 mt-2"
 								>
 									Done
 								</Button>

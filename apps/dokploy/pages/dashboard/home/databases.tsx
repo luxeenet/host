@@ -513,12 +513,12 @@ export default function ManagedDatabasesPage() {
 									const internalHost = `${db.appName}:${cfg.defaultPort}`;
 									const externalHost = db.externalPort
 										? `db.hatdot.cloud:${db.externalPort}`
-										: "Not exposed";
+										: "Internal Network Only";
 
 									const authSourceInfo =
 										db.engine === "mongo"
-											? `auth: ${db.authSource || db.databaseName || "admin"}`
-											: `db: ${db.databaseName || "default"}`;
+											? "Protected Auth"
+											: "Native Auth";
 
 									return (
 										<div
@@ -726,9 +726,8 @@ export default function ManagedDatabasesPage() {
 								</span>
 							</DialogTitle>
 							<DialogDescription className="text-xs">
-								Connection details and credentials for your database.
-								External connections are routed via db.hatdot.cloud with direct
-								connection support.
+								Connection credentials and parameters for your database. Direct
+								connection strings and secure endpoints are provided below.
 							</DialogDescription>
 						</DialogHeader>
 
@@ -888,13 +887,12 @@ export default function ManagedDatabasesPage() {
 						<div className="rounded-lg bg-muted/50 border p-3 text-xs space-y-1">
 							<div className="flex items-center gap-1.5 font-semibold text-foreground">
 								<Shield className="size-3.5 text-primary" />
-								<span>Automated Isolation & AuthSource Handling</span>
+								<span>Dedicated Security & Automated Deployment</span>
 							</div>
 							<p className="text-[11px] text-muted-foreground">
-								HatDot automatically isolates customer databases, registers
-								credentials with standard SCRAM-SHA / native protocols, sets the
-								correct authSource, and allocates external port routing via
-								db.hatdot.cloud.
+								Your database is automatically provisioned and deployed in a
+								dedicated, isolated environment with encrypted persistent storage,
+								production-ready credentials, and secure connection endpoints.
 							</p>
 						</div>
 					</div>

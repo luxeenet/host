@@ -255,7 +255,14 @@ export default function ManagedDatabasesPage() {
 
 	const handleOpenProvisionModal = () => {
 		const randSuffix = Math.random().toString(36).substring(2, 7);
-		const defaultPass = `SecPass_${Math.random().toString(36).substring(2, 10)}!`;
+		const randChars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+		let randomPassPart = "";
+		for (let i = 0; i < 10; i++) {
+			randomPassPart += randChars.charAt(
+				Math.floor(Math.random() * randChars.length),
+			);
+		}
+		const defaultPass = `SecPass_${randomPassPart}@`;
 		setProvEngine("mongo");
 		setProvName(`db-${randSuffix}`);
 		setProvDbName(`db_${randSuffix}`.replace(/[^a-z0-9_]/gi, "_"));
@@ -271,6 +278,19 @@ export default function ManagedDatabasesPage() {
 	const handleProvisionSubmit = async () => {
 		if (!provName.trim()) {
 			toast.error("Please enter a database instance name");
+			return;
+		}
+
+		if (!provPassword || !provPassword.trim()) {
+			toast.error("Please enter a database password");
+			return;
+		}
+
+		const DB_PASS_REGEX = /^[a-zA-Z0-9@#%^&*()_+\-=[\]{}|;:,.<>?~`]*$/;
+		if (!DB_PASS_REGEX.test(provPassword)) {
+			toast.error(
+				"Password contains invalid characters. Please avoid: $ ! ' \" \\ / and space characters for database compatibility",
+			);
 			return;
 		}
 
@@ -366,7 +386,14 @@ export default function ManagedDatabasesPage() {
 			setIsProvisionOpen(false);
 			await refetchOverview();
 		} catch (err: any) {
-			toast.error(err?.message || "Failed to provision database instance");
+			let message = err?.message || "Failed to provision database instance";
+			try {
+				const parsed = JSON.parse(message);
+				if (Array.isArray(parsed) && parsed[0]?.message) {
+					message = parsed[0].message;
+				}
+			} catch {}
+			toast.error(message);
 		} finally {
 			setIsProvisioning(false);
 		}
@@ -880,6 +907,9 @@ export default function ManagedDatabasesPage() {
 									onChange={(e) => setProvPassword(e.target.value)}
 									className="font-mono"
 								/>
+								<p className="text-[10px] text-muted-foreground">
+									Avoid $, !, &apos;, &quot;, \, / and space characters for database compatibility.
+								</p>
 							</div>
 						</div>
 

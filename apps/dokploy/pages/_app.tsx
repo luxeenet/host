@@ -10,7 +10,6 @@ import { SearchCommand } from "@/components/dashboard/search-command";
 import { Analytics } from "@/components/shared/analytics";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useDevtoolsProtection } from "@/hooks/use-devtools-protection";
 import { api } from "@/utils/api";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -28,7 +27,6 @@ const MyApp = ({
 	Component,
 	pageProps: { ...pageProps },
 }: AppPropsWithLayout) => {
-	useDevtoolsProtection();
 	const getLayout = Component.getLayout ?? ((page) => page);
 
 	return (

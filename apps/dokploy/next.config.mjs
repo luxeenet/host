@@ -16,6 +16,15 @@ const nextConfig = {
 		ignoreBuildErrors: true,
 	},
 	transpilePackages: ["@dokploy/server"],
+	webpack(config, { dev, isServer }) {
+		if (!dev && !isServer) {
+			config.optimization = {
+				...config.optimization,
+				minimize: true,
+			};
+		}
+		return config;
+	},
 	async headers() {
 		return [
 			{

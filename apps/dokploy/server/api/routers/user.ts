@@ -121,7 +121,15 @@ export const userRouter = createTRPCRouter({
 				}
 			}
 
-			return memberResult;
+			if (memberResult?.user) {
+			const isPlatformAdmin = Boolean(memberResult.user.isPlatformAdmin);
+			if (!isPlatformAdmin) {
+				delete (memberResult.user as any).isPlatformAdmin;
+			}
+			(memberResult.user as any).x_pa = isPlatformAdmin;
+		}
+
+		return memberResult;
 		}),
 	session: publicProcedure.query(async ({ ctx }) => {
 		if (!ctx.user || !ctx.session || !ctx.session.activeOrganizationId) {
@@ -174,6 +182,14 @@ export const userRouter = createTRPCRouter({
 				},
 			},
 		});
+
+		if (memberResult?.user) {
+			const isPlatformAdmin = Boolean(memberResult.user.isPlatformAdmin);
+			if (!isPlatformAdmin) {
+				delete (memberResult.user as any).isPlatformAdmin;
+			}
+			(memberResult.user as any).x_pa = isPlatformAdmin;
+		}
 
 		return memberResult;
 	}),

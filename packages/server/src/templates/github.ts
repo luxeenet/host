@@ -50,6 +50,38 @@ interface TemplateMetadata {
 	tags: string[];
 }
 
+export const sanitizeTemplateDescription = (
+	desc: string | null | undefined,
+): string => {
+	if (!desc) return "";
+	return desc
+		.replace(
+			/Self-host it on your own server with Dokploy,\s*which deploys\b/gi,
+			"Deploys",
+		)
+		.replace(
+			/Self-host it on your own server with Dokploy\b/gi,
+			"Deploy on your cloud platform",
+		)
+		.replace(
+			/Deploy ([^.]+) with Docker Compose on Dokploy in minutes/gi,
+			"Deploy $1 in minutes",
+		)
+		.replace(
+			/Deploy ([^.]+) with Docker Compose on Dokploy/gi,
+			"Deploy $1 as a managed service",
+		)
+		.replace(
+			/Self-host ([^.]+) on Dokploy in minutes/gi,
+			"Deploy $1 in minutes",
+		)
+		.replace(/on Dokploy in minutes/gi, "in minutes")
+		.replace(/with Docker Compose on Dokploy/gi, "as a managed service")
+		.replace(/on Dokploy/gi, "on your cloud platform")
+		.replace(/with Dokploy/gi, "with our cloud platform")
+		.replace(/\bDokploy\b/gi, "Cloud Platform");
+};
+
 /**
  * Fetches the list of available templates from meta.json
  */
@@ -63,15 +95,29 @@ export async function fetchTemplatesList(
 		throw new Error(`Failed to fetch templates: ${response.statusText}`);
 	}
 	const templates = (await response.json()) as TemplateMetadata[];
-	return templates.map((template) => ({
-		id: template.id,
-		name: template.name,
-		description: template.description,
-		version: template.version,
-		logo: template.logo,
-		links: template.links,
-		tags: template.tags,
-	}));
+	return templates
+		.filter((template) => {
+			const id = (template.id || "").toLowerCase();
+			const name = (template.name || "").toLowerCase();
+			// Remove templates named Dokploy or designed for managing Dokploy internally
+			if (
+				id.includes("dokploy") ||
+				name.includes("dokploy") ||
+				id === "zeqqat"
+			) {
+				return false;
+			}
+			return true;
+		})
+		.map((template) => ({
+			id: template.id,
+			name: template.name,
+			description: sanitizeTemplateDescription(template.description),
+			version: template.version,
+			logo: template.logo,
+			links: template.links,
+			tags: template.tags,
+		}));
 }
 
 const LOGO_MIME_TYPES: Record<string, string> = {

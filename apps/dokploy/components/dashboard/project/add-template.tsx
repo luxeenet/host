@@ -71,7 +71,7 @@ import {
 import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
 
-const TEMPLATE_BASE_URL_KEY = "dokploy_template_base_url";
+const TEMPLATE_BASE_URL_KEY = "hatdot_template_base_url";
 
 interface Props {
 	environmentId: string;
@@ -115,6 +115,11 @@ export const AddTemplate = ({ environmentId, baseUrl }: Props) => {
 		{
 			enabled: open,
 		},
+	);
+	const { data: authUser } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean(
+		(authUser as any)?.user?.isPlatformAdmin ||
+			(authUser as any)?.isPlatformAdmin,
 	);
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { data: servers } = api.server.withSSHKey.useQuery();
@@ -169,6 +174,15 @@ export const AddTemplate = ({ environmentId, baseUrl }: Props) => {
 
 	const templates =
 		data?.filter((template) => {
+			const lowerId = (template.id || "").toLowerCase();
+			const lowerName = (template.name || "").toLowerCase();
+			if (
+				lowerId.includes("dokploy") ||
+				lowerName.includes("dokploy") ||
+				lowerId === "zeqqat"
+			) {
+				return false;
+			}
 			const matchesTags =
 				selectedTags.length === 0 ||
 				template.tags.some((tag) => selectedTags.includes(tag));
@@ -223,14 +237,16 @@ export const AddTemplate = ({ environmentId, baseUrl }: Props) => {
 									className="w-full"
 									value={query}
 								/>
-								<Input
-									placeholder="Base URL (optional)"
-									onChange={(e) =>
-										setCustomBaseUrl(e.target.value || undefined)
-									}
-									className="w-full sm:w-[300px]"
-									value={customBaseUrl || ""}
-								/>
+								{isPlatformAdmin && (
+									<Input
+										placeholder="Base URL (optional)"
+										onChange={(e) =>
+											setCustomBaseUrl(e.target.value || undefined)
+										}
+										className="w-full sm:w-[300px]"
+										value={customBaseUrl || ""}
+									/>
+								)}
 								<Popover modal={true}>
 									<PopoverTrigger asChild>
 										<Button

@@ -83,6 +83,7 @@ export const createCompose = async (
 
 export const createComposeByTemplate = async (
 	input: typeof compose.$inferInsert,
+	tx: any = db,
 ) => {
 	const appName = cleanAppName(input.appName);
 	if (appName) {
@@ -95,14 +96,14 @@ export const createComposeByTemplate = async (
 			});
 		}
 	}
-	const newDestination = await db
+	const newDestination = await tx
 		.insert(compose)
 		.values({
 			...input,
 			appName,
 		})
 		.returning()
-		.then((value) => value[0]);
+		.then((value: any) => value[0]);
 
 	if (!newDestination) {
 		throw new TRPCError({

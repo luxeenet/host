@@ -626,8 +626,16 @@ export const composeRouter = createTRPCRouter({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const environment = await findEnvironmentById(input.environmentId);
+			const project = await findProjectById(environment.projectId);
 
 			await checkServiceAccess(ctx, environment.projectId, "create");
+
+			if (project.organizationId !== ctx.session.activeOrganizationId) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this project",
+				});
+			}
 
 			const webServerSettings = await getWebServerSettings();
 			if (
@@ -657,8 +665,6 @@ export const composeRouter = createTRPCRouter({
 
 			let serverIp = "127.0.0.1";
 
-			const project = await findProjectById(environment.projectId);
-
 			if (input.serverId) {
 				const server = await findServerById(input.serverId);
 				serverIp = server.ipAddress;
@@ -683,50 +689,108 @@ export const composeRouter = createTRPCRouter({
 				projectName: projectName,
 			});
 
-			const compose = await createComposeByTemplate({
-				...input,
-				composeFile: template.dockerCompose,
-				env: generate.envs?.join("\n"),
-				serverId: input.serverId,
-				name: input.id,
-				sourceType: "raw",
-				appName: appName,
-				icon: templateLogo,
-			});
+			const compose = await PlanEntitlementService.withAtomicQuotaLock(
+				ctx.session.activeOrganizationId,
+				async (tx) => {
+					// Plan entitlement — template deployments count as application slots
+					await assertEntitlement(
+						PlanEntitlementService.checkCanCreateApplication(
+							ctx.session.activeOrganizationId,
+							tx,
+						),
+					);
 
-			await addNewService(ctx, compose.composeId);
+					const createdCompose = await createComposeByTemplate(
+						{
+							...input,
+							composeFile: template.dockerCompose,
+							env: generate.envs?.join("\n"),
+							serverId: input.serverId,
+							name: input.id,
+							sourceType: "raw",
+							appName: appName,
+							icon: templateLogo,
+						},
+						tx,
+					);
 
-			if (generate.mounts && generate.mounts?.length > 0) {
-				for (const mount of generate.mounts) {
-					await createMount({
-						filePath: mount.filePath,
-						mountPath: "",
-						content: mount.content,
-						serviceId: compose.composeId,
-						serviceType: "compose",
-						type: "file",
+					await addNewService(ctx, createdCompose.composeId, tx);
+
+					if (generate.mounts && generate.mounts?.length > 0) {
+						for (const mount of generate.mounts) {
+							await createMount(
+								{
+									filePath: mount.filePath,
+									mountPath: "",
+									content: mount.content,
+									serviceId: createdCompose.composeId,
+									serviceType: "compose",
+									type: "file",
+								},
+								tx,
+							);
+						}
+					}
+
+					if (generate.domains && generate.domains?.length > 0) {
+						for (const domain of generate.domains) {
+							await createDomain(
+								{
+									...domain,
+									domainType: "compose",
+									certificateType: "none",
+									composeId: createdCompose.composeId,
+									host: domain.host || "",
+								},
+								tx,
+							);
+						}
+					}
+
+					await audit(ctx, {
+						action: "create",
+						resourceType: "compose",
+						resourceId: createdCompose.composeId,
+						resourceName: createdCompose.name,
 					});
-				}
+
+					return createdCompose;
+				},
+			);
+
+			// Automatically initiate background deployment
+			const jobData: DeploymentJob = {
+				composeId: compose.composeId,
+				organizationId:
+					ctx.session.activeOrganizationId || project.organizationId,
+				projectId: environment.projectId,
+				titleLog: `Deploy ${input.id} template`,
+				type: "deploy",
+				applicationType: "compose",
+				descriptionLog: `Automated template deployment for ${compose.name}`,
+				server: !!compose.serverId,
+				serverId: compose.serverId ?? undefined,
+			};
+
+			if (IS_CLOUD && compose.serverId) {
+				deploy(jobData).catch((error) => {
+					console.error("Background template deployment failed:", error);
+				});
+			} else {
+				myQueue
+					.add(
+						"deployments",
+						{ ...jobData },
+						{
+							removeOnComplete: true,
+							removeOnFail: true,
+						},
+					)
+					.catch((error) => {
+						console.error("Queueing template deployment failed:", error);
+					});
 			}
 
-			if (generate.domains && generate.domains?.length > 0) {
-				for (const domain of generate.domains) {
-					await createDomain({
-						...domain,
-						domainType: "compose",
-						certificateType: "none",
-						composeId: compose.composeId,
-						host: domain.host || "",
-					});
-				}
-			}
-
-			await audit(ctx, {
-				action: "create",
-				resourceType: "compose",
-				resourceId: compose.composeId,
-				resourceName: compose.name,
-			});
 			return compose;
 		}),
 

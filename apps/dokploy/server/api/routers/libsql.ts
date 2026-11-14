@@ -68,7 +68,7 @@ export const libsqlRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				return await PlanEntitlementService.withAtomicQuotaLock(
+				const newLibsql = await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
 					async (tx) => {
 						// Plan entitlement — enforce database quota
@@ -107,19 +107,19 @@ export const libsqlRouter = createTRPCRouter({
 							}
 						}
 
-						const newLibsql = await createLibsql(
+						const createdLibsql = await createLibsql(
 							{
 								...input,
 							},
 							tx,
 						);
-						await addNewService(ctx, newLibsql.libsqlId, tx);
+						await addNewService(ctx, createdLibsql.libsqlId, tx);
 
 						await createMount(
 							{
-								serviceId: newLibsql.libsqlId,
+								serviceId: createdLibsql.libsqlId,
 								serviceType: "libsql",
-								volumeName: `${newLibsql.appName}-data`,
+								volumeName: `${createdLibsql.appName}-data`,
 								mountPath: "/var/lib/sqld",
 								type: "volume",
 							},
@@ -129,25 +129,27 @@ export const libsqlRouter = createTRPCRouter({
 						await audit(ctx, {
 							action: "create",
 							resourceType: "service",
-							resourceId: newLibsql.libsqlId,
-							resourceName: newLibsql.appName,
+							resourceId: createdLibsql.libsqlId,
+							resourceName: createdLibsql.appName,
 						});
 
-						// Provision the actual database service immediately so database does not depend on deploying an application
-						provisionDatabaseService({
-							databaseId: newLibsql.libsqlId,
-							engine: "libsql",
-							serverId: newLibsql.serverId,
-						}).catch((err) => {
-							console.error(
-								`Immediate provisioning failed for libsql ${newLibsql.libsqlId}:`,
-								err,
-							);
-						});
-
-						return newLibsql;
+						return createdLibsql;
 					},
 				);
+
+				// Automatically provision and deploy the database immediately once committed
+				provisionDatabaseService({
+					databaseId: newLibsql.libsqlId,
+					engine: "libsql",
+					serverId: newLibsql.serverId,
+				}).catch((err) => {
+					console.error(
+						`Automatic deployment failed for libsql ${newLibsql.libsqlId}:`,
+						err,
+					);
+				});
+
+				return newLibsql;
 			} catch (error) {
 				if (error instanceof TRPCError) {
 					throw error;

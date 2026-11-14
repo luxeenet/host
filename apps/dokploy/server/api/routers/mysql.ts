@@ -79,7 +79,7 @@ export const mysqlRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				return await PlanEntitlementService.withAtomicQuotaLock(
+				const newMysql = await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
 					async (tx) => {
 						// Plan entitlement — enforce database quota
@@ -118,19 +118,19 @@ export const mysqlRouter = createTRPCRouter({
 							}
 						}
 
-						const newMysql = await createMysql(
+						const createdMysql = await createMysql(
 							{
 								...input,
 							},
 							tx,
 						);
-						await addNewService(ctx, newMysql.mysqlId, tx);
+						await addNewService(ctx, createdMysql.mysqlId, tx);
 
 						await createMount(
 							{
-								serviceId: newMysql.mysqlId,
+								serviceId: createdMysql.mysqlId,
 								serviceType: "mysql",
-								volumeName: `${newMysql.appName}-data`,
+								volumeName: `${createdMysql.appName}-data`,
 								mountPath: "/var/lib/mysql",
 								type: "volume",
 							},
@@ -140,25 +140,27 @@ export const mysqlRouter = createTRPCRouter({
 						await audit(ctx, {
 							action: "create",
 							resourceType: "service",
-							resourceId: newMysql.mysqlId,
-							resourceName: newMysql.appName,
+							resourceId: createdMysql.mysqlId,
+							resourceName: createdMysql.appName,
 						});
 
-						// Provision the actual database service immediately so database does not depend on deploying an application
-						provisionDatabaseService({
-							databaseId: newMysql.mysqlId,
-							engine: "mysql",
-							serverId: newMysql.serverId,
-						}).catch((err) => {
-							console.error(
-								`Immediate provisioning failed for mysql ${newMysql.mysqlId}:`,
-								err,
-							);
-						});
-
-						return newMysql;
+						return createdMysql;
 					},
 				);
+
+				// Automatically provision and deploy the database immediately once committed
+				provisionDatabaseService({
+					databaseId: newMysql.mysqlId,
+					engine: "mysql",
+					serverId: newMysql.serverId,
+				}).catch((err) => {
+					console.error(
+						`Automatic deployment failed for mysql ${newMysql.mysqlId}:`,
+						err,
+					);
+				});
+
+				return newMysql;
 			} catch (error) {
 				if (error instanceof TRPCError) {
 					throw error;

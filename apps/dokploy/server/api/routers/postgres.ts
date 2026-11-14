@@ -80,7 +80,7 @@ export const postgresRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				return await PlanEntitlementService.withAtomicQuotaLock(
+				const newPostgres = await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
 					async (tx) => {
 						// Plan entitlement — enforce database quota
@@ -119,21 +119,21 @@ export const postgresRouter = createTRPCRouter({
 							}
 						}
 
-						const newPostgres = await createPostgres(
+						const createdPostgres = await createPostgres(
 							{
 								...input,
 							},
 							tx,
 						);
-						await addNewService(ctx, newPostgres.postgresId, tx);
+						await addNewService(ctx, createdPostgres.postgresId, tx);
 
-						const mountPath = getMountPath(newPostgres.dockerImage);
+						const mountPath = getMountPath(createdPostgres.dockerImage);
 
 						await createMount(
 							{
-								serviceId: newPostgres.postgresId,
+								serviceId: createdPostgres.postgresId,
 								serviceType: "postgres",
-								volumeName: `${newPostgres.appName}-data`,
+								volumeName: `${createdPostgres.appName}-data`,
 								mountPath: mountPath,
 								type: "volume",
 							},
@@ -143,25 +143,27 @@ export const postgresRouter = createTRPCRouter({
 						await audit(ctx, {
 							action: "create",
 							resourceType: "service",
-							resourceId: newPostgres.postgresId,
-							resourceName: newPostgres.appName,
+							resourceId: createdPostgres.postgresId,
+							resourceName: createdPostgres.appName,
 						});
 
-						// Provision the actual database service immediately so database does not depend on deploying an application
-						provisionDatabaseService({
-							databaseId: newPostgres.postgresId,
-							engine: "postgres",
-							serverId: newPostgres.serverId,
-						}).catch((err) => {
-							console.error(
-								`Immediate provisioning failed for postgres ${newPostgres.postgresId}:`,
-								err,
-							);
-						});
-
-						return newPostgres;
+						return createdPostgres;
 					},
 				);
+
+				// Automatically provision and deploy the database immediately once committed
+				provisionDatabaseService({
+					databaseId: newPostgres.postgresId,
+					engine: "postgres",
+					serverId: newPostgres.serverId,
+				}).catch((err) => {
+					console.error(
+						`Automatic deployment failed for postgres ${newPostgres.postgresId}:`,
+						err,
+					);
+				});
+
+				return newPostgres;
 			} catch (error) {
 				if (error instanceof TRPCError) {
 					throw error;

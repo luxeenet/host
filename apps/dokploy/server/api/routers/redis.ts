@@ -76,7 +76,7 @@ export const redisRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				return await PlanEntitlementService.withAtomicQuotaLock(
+				const newRedis = await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
 					async (tx) => {
 						// Plan entitlement — Redis counts as a database slot
@@ -115,19 +115,19 @@ export const redisRouter = createTRPCRouter({
 							}
 						}
 
-						const newRedis = await createRedis(
+						const createdRedis = await createRedis(
 							{
 								...input,
 							},
 							tx,
 						);
-						await addNewService(ctx, newRedis.redisId, tx);
+						await addNewService(ctx, createdRedis.redisId, tx);
 
 						await createMount(
 							{
-								serviceId: newRedis.redisId,
+								serviceId: createdRedis.redisId,
 								serviceType: "redis",
-								volumeName: `${newRedis.appName}-data`,
+								volumeName: `${createdRedis.appName}-data`,
 								mountPath: "/data",
 								type: "volume",
 							},
@@ -137,25 +137,27 @@ export const redisRouter = createTRPCRouter({
 						await audit(ctx, {
 							action: "create",
 							resourceType: "service",
-							resourceId: newRedis.redisId,
-							resourceName: newRedis.appName,
+							resourceId: createdRedis.redisId,
+							resourceName: createdRedis.appName,
 						});
 
-						// Provision the actual database service immediately so database does not depend on deploying an application
-						provisionDatabaseService({
-							databaseId: newRedis.redisId,
-							engine: "redis",
-							serverId: newRedis.serverId,
-						}).catch((err) => {
-							console.error(
-								`Immediate provisioning failed for redis ${newRedis.redisId}:`,
-								err,
-							);
-						});
-
-						return newRedis;
+						return createdRedis;
 					},
 				);
+
+				// Automatically provision and deploy the database immediately once committed
+				provisionDatabaseService({
+					databaseId: newRedis.redisId,
+					engine: "redis",
+					serverId: newRedis.serverId,
+				}).catch((err) => {
+					console.error(
+						`Automatic deployment failed for redis ${newRedis.redisId}:`,
+						err,
+					);
+				});
+
+				return newRedis;
 			} catch (error) {
 				throw error;
 			}

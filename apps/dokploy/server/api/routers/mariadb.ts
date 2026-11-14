@@ -79,7 +79,7 @@ export const mariadbRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				return await PlanEntitlementService.withAtomicQuotaLock(
+				const newMariadb = await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
 					async (tx) => {
 						// Plan entitlement — enforce database quota
@@ -118,19 +118,19 @@ export const mariadbRouter = createTRPCRouter({
 							}
 						}
 
-						const newMariadb = await createMariadb(
+						const createdMariadb = await createMariadb(
 							{
 								...input,
 							},
 							tx,
 						);
-						await addNewService(ctx, newMariadb.mariadbId, tx);
+						await addNewService(ctx, createdMariadb.mariadbId, tx);
 
 						await createMount(
 							{
-								serviceId: newMariadb.mariadbId,
+								serviceId: createdMariadb.mariadbId,
 								serviceType: "mariadb",
-								volumeName: `${newMariadb.appName}-data`,
+								volumeName: `${createdMariadb.appName}-data`,
 								mountPath: "/var/lib/mysql",
 								type: "volume",
 							},
@@ -140,25 +140,27 @@ export const mariadbRouter = createTRPCRouter({
 						await audit(ctx, {
 							action: "create",
 							resourceType: "service",
-							resourceId: newMariadb.mariadbId,
-							resourceName: newMariadb.appName,
+							resourceId: createdMariadb.mariadbId,
+							resourceName: createdMariadb.appName,
 						});
 
-						// Provision the actual database service immediately so database does not depend on deploying an application
-						provisionDatabaseService({
-							databaseId: newMariadb.mariadbId,
-							engine: "mariadb",
-							serverId: newMariadb.serverId,
-						}).catch((err) => {
-							console.error(
-								`Immediate provisioning failed for mariadb ${newMariadb.mariadbId}:`,
-								err,
-							);
-						});
-
-						return newMariadb;
+						return createdMariadb;
 					},
 				);
+
+				// Automatically provision and deploy the database immediately once committed
+				provisionDatabaseService({
+					databaseId: newMariadb.mariadbId,
+					engine: "mariadb",
+					serverId: newMariadb.serverId,
+				}).catch((err) => {
+					console.error(
+						`Automatic deployment failed for mariadb ${newMariadb.mariadbId}:`,
+						err,
+					);
+				});
+
+				return newMariadb;
 			} catch (error) {
 				if (error instanceof TRPCError) {
 					throw error;

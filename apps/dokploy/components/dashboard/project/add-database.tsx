@@ -340,7 +340,7 @@ export const AddDatabase = ({ environmentId, projectName }: Props) => {
 		if (promise) {
 			await promise
 				.then(async () => {
-					toast.success("Database Created");
+					toast.success("Database created and deployment initiated!");
 					form.reset({
 						type: "postgres",
 						dockerImage: "",

@@ -79,7 +79,7 @@ export const mongoRouter = createTRPCRouter({
 
 				await checkServiceAccess(ctx, project.projectId, "create");
 
-				return await PlanEntitlementService.withAtomicQuotaLock(
+				const newMongo = await PlanEntitlementService.withAtomicQuotaLock(
 					ctx.session.activeOrganizationId,
 					async (tx) => {
 						// Plan entitlement — enforce database quota
@@ -118,19 +118,19 @@ export const mongoRouter = createTRPCRouter({
 							}
 						}
 
-						const newMongo = await createMongo(
+						const createdMongo = await createMongo(
 							{
 								...input,
 							},
 							tx,
 						);
-						await addNewService(ctx, newMongo.mongoId, tx);
+						await addNewService(ctx, createdMongo.mongoId, tx);
 
 						await createMount(
 							{
-								serviceId: newMongo.mongoId,
+								serviceId: createdMongo.mongoId,
 								serviceType: "mongo",
-								volumeName: `${newMongo.appName}-data`,
+								volumeName: `${createdMongo.appName}-data`,
 								mountPath: "/data/db",
 								type: "volume",
 							},
@@ -140,25 +140,27 @@ export const mongoRouter = createTRPCRouter({
 						await audit(ctx, {
 							action: "create",
 							resourceType: "service",
-							resourceId: newMongo.mongoId,
-							resourceName: newMongo.appName,
+							resourceId: createdMongo.mongoId,
+							resourceName: createdMongo.appName,
 						});
 
-						// Provision the actual database service immediately so database does not depend on deploying an application
-						provisionDatabaseService({
-							databaseId: newMongo.mongoId,
-							engine: "mongo",
-							serverId: newMongo.serverId,
-						}).catch((err) => {
-							console.error(
-								`Immediate provisioning failed for mongo ${newMongo.mongoId}:`,
-								err,
-							);
-						});
-
-						return newMongo;
+						return createdMongo;
 					},
 				);
+
+				// Automatically provision and deploy the database immediately once committed
+				provisionDatabaseService({
+					databaseId: newMongo.mongoId,
+					engine: "mongo",
+					serverId: newMongo.serverId,
+				}).catch((err) => {
+					console.error(
+						`Automatic deployment failed for mongo ${newMongo.mongoId}:`,
+						err,
+					);
+				});
+
+				return newMongo;
 			} catch (error) {
 				if (error instanceof TRPCError) {
 					throw error;

@@ -127,6 +127,65 @@ const ENGINE_METAS: Record<
 	},
 };
 
+export const sanitizeClientDatabaseError = (
+	msg: string | null | undefined,
+): string => {
+	if (!msg) return "Query execution failed";
+	let text = msg;
+	try {
+		const parsed = JSON.parse(text);
+		if (Array.isArray(parsed) && parsed[0]?.message) {
+			text = parsed[0].message;
+		}
+	} catch {}
+
+	return text
+		.replace(/^Command execution failed:\s*/gi, "")
+		.replace(/^Command failed:\s*/gi, "")
+		.replace(/docker exec (?:-i\s+|-t\s+|-it\s+)?[a-f0-9]{12,64}\s+/gi, "")
+		.replace(/env PGPASSWORD=[^\s]+\s+psql\s+.*?-c\s+(['"]?)([\s\S]*?)\1/gi, "")
+		.replace(/mysql\s+.*?-e\s+(['"]?)([\s\S]*?)\1/gi, "")
+		.replace(/mongosh\s+.*?--eval\s+(['"]?)([\s\S]*?)\1/gi, "")
+		.replace(/redis-cli\s+.*?\s+/gi, "")
+		.replace(/SET statement_timeout = \d+;?\s*/gi, "")
+		.replace(/\/bin\/(?:bash|sh):\s*/gi, "")
+		.replace(/[a-f0-9]{64}/gi, "")
+		.trim();
+};
+
+export const buildDefaultSqlQuery = (
+	entity: string,
+	engine: string,
+): string => {
+	if (entity && entity.trim()) {
+		const clean = entity.trim();
+		if (engine === "postgres") {
+			const quoted = clean.includes(".")
+				? clean.split(".").map((p) => `"${p}"`).join(".")
+				: `"${clean}"`;
+			return `SELECT * FROM ${quoted} LIMIT 25;`;
+		}
+		if (engine === "mysql" || engine === "mariadb") {
+			const quoted = clean.includes(".")
+				? clean.split(".").map((p) => `\`${p}\``).join(".")
+				: `\`${clean}\``;
+			return `SELECT * FROM ${quoted} LIMIT 25;`;
+		}
+		return `SELECT * FROM "${clean}" LIMIT 25;`;
+	}
+
+	if (engine === "postgres") {
+		return `SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema = 'public' LIMIT 25;`;
+	}
+	if (engine === "mysql" || engine === "mariadb") {
+		return `SHOW TABLES;`;
+	}
+	if (engine === "libsql") {
+		return `SELECT name FROM sqlite_master WHERE type='table' LIMIT 25;`;
+	}
+	return `SELECT 1;`;
+};
+
 export default function DatabaseManagePage() {
 	const router = useRouter();
 	const { id, engine } = router.query;
@@ -226,9 +285,13 @@ export default function DatabaseManagePage() {
 
 	useEffect(() => {
 		if (collectionsOrTables.length > 0 && !selectedEntity) {
-			setSelectedEntity(collectionsOrTables[0]?.name || "");
+			const firstTable = collectionsOrTables[0]?.name || "";
+			setSelectedEntity(firstTable);
+			if (meta.isSql && firstTable) {
+				setSqlQuery(buildDefaultSqlQuery(firstTable, databaseEngine));
+			}
 		}
-	}, [collectionsOrTables, selectedEntity]);
+	}, [collectionsOrTables, selectedEntity, meta.isSql, databaseEngine]);
 
 	// Table schema query (for SQL engines)
 	const { data: tableSchema, isLoading: isSchemaLoading } =
@@ -498,9 +561,10 @@ export default function DatabaseManagePage() {
 			});
 			setRedisConsoleLogs((prev) => [...prev, res.output || "OK"]);
 		} catch (err: any) {
+			const cleanMsg = sanitizeClientDatabaseError(err?.message || "Command failed");
 			setRedisConsoleLogs((prev) => [
 				...prev,
-				`ERROR: ${err?.message || "Command failed"}`,
+				`ERROR: ${cleanMsg}`,
 			]);
 		}
 	};
@@ -509,7 +573,7 @@ export default function DatabaseManagePage() {
 	// SQL Editor State (Postgres, MySQL, MariaDB, LibSQL)
 	// -------------------------------------------------------------
 	const defaultSql = meta.isSql
-		? `SELECT * FROM "${selectedEntity || "information_schema.tables"}" LIMIT 25;`
+		? buildDefaultSqlQuery(selectedEntity, databaseEngine)
 		: "";
 	const [sqlQuery, setSqlQuery] = useState(defaultSql);
 	const [sqlResult, setSqlResult] = useState<any>(null);
@@ -545,8 +609,9 @@ export default function DatabaseManagePage() {
 				`Query completed in ${res.durationMs}ms (${res.rowCount || 0} rows)`,
 			);
 		} catch (err: any) {
-			setSqlResult({ error: err?.message || "Query execution failed" });
-			toast.error(err?.message || "SQL Error");
+			const cleanErr = sanitizeClientDatabaseError(err?.message || "SQL Error");
+			setSqlResult({ error: cleanErr });
+			toast.error(cleanErr);
 		} finally {
 			setIsExecutingSql(false);
 		}
@@ -1405,6 +1470,11 @@ export default function DatabaseManagePage() {
 													onClick={() => {
 														setSelectedEntity(item.name);
 														setCurrentPage(1);
+														if (meta.isSql) {
+															setSqlQuery(
+																buildDefaultSqlQuery(item.name, databaseEngine),
+															);
+														}
 													}}
 													className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
 														selectedEntity === item.name
@@ -1804,6 +1874,72 @@ export default function DatabaseManagePage() {
 										)}
 										Run Query
 									</Button>
+								</div>
+
+								{/* Quick Query Templates */}
+								<div className="flex items-center gap-2 flex-wrap text-xs">
+									<span className="text-muted-foreground font-semibold text-[11px]">
+										Templates:
+									</span>
+									<button
+										type="button"
+										onClick={() =>
+											setSqlQuery(
+												buildDefaultSqlQuery(selectedEntity, databaseEngine),
+											)
+										}
+										className="text-[11px] px-2.5 py-1 rounded-md bg-muted hover:bg-muted/80 text-foreground border transition-all cursor-pointer"
+									>
+										Preview 25 Rows
+									</button>
+									<button
+										type="button"
+										onClick={() => {
+											if (selectedEntity) {
+												const quoted =
+													databaseEngine === "postgres"
+														? `"${selectedEntity}"`
+														: databaseEngine === "mysql" ||
+																databaseEngine === "mariadb"
+															? `\`${selectedEntity}\``
+															: `"${selectedEntity}"`;
+												setSqlQuery(
+													`SELECT count(*) AS total_rows FROM ${quoted};`,
+												);
+											} else {
+												setSqlQuery(
+													databaseEngine === "postgres"
+														? "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';"
+														: "SHOW TABLES;",
+												);
+											}
+										}}
+										className="text-[11px] px-2.5 py-1 rounded-md bg-muted hover:bg-muted/80 text-foreground border transition-all cursor-pointer"
+									>
+										Count Rows
+									</button>
+									<button
+										type="button"
+										onClick={() => {
+											if (databaseEngine === "postgres") {
+												setSqlQuery(
+													"SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;",
+												);
+											} else if (
+												databaseEngine === "mysql" ||
+												databaseEngine === "mariadb"
+											) {
+												setSqlQuery("SHOW TABLES;");
+											} else {
+												setSqlQuery(
+													"SELECT name FROM sqlite_master WHERE type='table';",
+												);
+											}
+										}}
+										className="text-[11px] px-2.5 py-1 rounded-md bg-muted hover:bg-muted/80 text-foreground border transition-all cursor-pointer"
+									>
+										List Tables
+									</button>
 								</div>
 
 								{/* Query Editor */}

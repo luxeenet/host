@@ -675,3 +675,90 @@ export const sanitizeCustomerDiagnostic = (text: string | null | undefined): str
 		.replace(/\bcontainer\b/gi, "instance")
 		.replace(/\bDocker\b/gi, "Managed Platform");
 };
+
+/**
+ * Deeply sanitizes database execution errors, eliminating any leaked docker commands,
+ * internal container IDs, host paths, internal environment variables, or statement timeouts.
+ * Formats the message cleanly so customers only see standard, helpful database diagnostics.
+ */
+export const sanitizeDatabaseExecutionError = (rawError: any): string => {
+	if (!rawError) return "Query execution error: please check syntax and table names.";
+
+	let rawText = "";
+	if (typeof rawError === "string") {
+		rawText = rawError;
+	} else if (rawError.stderr && typeof rawError.stderr === "string" && rawError.stderr.trim()) {
+		rawText = rawError.stderr;
+	} else if (rawError.stdout && typeof rawError.stdout === "string" && rawError.stdout.trim()) {
+		rawText = rawError.stdout;
+	} else if (rawError.message && typeof rawError.message === "string") {
+		rawText = rawError.message;
+	} else {
+		rawText = String(rawError);
+	}
+
+	let cleaned = redactCredentials(rawText);
+
+	// 1. Check for standard PostgreSQL error output (e.g. ERROR: relation "..." does not exist)
+	const pgErrorMatch = cleaned.match(/ERROR:\s+([^\n\r]+)(?:[\s\S]*?(LINE\s+\d+:\s+[^\n\r]+))?/i);
+	if (pgErrorMatch) {
+		const mainError = pgErrorMatch[1]?.trim();
+		const lineSnippet = pgErrorMatch[2]?.trim();
+		if (lineSnippet && !lineSnippet.includes("statement_timeout")) {
+			return `${mainError} (${lineSnippet})`;
+		}
+		if (mainError) {
+			return mainError;
+		}
+	}
+
+	// 2. Check for standard MySQL / MariaDB error output (e.g. ERROR 1146 (42S02): Table '...' doesn't exist)
+	const mysqlErrorMatch = cleaned.match(/ERROR\s+\d+\s*(?:\([^)]+\))?:?\s*([^\n\r]+)/i);
+	if (mysqlErrorMatch && mysqlErrorMatch[1]) {
+		return mysqlErrorMatch[1].trim();
+	}
+
+	// 3. Check for MongoDB error output (e.g. MongoServerError: ... or errmsg: "...")
+	const mongoErrMsgMatch = cleaned.match(/"errmsg"\s*:\s*"([^"]+)"/i);
+	if (mongoErrMsgMatch && mongoErrMsgMatch[1]) {
+		return mongoErrMsgMatch[1].trim();
+	}
+	const mongoServerMatch = cleaned.match(/MongoServerError:\s*([^\n\r]+)/i);
+	if (mongoServerMatch && mongoServerMatch[1]) {
+		return mongoServerMatch[1].trim();
+	}
+
+	// 4. Check for Redis error output (e.g. ERR syntax error or (error) ERR ...)
+	const redisMatch = cleaned.match(/(?:\(error\)\s*)?(?:ERR|WRONGTYPE|NOAUTH)\s+([^\n\r]+)/i);
+	if (redisMatch && redisMatch[1]) {
+		return redisMatch[1].trim();
+	}
+
+	// 5. Check for SQLite / LibSQL error output
+	const sqliteMatch = cleaned.match(/Error:\s*([^\n\r]+)/i);
+	if (sqliteMatch && sqliteMatch[1] && !sqliteMatch[1].toLowerCase().includes("command failed")) {
+		return sqliteMatch[1].trim();
+	}
+
+	// 6. General cleanup of any leaked technical wrappers
+	cleaned = cleaned
+		.replace(/^Command execution failed:\s*/gi, "")
+		.replace(/^Command failed:\s*/gi, "")
+		.replace(/docker exec (?:-i\s+|-t\s+|-it\s+)?[a-f0-9]{12,64}\s+/gi, "")
+		.replace(/env PGPASSWORD=[^\s]+\s+psql\s+.*?-c\s+(['"]?)([\s\S]*?)\1/gi, "")
+		.replace(/mysql\s+.*?-e\s+(['"]?)([\s\S]*?)\1/gi, "")
+		.replace(/mongosh\s+.*?--eval\s+(['"]?)([\s\S]*?)\1/gi, "")
+		.replace(/redis-cli\s+.*?\s+/gi, "")
+		.replace(/SET statement_timeout = \d+;?\s*/gi, "")
+		.replace(/\/bin\/(?:bash|sh):\s*/gi, "")
+		.replace(/[a-f0-9]{64}/gi, "")
+		.replace(/[a-f0-9]{12}/gi, "")
+		.trim();
+
+	const firstCleanLine = cleaned.split("\n").find((l) => l.trim().length > 0)?.trim();
+	if (firstCleanLine && firstCleanLine.length > 3) {
+		return firstCleanLine;
+	}
+
+	return "Database query error: please verify your query syntax and table names.";
+};

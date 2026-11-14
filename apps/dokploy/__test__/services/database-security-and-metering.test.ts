@@ -531,4 +531,53 @@ describe("HatDot Security & Metering Regression Suite", () => {
 			expect(usage.storage.formattedUsed).toBe("150.0 MB");
 		});
 	});
+
+	describe("3. Professional Database Error Sanitization", () => {
+		it("sanitizes PostgreSQL relation errors without leaking docker exec or internal container hashes", async () => {
+			const { sanitizeDatabaseExecutionError } = await import(
+				"@dokploy/server/services/database-security"
+			);
+
+			const rawError = `Command execution failed: Command failed: docker exec 874ea8d4899aaa6e39473d77cb3326509de7a0cad9840ebbd777bae971f71c52 env PGPASSWORD=secret_pass psql -U postgres -d pp -X --csv -c 'SET statement_timeout = 15000; SELECT * FROM "information_schema.tables" LIMIT 25;' ERROR: relation "information_schema.tables" does not exist LINE 2: SELECT * FROM "information_schema.tables" LIMIT 25; ^`;
+
+			const cleaned = sanitizeDatabaseExecutionError(rawError);
+
+			expect(cleaned).not.toContain("docker exec");
+			expect(cleaned).not.toContain("874ea8d4899aaa6e39473d77cb3326509de7a0cad9840ebbd777bae971f71c52");
+			expect(cleaned).not.toContain("PGPASSWORD");
+			expect(cleaned).not.toContain("SET statement_timeout");
+			expect(cleaned).toContain('relation "information_schema.tables" does not exist');
+		});
+
+		it("sanitizes MySQL / MariaDB errors without infrastructure leakage", async () => {
+			const { sanitizeDatabaseExecutionError } = await import(
+				"@dokploy/server/services/database-security"
+			);
+
+			const rawError = `Command failed: docker exec abc123def456 mysql -u root -psecret db -e 'SELECT * FROM missing;' ERROR 1146 (42S02) at line 1: Table 'db.missing' doesn't exist`;
+
+			const cleaned = sanitizeDatabaseExecutionError(rawError);
+
+			expect(cleaned).not.toContain("docker exec");
+			expect(cleaned).not.toContain("abc123def456");
+			expect(cleaned).not.toContain("secret");
+			expect(cleaned).toContain("Table 'db.missing' doesn't exist");
+		});
+
+		it("sanitizes MongoDB and Redis errors", async () => {
+			const { sanitizeDatabaseExecutionError } = await import(
+				"@dokploy/server/services/database-security"
+			);
+
+			const mongoRaw = `Command failed: docker exec 777 mongosh --eval '{"ok": 0, "errmsg": "Collection users already exists"}'`;
+			const cleanedMongo = sanitizeDatabaseExecutionError(mongoRaw);
+			expect(cleanedMongo).not.toContain("docker exec");
+			expect(cleanedMongo).toBe("Collection users already exists");
+
+			const redisRaw = `Command failed: docker exec 888 redis-cli (error) ERR unknown command 'FOO'`;
+			const cleanedRedis = sanitizeDatabaseExecutionError(redisRaw);
+			expect(cleanedRedis).not.toContain("docker exec");
+			expect(cleanedRedis).toBe("unknown command 'FOO'");
+		});
+	});
 });

@@ -13,6 +13,7 @@ import { getServiceContainer } from "../utils/docker/utils";
 import { execAsync, execAsyncRemote } from "../utils/process/execAsync";
 import {
 	redactCredentials,
+	sanitizeDatabaseExecutionError,
 	sanitizeDatabaseIdentifier,
 } from "./database-security";
 import { findLibsqlById } from "./libsql";
@@ -77,15 +78,23 @@ export const executeInsideServiceContainer = async (
 	if (!container) {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
-			message: `Database instance for '${appName}' is not currently running. Please start or deploy the service to use manager features.`,
+			message: `Database instance is currently offline or deploying. Please wait for service to become ready.`,
 		});
 	}
 
 	const fullCmd = `docker exec ${quote([container.Id])} ${command}`;
-	if (serverId) {
-		return await execAsyncRemote(serverId, fullCmd);
+	try {
+		if (serverId) {
+			return await execAsyncRemote(serverId, fullCmd);
+		}
+		return await execAsync(fullCmd, { shell: "/bin/bash" });
+	} catch (err: any) {
+		const cleanMessage = sanitizeDatabaseExecutionError(err);
+		const sanitizedError = new Error(cleanMessage);
+		(sanitizedError as any).stderr = cleanMessage;
+		(sanitizedError as any).stdout = "";
+		throw sanitizedError;
 	}
-	return await execAsync(fullCmd, { shell: "/bin/bash" });
 };
 
 /**
@@ -1109,7 +1118,7 @@ export const sqlAdapter = {
 			} catch (err: any) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
-					message: redactCredentials(err.message || "SQL Execution Error"),
+					message: sanitizeDatabaseExecutionError(err),
 				});
 			}
 		}
@@ -1152,7 +1161,7 @@ export const sqlAdapter = {
 		} catch (err: any) {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: redactCredentials(err.message || "SQL Execution Error"),
+				message: sanitizeDatabaseExecutionError(err),
 			});
 		}
 	},
@@ -1365,8 +1374,15 @@ export const redisAdapter = {
 		const dbArg = database ? `-n ${quote([database])} ` : "";
 		const cmd = `redis-cli ${auth}${dbArg}${rawCommand}`;
 
-		const res = await executeInsideServiceContainer(appName, serverId, cmd);
-		return { output: res.stdout || res.stderr, database: database || "0" };
+		try {
+			const res = await executeInsideServiceContainer(appName, serverId, cmd);
+			return { output: res.stdout || res.stderr, database: database || "0" };
+		} catch (err: any) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: sanitizeDatabaseExecutionError(err),
+			});
+		}
 	},
 };
 
@@ -1540,7 +1556,7 @@ export const libsqlAdapter = {
 		} catch (err: any) {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: redactCredentials(err.message || "SQL Error"),
+				message: sanitizeDatabaseExecutionError(err),
 			});
 		}
 	},

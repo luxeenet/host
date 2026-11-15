@@ -5,6 +5,7 @@ import {
 	organization,
 	previewDeployments,
 } from "@dokploy/server/db/schema";
+import { BRAND } from "@paas/branding";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import type { z } from "zod";
@@ -135,8 +136,13 @@ export const createPreviewDeployment = async (
 	const org = await db.query.organization.findFirst({
 		where: eq(organization.id, application.environment.project.organizationId),
 	});
+	const defaultWildcard =
+		BRAND.PLATFORM_SUBDOMAIN_BASE && BRAND.PLATFORM_SUBDOMAIN_BASE !== "localhost"
+			? `*.${BRAND.PLATFORM_SUBDOMAIN_BASE}`
+			: "*.sslip.io";
+
 	const generateDomain = await generateWildcardDomain(
-		application.previewWildcard || "*.sslip.io",
+		application.previewWildcard || defaultWildcard,
 		appName,
 		application.server?.ipAddress || "",
 		org?.ownerId || "",

@@ -33,6 +33,15 @@ describe("helpers functions", () => {
 				domain.endsWith(`${mockSchema.serverIp.replaceAll(".", "-")}.sslip.io`),
 			).toBeTruthy();
 		});
+
+		it("should prioritize custom platform domain when passed in schema", () => {
+			const customSchema = {
+				...mockSchema,
+				domain: "profile-alltube-p7aloo.hatdot.cloud",
+			};
+			const domain = processValue("${domain}", {}, customSchema);
+			expect(domain).toBe("profile-alltube-p7aloo.hatdot.cloud");
+		});
 	});
 
 	describe("${base64}", () => {

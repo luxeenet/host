@@ -32,6 +32,7 @@ import {
 	stopCompose,
 	updateCompose,
 	updateDeploymentStatus,
+	resolveGeneratedApplicationDomain,
 } from "@dokploy/server";
 import { paths } from "@dokploy/server/constants";
 import { db } from "@dokploy/server/db";
@@ -677,6 +678,14 @@ export const composeRouter = createTRPCRouter({
 
 			const projectName = slugify(`${project.name} ${input.id}`);
 			const appName = `${projectName}-${generatePassword(6)}`;
+
+			// Resolve clean platform domain (e.g. app-name.hatdot.cloud) with Let's Encrypt HTTPS
+			const { host: generatedDomain, supportsHttps } =
+				await resolveGeneratedApplicationDomain(
+					appName,
+					input.serverId ?? undefined,
+				);
+
 			const config = {
 				...template.config,
 				variables: {
@@ -687,6 +696,7 @@ export const composeRouter = createTRPCRouter({
 			const generate = processTemplate(config, {
 				serverIp: serverIp,
 				projectName: projectName,
+				domain: generatedDomain,
 			});
 
 			const compose = await PlanEntitlementService.withAtomicQuotaLock(
@@ -734,17 +744,39 @@ export const composeRouter = createTRPCRouter({
 
 					if (generate.domains && generate.domains?.length > 0) {
 						for (const domain of generate.domains) {
+							const targetHost =
+								domain.host &&
+								!domain.host.includes(".sslip.io") &&
+								!domain.host.includes(".traefik.me") &&
+								!domain.host.includes(".nip.io")
+									? domain.host
+									: generatedDomain;
 							await createDomain(
 								{
 									...domain,
 									domainType: "compose",
-									certificateType: "none",
+									certificateType: supportsHttps ? "letsencrypt" : "none",
+									https: supportsHttps,
 									composeId: createdCompose.composeId,
-									host: domain.host || "",
+									host: targetHost,
 								},
 								tx,
 							);
 						}
+					} else {
+						// Auto-provision primary domain if template does not declare one
+						await createDomain(
+							{
+								domainType: "compose",
+								certificateType: supportsHttps ? "letsencrypt" : "none",
+								https: supportsHttps,
+								composeId: createdCompose.composeId,
+								host: generatedDomain,
+								port: 80,
+								path: "/",
+							},
+							tx,
+						);
 					}
 
 					await audit(ctx, {
@@ -1022,6 +1054,12 @@ export const composeRouter = createTRPCRouter({
 					});
 				}
 
+				const { host: generatedDomain } =
+					await resolveGeneratedApplicationDomain(
+						input.appName,
+						input.serverId,
+					);
+
 				const configModified = {
 					...config,
 					variables: {
@@ -1033,6 +1071,7 @@ export const composeRouter = createTRPCRouter({
 				const processedTemplate = processTemplate(configModified, {
 					serverIp,
 					projectName: input.appName,
+					domain: generatedDomain,
 				});
 
 				return {
@@ -1096,6 +1135,12 @@ export const composeRouter = createTRPCRouter({
 					});
 				}
 
+				const { host: generatedDomain, supportsHttps } =
+					await resolveGeneratedApplicationDomain(
+						compose.appName,
+						compose.serverId || undefined,
+					);
+
 				const configModified = {
 					...config,
 					variables: {
@@ -1107,6 +1152,7 @@ export const composeRouter = createTRPCRouter({
 				const processedTemplate = processTemplate(configModified, {
 					serverIp: serverIp,
 					projectName: compose.appName,
+					domain: generatedDomain,
 				});
 
 				await updateCompose(input.composeId, {
@@ -1130,14 +1176,32 @@ export const composeRouter = createTRPCRouter({
 
 				if (processedTemplate.domains && processedTemplate.domains.length > 0) {
 					for (const domain of processedTemplate.domains) {
+						const targetHost =
+							domain.host &&
+							!domain.host.includes(".sslip.io") &&
+							!domain.host.includes(".traefik.me") &&
+							!domain.host.includes(".nip.io")
+								? domain.host
+								: generatedDomain;
 						await createDomain({
 							...domain,
 							domainType: "compose",
-							certificateType: "none",
+							certificateType: supportsHttps ? "letsencrypt" : "none",
+							https: supportsHttps,
 							composeId: compose.composeId,
-							host: domain.host || "",
+							host: targetHost,
 						});
 					}
+				} else {
+					await createDomain({
+						domainType: "compose",
+						certificateType: supportsHttps ? "letsencrypt" : "none",
+						https: supportsHttps,
+						composeId: compose.composeId,
+						host: generatedDomain,
+						port: 80,
+						path: "/",
+					});
 				}
 
 				await audit(ctx, {

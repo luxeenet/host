@@ -3,12 +3,14 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Domain } from "@dokploy/server/services/domain";
+import { BRAND } from "@paas/branding";
 import { TRPCError } from "@trpc/server";
 import { fetchTemplateFiles } from "./github";
 
 export interface Schema {
 	serverIp: string;
 	projectName: string;
+	domain?: string;
 }
 
 export type DomainSchema = Pick<Domain, "host" | "port" | "serviceName"> & {
@@ -33,14 +35,16 @@ export interface GenerateJWTOptions {
 export const generateRandomDomain = ({
 	serverIp,
 	projectName,
+	domain,
 }: Schema): string => {
+	if (domain) {
+		return domain;
+	}
+
 	const hash = randomBytes(3).toString("hex");
 	const effectiveIp = serverIp || "127.0.0.1";
 	const slugIp = effectiveIp.replaceAll(".", "-").replaceAll(":", "-");
 
-	// Domain labels have a max length of 63 characters
-	// Reserve space for: hash (6) + separators (1-2) + ip section + dot + sslip.io (8)
-	// Approx: 6 + 2 + (variable ip length) + 9 = ~19-30 chars for other parts
 	const maxProjectNameLength = 40;
 	const truncatedProjectName =
 		projectName.length > maxProjectNameLength

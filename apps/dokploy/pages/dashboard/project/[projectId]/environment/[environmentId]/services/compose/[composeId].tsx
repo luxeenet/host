@@ -285,7 +285,7 @@ const Service = (
 												</TabsTrigger>
 											)}
 											{permissions?.service.read && (
-												<TabsTrigger value="containers">Containers</TabsTrigger>
+												<TabsTrigger value="containers">Services</TabsTrigger>
 											)}
 											{permissions?.service.create && (
 												<TabsTrigger value="backups">Backups</TabsTrigger>

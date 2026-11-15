@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { paths } from "@dokploy/server/constants";
 import { db } from "@dokploy/server/db";
 import { type apiCreatePatch, patch } from "@dokploy/server/db/schema";
@@ -11,6 +11,57 @@ import { findComposeById } from "./compose";
 
 export type Patch = typeof patch.$inferSelect;
 
+export const validateSafeRelativePath = (inputPath: string): string => {
+	if (!inputPath || typeof inputPath !== "string") {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "File path is required",
+		});
+	}
+
+	// Reject null bytes or encoded null bytes
+	if (inputPath.includes("\0") || inputPath.includes("%00")) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Invalid file path",
+		});
+	}
+
+	// Normalize separators to forward slash
+	const normalized = inputPath.replace(/\\/g, "/").trim();
+
+	// Reject absolute paths, drive letters, or protocol schemes
+	if (
+		normalized.startsWith("/") ||
+		/^[a-zA-Z]:/.test(normalized) ||
+		normalized.includes("://")
+	) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Absolute paths and drive letters are not allowed",
+		});
+	}
+
+	// Reject path traversal tokens
+	const segments = normalized.split("/").filter(Boolean);
+	if (segments.some((segment) => segment === ".." || segment === ".")) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Directory traversal sequences (..) are not allowed",
+		});
+	}
+
+	// Reject attempts to target root git control structures
+	if (segments[0] === ".git") {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Access to internal repository control structures (.git) is restricted",
+		});
+	}
+
+	return segments.join("/");
+};
+
 export const createPatch = async (input: z.infer<typeof apiCreatePatch>) => {
 	if (!input.applicationId && !input.composeId) {
 		throw new TRPCError({
@@ -19,10 +70,13 @@ export const createPatch = async (input: z.infer<typeof apiCreatePatch>) => {
 		});
 	}
 
+	const safePath = validateSafeRelativePath(input.filePath);
+
 	const newPatch = await db
 		.insert(patch)
 		.values({
 			...input,
+			filePath: safePath,
 			content: input.content,
 			enabled: true,
 		})
@@ -156,7 +210,16 @@ export const generateApplyPatchesCommand = async ({
 	let command = `echo "Applying ${patches.length} patch(es)...";`;
 
 	for (const p of patches) {
-		const filePath = join(codePath, p.filePath);
+		const safeRelative = validateSafeRelativePath(p.filePath);
+		const filePath = resolve(codePath, safeRelative);
+		const resolvedCodePath = resolve(codePath);
+
+		if (!filePath.startsWith(resolvedCodePath + "/") && filePath !== resolvedCodePath) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: `Invalid patch file path: ${p.filePath}`,
+			});
+		}
 
 		if (p.type === "delete") {
 			command += `

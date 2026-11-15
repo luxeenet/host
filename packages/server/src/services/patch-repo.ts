@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { paths } from "@dokploy/server/constants";
 import { TRPCError } from "@trpc/server";
 import { quote } from "shell-quote";
@@ -10,6 +10,7 @@ import { cloneGithubRepository } from "../utils/providers/github";
 import { cloneGitlabRepository } from "../utils/providers/gitlab";
 import { findApplicationById } from "./application";
 import { findComposeById } from "./compose";
+import { validateSafeRelativePath } from "./patch";
 
 interface PatchRepoConfig {
 	type: "application" | "compose";
@@ -166,8 +167,17 @@ export const readPatchRepoFile = async (
 			? await findApplicationById(id)
 			: await findComposeById(id);
 
+	const safeRelative = validateSafeRelativePath(filePath);
 	const repoPath = join(PATCH_REPOS_PATH, type, application.appName);
-	const fullPath = join(repoPath, filePath);
+	const fullPath = resolve(repoPath, safeRelative);
+	const resolvedRepo = resolve(repoPath);
+
+	if (!fullPath.startsWith(resolvedRepo + "/") && fullPath !== resolvedRepo) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Invalid patch file path",
+		});
+	}
 
 	const command = `cat ${quote([fullPath])}`;
 

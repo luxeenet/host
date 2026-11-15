@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
 	cleanPatchRepos,
 	createPatch,
@@ -12,7 +13,9 @@ import {
 	readPatchRepoDirectory,
 	readPatchRepoFile,
 	updatePatch,
+	validateSafeRelativePath,
 } from "@dokploy/server";
+import { paths } from "@dokploy/server/constants";
 import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -183,7 +186,7 @@ export const patchRouter = createTRPCRouter({
 			z.object({
 				id: z.string().min(1),
 				type: z.enum(["application", "compose"]),
-				repoPath: z.string(),
+				repoPath: z.string().optional(),
 			}),
 		)
 		.query(async ({ input, ctx }) => {
@@ -191,14 +194,19 @@ export const patchRouter = createTRPCRouter({
 				service: ["read"],
 			});
 			let serverId: string | null = null;
+			let appName = "";
 			if (input.type === "application") {
 				const app = await findApplicationById(input.id);
 				serverId = app.serverId;
+				appName = app.appName;
 			} else {
 				const compose = await findComposeById(input.id);
 				serverId = compose.serverId;
+				appName = compose.appName;
 			}
-			return await readPatchRepoDirectory(input.repoPath, serverId);
+			const { PATCH_REPOS_PATH } = paths(!!serverId);
+			const canonicalRepoPath = join(PATCH_REPOS_PATH, input.type, appName);
+			return await readPatchRepoDirectory(canonicalRepoPath, serverId);
 		}),
 
 	readRepoFile: protectedProcedure
@@ -213,6 +221,7 @@ export const patchRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.id, {
 				service: ["read"],
 			});
+			const safeFilePath = validateSafeRelativePath(input.filePath);
 			let serverId: string | null = null;
 			if (input.type === "application") {
 				const app = await findApplicationById(input.id);
@@ -222,14 +231,14 @@ export const patchRouter = createTRPCRouter({
 				serverId = compose.serverId;
 			}
 			const existingPatch = await findPatchByFilePath(
-				input.filePath,
+				safeFilePath,
 				input.id,
 				input.type,
 			);
 			// For delete patches, show current file content from repo (what will be deleted)
 			if (existingPatch?.type === "delete") {
 				try {
-					return await readPatchRepoFile(input.id, input.type, input.filePath);
+					return await readPatchRepoFile(input.id, input.type, safeFilePath);
 				} catch {
 					return "(File not found in repo - will be removed if it exists)";
 				}
@@ -237,7 +246,7 @@ export const patchRouter = createTRPCRouter({
 			if (existingPatch?.content) {
 				return existingPatch.content;
 			}
-			return await readPatchRepoFile(input.id, input.type, input.filePath);
+			return await readPatchRepoFile(input.id, input.type, safeFilePath);
 		}),
 
 	saveFileAsPatch: protectedProcedure
@@ -254,14 +263,15 @@ export const patchRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.id, {
 				service: ["create"],
 			});
+			const safeFilePath = validateSafeRelativePath(input.filePath);
 			const existingPatch = await findPatchByFilePath(
-				input.filePath,
+				safeFilePath,
 				input.id,
 				input.type,
 			);
 			if (!existingPatch) {
 				const result = await createPatch({
-					filePath: input.filePath,
+					filePath: safeFilePath,
 					content: input.content,
 					type: input.patchType,
 					applicationId: input.type === "application" ? input.id : undefined,
@@ -271,7 +281,7 @@ export const patchRouter = createTRPCRouter({
 					action: "create",
 					resourceType: "settings",
 					resourceId: result.patchId,
-					resourceName: input.filePath,
+					resourceName: safeFilePath,
 					metadata: { type: "saveFileAsPatch" },
 				});
 				return result;
@@ -284,7 +294,7 @@ export const patchRouter = createTRPCRouter({
 				action: "update",
 				resourceType: "settings",
 				resourceId: existingPatch.patchId,
-				resourceName: input.filePath,
+				resourceName: safeFilePath,
 				metadata: { type: "saveFileAsPatch" },
 			});
 			return result;
@@ -302,8 +312,9 @@ export const patchRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.id, {
 				service: ["create"],
 			});
+			const safeFilePath = validateSafeRelativePath(input.filePath);
 			const result = await markPatchForDeletion(
-				input.filePath,
+				safeFilePath,
 				input.id,
 				input.type,
 			);
@@ -311,7 +322,7 @@ export const patchRouter = createTRPCRouter({
 				action: "delete",
 				resourceType: "settings",
 				resourceId: input.id,
-				resourceName: input.filePath,
+				resourceName: safeFilePath,
 				metadata: { type: "markFileForDeletion" },
 			});
 			return result;

@@ -27,11 +27,14 @@ export const assertHostScheduleAccess = async (
 ) => {
 	if (scheduleType !== "server" && scheduleType !== "dokploy-server") return;
 
-	if (scheduleType === "dokploy-server" && IS_CLOUD) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: "Host-level schedules are not available in the cloud version.",
-		});
+	if (scheduleType === "dokploy-server") {
+		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+		if (!isPlatformAdmin) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: "Primary host-level schedules require platform administrator privileges.",
+			});
+		}
 	}
 
 	const member = await findMemberByUserId(
@@ -45,7 +48,13 @@ export const assertHostScheduleAccess = async (
 		});
 	}
 
-	if (scheduleType === "server" && serverId) {
+	if (scheduleType === "server") {
+		if (!serverId) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "serverId is required for server schedules",
+			});
+		}
 		const targetServer = await findServerById(serverId);
 		if (targetServer.organizationId !== ctx.session.activeOrganizationId) {
 			throw new TRPCError({

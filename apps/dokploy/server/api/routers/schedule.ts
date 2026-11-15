@@ -236,14 +236,11 @@ export const scheduleRouter = createTRPCRouter({
 				}
 
 				if (input.scheduleType === "dokploy-server") {
-					const member = await findMemberByUserId(
-						ctx.user.id,
-						ctx.session.activeOrganizationId,
-					);
-					if (member.role !== "owner" && member.role !== "admin") {
+					const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+					if (!isPlatformAdmin) {
 						throw new TRPCError({
 							code: "FORBIDDEN",
-							message: "Only owners and admins can list host-level schedules.",
+							message: "Primary host-level schedules require platform administrator privileges.",
 						});
 					}
 				}
@@ -296,6 +293,16 @@ export const scheduleRouter = createTRPCRouter({
 				});
 			} else {
 				await checkPermission(ctx, { schedule: ["read"] });
+
+				if (schedule.scheduleType === "dokploy-server") {
+					const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+					if (!isPlatformAdmin) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: "Primary host-level schedules require platform administrator privileges.",
+						});
+					}
+				}
 
 				if (schedule.scheduleType === "server" && schedule.serverId) {
 					const targetServer = await findServerById(schedule.serverId);

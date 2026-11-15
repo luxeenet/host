@@ -1286,7 +1286,20 @@ export const applicationRouter = createTRPCRouter({
 			} catch (error: any) {
 				exitCode = error.exitCode ?? error.code ?? 1;
 				stdout = error.stdout || "";
-				stderr = error.stderr || error.message || "Command failed";
+				let rawErr = error.stderr || error.message || "Command failed";
+				stderr = rawErr
+					.replace(
+						/Command failed:\s*docker exec (?:-i\s+|-t\s+|-it\s+)?[a-f0-9]{12,64}\s+sh -c\s+(['"]?)([\s\S]*?)\1/gi,
+						"",
+					)
+					.replace(/docker exec (?:-i\s+|-t\s+|-it\s+)?[a-f0-9]{12,64}\s+/gi, "")
+					.replace(/Command execution failed:\s*/gi, "")
+					.replace(/Command failed:\s*/gi, "")
+					.replace(/[a-f0-9]{64}/gi, "")
+					.trim();
+				if (!stderr && rawErr) {
+					stderr = "Command failed with exit code " + exitCode;
+				}
 			}
 
 			let truncated = false;

@@ -33,12 +33,14 @@ export const updateServerTraefik = (
 		service: `${appName}-service-app`,
 		entryPoints: ["web"],
 		rule: `Host(\`${newHost}\`)`,
+		priority: 1000000,
 	};
 
 	// Always update the rule with the new host
 	if (newHost) {
 		currentRouterConfig.rule = `Host(\`${newHost}\`)`;
 	}
+	currentRouterConfig.priority = 1000000;
 
 	config.http.routers[`${appName}-router-app`] = currentRouterConfig;
 
@@ -65,12 +67,14 @@ export const updateServerTraefik = (
 				service: `${appName}-service-app`,
 				entryPoints: ["websecure"],
 				tls: { certResolver: "letsencrypt" },
+				priority: 1000000,
 			};
 		} else {
 			config.http.routers[`${appName}-router-app-secure`] = {
 				rule: `Host(\`${newHost}\`)`,
 				service: `${appName}-service-app`,
 				entryPoints: ["websecure"],
+				priority: 1000000,
 			};
 		}
 	} else {

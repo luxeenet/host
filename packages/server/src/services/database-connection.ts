@@ -1,16 +1,18 @@
 import { BRAND } from "@paas/branding";
 import { TRPCError } from "@trpc/server";
-import { isNull, not } from "drizzle-orm";
+import { eq, isNull, not } from "drizzle-orm";
 import { isIP } from "net";
 import { quote } from "shell-quote";
 import { db } from "../db";
 import {
+	environments,
 	libsql,
 	mariadb,
 	mongo,
 	mysql,
 	ports,
 	postgres,
+	projects,
 	redis,
 } from "../db/schema";
 import { getServiceContainer } from "../utils/docker/utils";
@@ -642,6 +644,42 @@ export const connectDatabaseToApplication = async (params: {
 		throw new TRPCError({
 			code: "NOT_FOUND",
 			message: "Database not found",
+		});
+	}
+
+	// Cross-tenant and cross-environment isolation guard
+	const [appEnv] = await db
+		.select({
+			projectId: environments.projectId,
+			organizationId: projects.organizationId,
+		})
+		.from(environments)
+		.innerJoin(projects, eq(environments.projectId, projects.projectId))
+		.where(eq(environments.environmentId, app.environmentId))
+		.limit(1);
+
+	const [dbEnv] = await db
+		.select({
+			projectId: environments.projectId,
+			organizationId: projects.organizationId,
+		})
+		.from(environments)
+		.innerJoin(projects, eq(environments.projectId, projects.projectId))
+		.where(eq(environments.environmentId, dbRecord.environmentId))
+		.limit(1);
+
+	if (!appEnv || !dbEnv || appEnv.organizationId !== dbEnv.organizationId) {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "Cross-organization database connections are strictly prohibited.",
+		});
+	}
+
+	if (app.serverId !== dbRecord.serverId) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message:
+				"The database and application reside on different servers. Internal network connections require both resources to be on the same server.",
 		});
 	}
 

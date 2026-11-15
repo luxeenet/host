@@ -390,6 +390,13 @@ export const createDomain = async (
 ) => {
 	const host = input.host?.trim();
 	if (host) {
+		if (await isSystemReservedDomain(host)) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message:
+					"This domain is reserved for platform infrastructure and system administration.",
+			});
+		}
 		const targetOrgId = await getServiceOrganizationId(
 			{
 				applicationId: input.applicationId,
@@ -848,6 +855,90 @@ export const isPlatformOrTestDomain = async (
 	return false;
 };
 
+export const RESERVED_PLATFORM_SUBDOMAINS = new Set([
+	"panel",
+	"panel2021",
+	"admin",
+	"dashboard",
+	"app",
+	"api",
+	"db",
+	"auth",
+	"status",
+	"traefik",
+	"cloud",
+	"platform",
+	"mail",
+	"smtp",
+	"ns1",
+	"ns2",
+	"ns3",
+	"registry",
+	"billing",
+	"monitor",
+	"metrics",
+]);
+
+export const isSystemReservedDomain = async (
+	host: string,
+): Promise<boolean> => {
+	if (!host) return false;
+	const cleanHost = host
+		.replace(/^https?:\/\//, "")
+		.split(/[/:]/)[0]!
+		.trim()
+		.toLowerCase();
+
+	if (
+		!cleanHost ||
+		cleanHost === "localhost" ||
+		cleanHost.endsWith(".localhost") ||
+		isIP(cleanHost)
+	) {
+		return true;
+	}
+
+	// 1. Check against web server settings host (the Dokploy / HatDot admin panel host)
+	try {
+		const settings = await getWebServerSettings();
+		if (settings?.host) {
+			const settingsHost = settings.host
+				.replace(/^https?:\/\//, "")
+				.split(/[/:]/)[0]!
+				.trim()
+				.toLowerCase();
+			if (settingsHost && cleanHost === settingsHost) {
+				return true;
+			}
+		}
+	} catch {}
+
+	// 2. Check against platform base domain (apex domain and reserved platform subdomains)
+	const platformDomain = await getConfiguredPlatformDomain();
+	if (platformDomain) {
+		const cleanPlatform = platformDomain
+			.replace(/^https?:\/\//, "")
+			.split(/[/:]/)[0]!
+			.trim()
+			.toLowerCase();
+
+		// Apex platform domain cannot be claimed directly by a customer app
+		if (cleanHost === cleanPlatform) {
+			return true;
+		}
+
+		if (cleanHost.endsWith(`.${cleanPlatform}`)) {
+			const prefix = cleanHost.slice(0, -(cleanPlatform.length + 1)).toLowerCase();
+			const parts = prefix.split(".");
+			if (parts.some((p) => RESERVED_PLATFORM_SUBDOMAINS.has(p))) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+};
+
 export const resolveGeneratedApplicationDomain = async (
 	appName: string,
 	serverId?: string,
@@ -1114,6 +1205,14 @@ export const updateDomainById = async (
 	domainData: Partial<Domain>,
 ) => {
 	if (domainData.host) {
+		const cleanHost = domainData.host.trim();
+		if (await isSystemReservedDomain(cleanHost)) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message:
+					"This domain is reserved for platform infrastructure and system administration.",
+			});
+		}
 		const current = await findDomainById(domainId);
 		if (
 			current &&

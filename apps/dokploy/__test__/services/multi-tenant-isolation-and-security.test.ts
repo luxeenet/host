@@ -385,4 +385,71 @@ describe("Multi-Tenant Isolation & Security across Customer Tabs", () => {
 			).not.toThrow();
 		});
 	});
+
+	describe("System Reserved Domains & Infrastructure Protection", () => {
+		const reservedPrefixes = [
+			"panel",
+			"panel2021",
+			"admin",
+			"dashboard",
+			"app",
+			"api",
+			"db",
+			"auth",
+			"status",
+			"traefik",
+			"cloud",
+			"platform",
+		];
+
+		const checkDomainReserved = (host: string, platformDomain = "hatdot.cloud") => {
+			const cleanHost = host.trim().toLowerCase();
+			if (cleanHost === "localhost" || cleanHost.endsWith(".localhost") || cleanHost === "127.0.0.1") {
+				return true;
+			}
+			if (cleanHost === platformDomain) {
+				return true;
+			}
+			if (cleanHost.endsWith(`.${platformDomain}`)) {
+				const prefix = cleanHost.slice(0, -(platformDomain.length + 1)).toLowerCase();
+				const parts = prefix.split(".");
+				if (parts.some((p) => reservedPrefixes.includes(p))) {
+					return true;
+				}
+			}
+			return false;
+		};
+
+		it("blocks claiming platform apex domain", () => {
+			expect(checkDomainReserved("hatdot.cloud")).toBe(true);
+		});
+
+		it("blocks claiming admin and platform infrastructure subdomains", () => {
+			expect(checkDomainReserved("panel.hatdot.cloud")).toBe(true);
+			expect(checkDomainReserved("panel2021.hatdot.cloud")).toBe(true);
+			expect(checkDomainReserved("admin.hatdot.cloud")).toBe(true);
+			expect(checkDomainReserved("db.hatdot.cloud")).toBe(true);
+			expect(checkDomainReserved("auth.hatdot.cloud")).toBe(true);
+			expect(checkDomainReserved("api.hatdot.cloud")).toBe(true);
+			expect(checkDomainReserved("traefik.hatdot.cloud")).toBe(true);
+			expect(checkDomainReserved("status.hatdot.cloud")).toBe(true);
+		});
+
+		it("blocks localhost and local IPs", () => {
+			expect(checkDomainReserved("localhost")).toBe(true);
+			expect(checkDomainReserved("sub.localhost")).toBe(true);
+			expect(checkDomainReserved("127.0.0.1")).toBe(true);
+		});
+
+		it("allows valid customer applications on the platform subdomain", () => {
+			expect(checkDomainReserved("qrcode-3d-p7aloo.hatdot.cloud")).toBe(false);
+			expect(checkDomainReserved("alltube-76394f.hatdot.cloud")).toBe(false);
+			expect(checkDomainReserved("my-super-store.hatdot.cloud")).toBe(false);
+		});
+
+		it("allows custom domains", () => {
+			expect(checkDomainReserved("example.com")).toBe(false);
+			expect(checkDomainReserved("app.mycompany.io")).toBe(false);
+		});
+	});
 });

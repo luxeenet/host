@@ -1,4 +1,15 @@
-import { ChevronsUpDown } from "lucide-react";
+import {
+	Activity,
+	BlocksIcon,
+	ChevronsUpDown,
+	CreditCard,
+	Folder,
+	GalleryVerticalEnd,
+	LogOut,
+	Server,
+	ShieldCheck,
+	User,
+} from "lucide-react";
 import { useRouter } from "next/router";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -22,9 +33,16 @@ export const UserNav = () => {
 	const router = useRouter();
 	const { data } = api.user.get.useQuery();
 	const { data: permissions } = api.user.getPermissions.useQuery();
-	const { data: isCloud } = api.settings.isCloud.useQuery();
 
-	// const { mutateAsync } = api.auth.logout.useMutation();
+	const isPlatformAdmin =
+		Boolean(data?.user?.isPlatformAdmin) ||
+		Boolean((data?.user as any)?.x_pa) ||
+		Boolean((data as any)?.isPlatformAdmin);
+
+	const canAccessBilling =
+		data?.role === "owner" ||
+		data?.role === "admin" ||
+		Boolean(permissions?.organization?.update);
 
 	return (
 		<DropdownMenu>
@@ -70,90 +88,109 @@ export const UserNav = () => {
 				<DropdownMenuSeparator />
 				<DropdownMenuGroup>
 					<DropdownMenuItem
-						className="cursor-pointer"
+						className="cursor-pointer flex items-center gap-2"
 						onClick={() => {
 							router.push("/dashboard/settings/profile");
 						}}
 					>
-						Profile
+						<User className="size-4 text-muted-foreground" />
+						<span>Profile</span>
 					</DropdownMenuItem>
 					<DropdownMenuItem
-						className="cursor-pointer"
+						className="cursor-pointer flex items-center gap-2"
 						onClick={() => {
 							router.push("/dashboard/home");
 						}}
 					>
-						Projects
+						<Folder className="size-4 text-muted-foreground" />
+						<span>Projects</span>
 					</DropdownMenuItem>
-					{!isCloud ? (
-						<>
+					{canAccessBilling && (
+						<DropdownMenuItem
+							className="cursor-pointer flex items-center gap-2"
+							onClick={() => {
+								router.push("/dashboard/billing");
+							}}
+						>
+							<CreditCard className="size-4 text-muted-foreground" />
+							<span>Billing</span>
+						</DropdownMenuItem>
+					)}
+				</DropdownMenuGroup>
+				{isPlatformAdmin && (
+					<>
+						<DropdownMenuSeparator />
+						<DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase px-2 py-1">
+							Administration
+						</DropdownMenuLabel>
+						<DropdownMenuGroup>
 							<DropdownMenuItem
-								className="cursor-pointer"
+								className="cursor-pointer flex items-center gap-2"
+								onClick={() => {
+									router.push("/admin");
+								}}
+							>
+								<ShieldCheck className="size-4 text-muted-foreground" />
+								<span>Admin Portal</span>
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								className="cursor-pointer flex items-center gap-2"
 								onClick={() => {
 									router.push("/dashboard/monitoring");
 								}}
 							>
-								Monitoring
+								<Activity className="size-4 text-muted-foreground" />
+								<span>Monitoring</span>
 							</DropdownMenuItem>
 							{permissions?.traefikFiles.read && (
 								<DropdownMenuItem
-									className="cursor-pointer"
+									className="cursor-pointer flex items-center gap-2"
 									onClick={() => {
 										router.push("/dashboard/traefik");
 									}}
 								>
-									Traefik
+									<GalleryVerticalEnd className="size-4 text-muted-foreground" />
+									<span>Traefik</span>
 								</DropdownMenuItem>
 							)}
 							{permissions?.docker.read && (
 								<DropdownMenuItem
-									className="cursor-pointer"
+									className="cursor-pointer flex items-center gap-2"
 									onClick={() => {
 										router.push("/dashboard/docker", undefined, {
 											shallow: true,
 										});
 									}}
 								>
-									Docker
+									<BlocksIcon className="size-4 text-muted-foreground" />
+									<span>Docker</span>
 								</DropdownMenuItem>
 							)}
-						</>
-					) : (
-						permissions?.organization.update && (
-							<DropdownMenuItem
-								className="cursor-pointer"
-								onClick={() => {
-									router.push("/dashboard/settings/servers");
-								}}
-							>
-								Servers
-							</DropdownMenuItem>
-						)
-					)}
-				</DropdownMenuGroup>
-				{isCloud && data?.role === "owner" && (
-					<DropdownMenuItem
-						className="cursor-pointer"
-						onClick={() => {
-							router.push("/dashboard/settings/billing");
-						}}
-					>
-						Billing
-					</DropdownMenuItem>
+							{permissions?.organization.update && (
+								<DropdownMenuItem
+									className="cursor-pointer flex items-center gap-2"
+									onClick={() => {
+										router.push("/dashboard/settings/servers");
+									}}
+								>
+									<Server className="size-4 text-muted-foreground" />
+									<span>Servers</span>
+								</DropdownMenuItem>
+							)}
+						</DropdownMenuGroup>
+					</>
 				)}
 				<DropdownMenuSeparator />
 				<DropdownMenuItem
-					className="cursor-pointer"
+					className="cursor-pointer flex items-center gap-2 text-destructive focus:text-destructive"
 					onClick={async () => {
 						await authClient.signOut().then(() => {
 							router.push("/");
 						});
-						// await mutateAsync().then(() => {
-						// 	router.push("/");
-						// });
 					}}
 				>
-					Log out
+					<LogOut className="size-4" />
+					<span>Log out</span>
 				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>

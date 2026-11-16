@@ -56,6 +56,11 @@ export const SearchCommand = () => {
 	const [open, setOpen] = React.useState(false);
 	const [search, setSearch] = React.useState("");
 	const { data: session } = api.user.session.useQuery();
+	const { data: user } = api.user.get.useQuery();
+	const isPlatformAdmin =
+		Boolean(user?.user?.isPlatformAdmin) ||
+		Boolean((user?.user as any)?.x_pa) ||
+		Boolean((user as any)?.isPlatformAdmin);
 	const { data } = api.project.all.useQuery(undefined, {
 		enabled: !!session,
 	});
@@ -175,14 +180,30 @@ export const SearchCommand = () => {
 						</CommandItem>
 						<CommandItem
 							onSelect={() => {
-								router.push("/dashboard/overview?tab=deployments");
+								router.push("/dashboard/billing");
 								setOpen(false);
 							}}
 						>
-							Deployments
+							Billing
 						</CommandItem>
-						{!isCloud && (
+						{isPlatformAdmin && (
 							<>
+								<CommandItem
+									onSelect={() => {
+										router.push("/admin");
+										setOpen(false);
+									}}
+								>
+									Admin Portal
+								</CommandItem>
+								<CommandItem
+									onSelect={() => {
+										router.push("/dashboard/overview?tab=deployments");
+										setOpen(false);
+									}}
+								>
+									Deployments
+								</CommandItem>
 								<CommandItem
 									onSelect={() => {
 										router.push("/dashboard/monitoring");
@@ -219,7 +240,7 @@ export const SearchCommand = () => {
 						)}
 						<CommandItem
 							onSelect={() => {
-								router.push("/dashboard/settings/server");
+								router.push("/dashboard/settings/profile");
 								setOpen(false);
 							}}
 						>

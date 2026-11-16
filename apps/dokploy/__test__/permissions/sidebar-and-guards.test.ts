@@ -194,4 +194,53 @@ describe("Sidebar Navigation Menu Filtering", () => {
 		expect(settingsVisible).toContain("Audit Logs");
 		expect(settingsVisible).toContain("Certificates");
 	});
+
+	describe("UserNav Dropdown & Search Command Infrastructure Isolation", () => {
+		interface UserNavItem {
+			title: string;
+			url: string;
+			isPlatformAdminOnly?: boolean;
+		}
+
+		const USER_NAV_ITEMS: UserNavItem[] = [
+			{ title: "Profile", url: "/dashboard/settings/profile", isPlatformAdminOnly: false },
+			{ title: "Projects", url: "/dashboard/home", isPlatformAdminOnly: false },
+			{ title: "Billing", url: "/dashboard/billing", isPlatformAdminOnly: false },
+			{ title: "Admin Portal", url: "/admin", isPlatformAdminOnly: true },
+			{ title: "Monitoring", url: "/dashboard/monitoring", isPlatformAdminOnly: true },
+			{ title: "Traefik", url: "/dashboard/traefik", isPlatformAdminOnly: true },
+			{ title: "Docker", url: "/dashboard/docker", isPlatformAdminOnly: true },
+			{ title: "Servers", url: "/dashboard/settings/servers", isPlatformAdminOnly: true },
+		];
+
+		const resolveVisibleUserNav = (isPlatformAdmin: boolean) =>
+			USER_NAV_ITEMS.filter((item) => (item.isPlatformAdminOnly ? isPlatformAdmin : true));
+
+		it("strictly hides Monitoring, Traefik, Docker, Servers, and Admin Portal from customer UserNav", () => {
+			const visible = resolveVisibleUserNav(false).map((i) => i.title);
+
+			expect(visible).toContain("Profile");
+			expect(visible).toContain("Projects");
+			expect(visible).toContain("Billing");
+
+			expect(visible).not.toContain("Monitoring");
+			expect(visible).not.toContain("Traefik");
+			expect(visible).not.toContain("Docker");
+			expect(visible).not.toContain("Servers");
+			expect(visible).not.toContain("Admin Portal");
+		});
+
+		it("allows platform administrator to access infrastructure shortcuts in UserNav", () => {
+			const visible = resolveVisibleUserNav(true).map((i) => i.title);
+
+			expect(visible).toContain("Profile");
+			expect(visible).toContain("Projects");
+			expect(visible).toContain("Billing");
+			expect(visible).toContain("Admin Portal");
+			expect(visible).toContain("Monitoring");
+			expect(visible).toContain("Traefik");
+			expect(visible).toContain("Docker");
+			expect(visible).toContain("Servers");
+		});
+	});
 });

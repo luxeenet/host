@@ -126,7 +126,11 @@ export const subscriptionRouter = createTRPCRouter({
 						id: subId,
 						organizationId: orgId,
 						planId: plan.id,
-						status: trialEndsAt ? "trial" : "pending_payment",
+						status: trialEndsAt
+							? "trial"
+							: Number(plan.price) === 0
+								? "active"
+								: "pending_payment",
 						currentPeriodStart: now,
 						currentPeriodEnd: periodEnd,
 						trialEndsAt,
@@ -204,13 +208,63 @@ export const subscriptionRouter = createTRPCRouter({
 				});
 			}
 
-			const [updated] = await db
-				.update(schema.subscriptions)
-				.set({ planId: input.planId, updatedAt: new Date() })
-				.where(eq(schema.subscriptions.id, sub.id))
-				.returning();
+			if (sub.planId === input.planId) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Organization is already subscribed to this plan.",
+				});
+			}
 
-			return updated;
+			const isFreeTargetPlan = Number(plan.price) === 0;
+
+			// If moving to a free plan, update directly
+			if (isFreeTargetPlan) {
+				const [updated] = await db
+					.update(schema.subscriptions)
+					.set({ planId: input.planId, status: "active", updatedAt: new Date() })
+					.where(eq(schema.subscriptions.id, sub.id))
+					.returning();
+				return updated;
+			}
+
+			// If moving to a paid plan, generate an invoice and enforce payment requirement
+			const now = new Date();
+			const trialEndsAt =
+				plan.trialDays > 0
+					? new Date(now.getTime() + plan.trialDays * 86400000)
+					: null;
+			const periodEnd = trialEndsAt ?? getNextPeriodEnd(plan.billingCycle);
+
+			return db.transaction(async (tx) => {
+				const [updated] = await tx
+					.update(schema.subscriptions)
+					.set({
+						planId: input.planId,
+						status: trialEndsAt ? "trial" : "pending_payment",
+						currentPeriodStart: now,
+						currentPeriodEnd: periodEnd,
+						trialEndsAt,
+						updatedAt: now,
+					})
+					.where(eq(schema.subscriptions.id, sub.id))
+					.returning();
+
+				const invoiceNumber = await generateInvoiceNumber();
+				await tx.insert(schema.invoices).values({
+					id: nanoid(),
+					subscriptionId: sub.id,
+					organizationId: orgId,
+					invoiceNumber,
+					amount: plan.price,
+					currency: plan.currency,
+					status: trialEndsAt ? "draft" : "open",
+					dueDate: trialEndsAt ?? new Date(now.getTime() + 7 * 86400000),
+					periodStart: now,
+					periodEnd: periodEnd,
+				});
+
+				return updated;
+			});
 		}),
 
 	/** Get all available active plans */

@@ -33,6 +33,7 @@ import {
 	updateCompose,
 	updateDeploymentStatus,
 	resolveGeneratedApplicationDomain,
+	validateSafeComposeYaml,
 } from "@dokploy/server";
 import { paths } from "@dokploy/server/constants";
 import { db } from "@dokploy/server/db";
@@ -107,6 +108,20 @@ export const composeRouter = createTRPCRouter({
 								tx,
 							),
 						);
+						await assertEntitlement(
+							PlanEntitlementService.checkApplicationType(
+								ctx.session.activeOrganizationId,
+								"compose",
+								tx,
+							),
+						);
+
+						if (input.composeFile) {
+							validateSafeComposeYaml(
+								input.composeFile,
+								Boolean((ctx.user as any)?.isPlatformAdmin),
+							);
+						}
 
 						const webServerSettings = await getWebServerSettings();
 						if (
@@ -232,6 +247,14 @@ export const composeRouter = createTRPCRouter({
 				);
 				await assertSourceTypeAvailable(input.sourceType);
 			}
+
+			if (input.composeFile) {
+				validateSafeComposeYaml(
+					input.composeFile,
+					Boolean((ctx.user as any)?.isPlatformAdmin),
+				);
+			}
+
 			const updated = await updateCompose(input.composeId, input);
 			await audit(ctx, {
 				action: "update",
@@ -709,6 +732,20 @@ export const composeRouter = createTRPCRouter({
 							tx,
 						),
 					);
+					await assertEntitlement(
+						PlanEntitlementService.checkApplicationType(
+							ctx.session.activeOrganizationId,
+							"compose",
+							tx,
+						),
+					);
+
+					if (template.dockerCompose) {
+						validateSafeComposeYaml(
+							template.dockerCompose,
+							Boolean((ctx.user as any)?.isPlatformAdmin),
+						);
+					}
 
 					const createdCompose = await createComposeByTemplate(
 						{
@@ -984,6 +1021,11 @@ export const composeRouter = createTRPCRouter({
 					});
 				}
 
+				validateSafeComposeYaml(
+					templateData.compose,
+					Boolean((ctx.user as any)?.isPlatformAdmin),
+				);
+
 				const configModified = {
 					...config,
 					variables: {
@@ -1053,6 +1095,11 @@ export const composeRouter = createTRPCRouter({
 							"Invalid template format. Must contain compose and config fields",
 					});
 				}
+
+				validateSafeComposeYaml(
+					templateData.compose,
+					Boolean((ctx.user as any)?.isPlatformAdmin),
+				);
 
 				const { host: generatedDomain } =
 					await resolveGeneratedApplicationDomain(
@@ -1134,6 +1181,11 @@ export const composeRouter = createTRPCRouter({
 							"Invalid template format. Must contain compose and config fields",
 					});
 				}
+
+				validateSafeComposeYaml(
+					templateData.compose,
+					Boolean((ctx.user as any)?.isPlatformAdmin),
+				);
 
 				const { host: generatedDomain, supportsHttps } =
 					await resolveGeneratedApplicationDomain(

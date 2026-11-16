@@ -1082,6 +1082,19 @@ export const projectRouter = createTRPCRouter({
 									appName.lastIndexOf("-"),
 								);
 
+								// Plan entitlement — enforce application quota on duplicate
+								await assertEntitlement(
+									PlanEntitlementService.checkCanCreateApplication(
+										ctx.session.activeOrganizationId,
+									),
+								);
+								await assertEntitlement(
+									PlanEntitlementService.checkApplicationType(
+										ctx.session.activeOrganizationId,
+										"compose",
+									),
+								);
+
 								const newCompose = await createCompose({
 									...compose,
 									appName: newAppName,

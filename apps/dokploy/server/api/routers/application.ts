@@ -1204,6 +1204,14 @@ export const applicationRouter = createTRPCRouter({
 				});
 			}
 
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkCanUseTerminal(
+						ctx.session.activeOrganizationId,
+					),
+				);
+			}
+
 			// Locate running container strictly for this application
 			const findContainerCmd = `docker ps -q --filter "status=running" --filter "label=com.docker.swarm.service.name=${application.appName}" | head -n 1`;
 			let containerId = "";

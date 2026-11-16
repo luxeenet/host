@@ -23,6 +23,7 @@ export * from "./services/certificate";
 export * from "./services/cdn";
 export * from "./services/cluster";
 export * from "./services/compose";
+export * from "./services/compose-security";
 export * from "./services/customer-usage";
 export * from "./services/customer-storage";
 export * from "./services/database-connection";

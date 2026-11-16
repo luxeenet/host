@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { TRPCError } from "@trpc/server";
+import {
+	validateSafeComposeSpecification,
+	validateSafeComposeYaml,
+} from "@dokploy/server/services/compose-security";
 
 vi.mock("@dokploy/server/db", () => {
 	return {
@@ -450,6 +454,192 @@ describe("Multi-Tenant Isolation & Security across Customer Tabs", () => {
 		it("allows custom domains", () => {
 			expect(checkDomainReserved("example.com")).toBe(false);
 			expect(checkDomainReserved("app.mycompany.io")).toBe(false);
+		});
+	});
+
+	describe("Docker Compose Multi-Tenant Container Safety & Isolation", () => {
+		it("blocks non-platform admin from deploying privileged containers", () => {
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							web: {
+								image: "alpine",
+								privileged: true,
+							},
+						},
+					} as any,
+					false,
+				),
+			).toThrowError(
+				expect.objectContaining({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("Privileged container mode is restricted"),
+				}),
+			);
+		});
+
+		it("blocks non-platform admin from using network_mode: host", () => {
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							web: {
+								image: "nginx",
+								network_mode: "host",
+							},
+						},
+					} as any,
+					false,
+				),
+			).toThrowError(
+				expect.objectContaining({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("Host networking mode is restricted"),
+				}),
+			);
+		});
+
+		it("blocks non-platform admin from mounting docker.sock", () => {
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							web: {
+								image: "docker:cli",
+								volumes: ["/var/run/docker.sock:/var/run/docker.sock"],
+							},
+						},
+					} as any,
+					false,
+				),
+			).toThrowError(
+				expect.objectContaining({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("Mounting sensitive host path '/var/run/docker.sock'"),
+				}),
+			);
+		});
+
+		it("blocks non-platform admin from mounting host root or system directories", () => {
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							web: {
+								image: "alpine",
+								volumes: ["/:/host"],
+							},
+						},
+					} as any,
+					false,
+				),
+			).toThrowError(
+				expect.objectContaining({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("Mounting sensitive host path '/'"),
+				}),
+			);
+
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							web: {
+								image: "alpine",
+								volumes: ["/etc:/etc:ro"],
+							},
+						},
+					} as any,
+					false,
+				),
+			).toThrowError(
+				expect.objectContaining({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("Mounting sensitive host path '/etc'"),
+				}),
+			);
+		});
+
+		it("blocks non-platform admin from adding dangerous capabilities", () => {
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							web: {
+								image: "alpine",
+								cap_add: ["ALL"],
+							},
+						},
+					} as any,
+					false,
+				),
+			).toThrowError(
+				expect.objectContaining({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("Elevated Linux capability 'ALL'"),
+				}),
+			);
+		});
+
+		it("blocks non-platform admin from binding reserved host ports in compose", () => {
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							web: {
+								image: "nginx",
+								ports: ["80:80"],
+							},
+						},
+					} as any,
+					false,
+				),
+			).toThrowError(
+				expect.objectContaining({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("privileged port 80"),
+				}),
+			);
+		});
+
+		it("allows standard unprivileged compose services for customers", () => {
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							web: {
+								image: "nginx:alpine",
+								ports: ["8088:80"],
+								volumes: ["./app:/usr/share/nginx/html", "named_vol:/data"],
+								environment: {
+									NODE_ENV: "production",
+								},
+							},
+						},
+					} as any,
+					false,
+				),
+			).not.toThrow();
+		});
+
+		it("allows platform administrators to use advanced compose specifications", () => {
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							adminService: {
+								image: "admin-tool",
+								privileged: true,
+								network_mode: "host",
+								volumes: ["/var/run/docker.sock:/var/run/docker.sock"],
+								ports: ["80:80"],
+							},
+						},
+					} as any,
+					true,
+				),
+			).not.toThrow();
 		});
 	});
 });

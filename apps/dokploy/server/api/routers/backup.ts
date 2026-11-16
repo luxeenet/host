@@ -59,6 +59,10 @@ import {
 import { audit } from "@/server/api/utils/audit";
 import { assertDatabaseBackupLimit } from "@/server/api/utils/plan-limits";
 import {
+	PlanEntitlementService,
+	assertEntitlement,
+} from "@dokploy/server/services/plan-entitlement";
+import {
 	apiCreateBackup,
 	apiFindOneBackup,
 	apiRemoveBackup,
@@ -95,6 +99,15 @@ export const backupRouter = createTRPCRouter({
 					await checkServicePermissionAndAccess(ctx, serviceId, {
 						backup: ["create"],
 					});
+				}
+
+				if (!(ctx.user as any)?.isPlatformAdmin) {
+					await assertEntitlement(
+						PlanEntitlementService.checkFeature(
+							ctx.session.activeOrganizationId,
+							"backups",
+						),
+					);
 				}
 
 				if (

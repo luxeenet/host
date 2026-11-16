@@ -17,6 +17,7 @@ import { cloneGitlabRepository } from "../providers/gitlab";
 import { getCreateComposeFileCommand } from "../providers/raw";
 import { randomizeDeployableSpecificationFile } from "./collision";
 import { randomizeSpecificationFile } from "./compose";
+import { validateSafeComposeSpecification } from "../../services/compose-security";
 import type {
 	ComposeSpecification,
 	DefinitionsService,
@@ -219,6 +220,11 @@ export const addDomainToCompose = async (
 	}
 
 	result = (await applyComposeFilePatch(compose)) ?? result;
+
+	validateSafeComposeSpecification(
+		result,
+		Boolean((compose as any).isPlatformAdmin),
+	);
 
 	if (compose.isolatedDeployment) {
 		const randomized = randomizeDeployableSpecificationFile(

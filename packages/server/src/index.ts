@@ -18,6 +18,7 @@ export * from "./services/failure-recovery";
 export * from "./services/intelligent-builder";
 export * from "./services/backup";
 export * from "./services/backup-storage";
+export * from "./services/billing-cycle";
 export * from "./services/bitbucket";
 export * from "./services/certificate";
 export * from "./services/cdn";

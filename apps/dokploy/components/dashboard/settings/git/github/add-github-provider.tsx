@@ -22,6 +22,8 @@ export const AddGithubProvider = () => {
 	const { data: session } = api.user.session.useQuery();
 	const { data } = api.user.get.useQuery();
 	const [manifest, setManifest] = useState("");
+	const [appName, setAppName] = useState("");
+	const [defaultAppName, setDefaultAppName] = useState("");
 	const [isOrganization, setIsOrganization] = useState(false);
 	const [organizationName, setOrganization] = useState("");
 	const [githubUrl, setGithubUrl] = useState(DEFAULT_GITHUB_URL);
@@ -31,33 +33,45 @@ export const AddGithubProvider = () => {
 	const randomString = () => Math.random().toString(36).slice(2, 8);
 
 	useEffect(() => {
-		const url = document.location.origin;
-		const manifest = JSON.stringify(
-			{
-				redirect_url: `${origin}/api/providers/github/setup?organizationId=${activeOrganization?.id ?? ""}&userId=${session?.user?.id ?? ""}&githubUrl=${encodeURIComponent(baseUrl)}`,
-				name: `HatDot-${format(new Date(), "yyyy-MM-dd")}-${randomString()}`,
-				url: origin,
-				hook_attributes: {
-					url: `${url}/api/deploy/github`,
-				},
-				callback_urls: [`${origin}/api/providers/github/setup`],
-				public: false,
-				request_oauth_on_install: true,
-				default_permissions: {
-					contents: "read",
-					metadata: "read",
-					emails: "read",
-					pull_requests: "write",
-					administration: "read",
-				},
-				default_events: ["pull_request", "push"],
-			},
-			null,
-			4,
-		);
+		if (isOpen && !defaultAppName) {
+			const initialName = `HatDot-${format(new Date(), "yyyy-MM-dd")}-${randomString()}`;
+			setDefaultAppName(initialName);
+			if (!appName) {
+				setAppName(initialName);
+			}
+		}
+	}, [isOpen, defaultAppName, appName]);
 
-		setManifest(manifest);
-	}, [activeOrganization?.id, session?.user?.id, baseUrl]);
+	useEffect(() => {
+		const origin = typeof window !== "undefined" ? window.location.origin : "";
+		const effectiveAppName = (
+			appName.trim() ||
+			defaultAppName ||
+			`HatDot-${format(new Date(), "yyyy-MM-dd")}-${randomString()}`
+		).trim();
+
+		const manifestObj = {
+			redirect_url: `${origin}/api/providers/github/setup?organizationId=${activeOrganization?.id ?? ""}&userId=${session?.user?.id ?? ""}&githubUrl=${encodeURIComponent(baseUrl)}`,
+			name: effectiveAppName,
+			url: origin,
+			hook_attributes: {
+				url: `${origin}/api/deploy/github`,
+			},
+			callback_urls: [`${origin}/api/providers/github/setup`],
+			public: false,
+			request_oauth_on_install: true,
+			default_permissions: {
+				contents: "read",
+				metadata: "read",
+				emails: "read",
+				pull_requests: "write",
+				administration: "read",
+			},
+			default_events: ["pull_request", "push"],
+		};
+
+		setManifest(JSON.stringify(manifestObj, null, 4));
+	}, [activeOrganization?.id, session?.user?.id, baseUrl, appName, defaultAppName]);
 
 	return (
 		<Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -84,6 +98,18 @@ export const AddGithubProvider = () => {
 								below to get started.
 							</p>
 							<div className="mt-4 flex flex-col gap-4">
+								<div className="flex flex-col gap-2">
+									<span className="text-sm">App Name</span>
+									<Input
+										placeholder={defaultAppName || "HatDot-..."}
+										value={appName}
+										onChange={(e) => setAppName(e.target.value)}
+									/>
+									<span className="text-muted-foreground text-xs">
+										The display name for your GitHub App. Starts with HatDot by default.
+									</span>
+								</div>
+
 								<div className="flex flex-col gap-2">
 									<span className="text-sm">GitHub URL</span>
 									<Input
@@ -128,11 +154,11 @@ export const AddGithubProvider = () => {
 								method="post"
 							>
 								<input
-									type="text"
+									type="hidden"
 									name="manifest"
 									id="manifest"
-									defaultValue={manifest}
-									className="invisible"
+									value={manifest}
+									readOnly
 								/>
 								<br />
 
@@ -156,6 +182,7 @@ export const AddGithubProvider = () => {
 									</a>
 									<Button
 										disabled={
+											!manifest ||
 											!!githubUrlError ||
 											(isOrganization && organizationName.length < 1)
 										}

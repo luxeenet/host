@@ -1386,7 +1386,7 @@ export const deployPreviewApplication = async ({
 		);
 		await updateIssueComment({
 			...issueParams,
-			body: `### Dokploy Preview Deployment\n\n${buildingComment}`,
+			body: `### HatDot Preview Deployment\n\n${buildingComment}`,
 		});
 		application.appName = previewDeployment.appName;
 		application.env = `${application.previewEnv}\nDOKPLOY_DEPLOY_URL=${previewDeployment?.domain?.host}`;
@@ -1421,7 +1421,7 @@ export const deployPreviewApplication = async ({
 		);
 		await updateIssueComment({
 			...issueParams,
-			body: `### Dokploy Preview Deployment\n\n${successComment}`,
+			body: `### HatDot Preview Deployment\n\n${successComment}`,
 		});
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updatePreviewDeployment(previewDeploymentId, {
@@ -1431,7 +1431,7 @@ export const deployPreviewApplication = async ({
 		const comment = getIssueComment(application.name, "error", previewDomain);
 		await updateIssueComment({
 			...issueParams,
-			body: `### Dokploy Preview Deployment\n\n${comment}`,
+			body: `### HatDot Preview Deployment\n\n${comment}`,
 		});
 		await updateDeploymentStatus(deployment.deploymentId, "error");
 		await updatePreviewDeployment(previewDeploymentId, {
@@ -1504,7 +1504,7 @@ export const rebuildPreviewApplication = async ({
 		);
 		await updateIssueComment({
 			...issueParams,
-			body: `### Dokploy Preview Deployment\n\n${buildingComment}`,
+			body: `### HatDot Preview Deployment\n\n${buildingComment}`,
 		});
 
 		// Set application properties for preview deployment
@@ -1536,7 +1536,7 @@ export const rebuildPreviewApplication = async ({
 		);
 		await updateIssueComment({
 			...issueParams,
-			body: `### Dokploy Preview Deployment\n\n${successComment}`,
+			body: `### HatDot Preview Deployment\n\n${successComment}`,
 		});
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updatePreviewDeployment(previewDeploymentId, {
@@ -1563,7 +1563,7 @@ export const rebuildPreviewApplication = async ({
 		const comment = getIssueComment(application.name, "error", previewDomain);
 		await updateIssueComment({
 			...issueParams,
-			body: `### Dokploy Preview Deployment\n\n${comment}`,
+			body: `### HatDot Preview Deployment\n\n${comment}`,
 		});
 		await updateDeploymentStatus(deployment.deploymentId, "error");
 		await updatePreviewDeployment(previewDeploymentId, {

@@ -406,6 +406,85 @@ describe("10. Disabled Plan Feature Enforcement", () => {
 		const result = await PlanEntitlementService.checkApplicationType("org-1", "python");
 		expect(result.allowed).toBe(true);
 	});
+
+	it("blocks dockerfile buildType when plan has no docker entitlement", async () => {
+		mockSnapshot({
+			features: { docker_access: false },
+			applicationTypes: ["static", "node"],
+		});
+		const result = await PlanEntitlementService.checkBuildType("org-1", "dockerfile", false);
+		expect(result.allowed).toBe(false);
+		expect(result.reason).toContain("Dockerfile");
+	});
+
+	it("allows dockerfile buildType when plan has docker_access enabled", async () => {
+		mockSnapshot({
+			features: { docker_access: true },
+			applicationTypes: ["static", "node"],
+		});
+		const result = await PlanEntitlementService.checkBuildType("org-1", "dockerfile", false);
+		expect(result.allowed).toBe(true);
+	});
+
+	it("allows dockerfile buildType when plan includes docker in applicationTypes", async () => {
+		mockSnapshot({
+			features: { docker_access: false },
+			applicationTypes: ["static", "docker"],
+		});
+		const result = await PlanEntitlementService.checkBuildType("org-1", "dockerfile", false);
+		expect(result.allowed).toBe(true);
+	});
+
+	it("always allows dockerfile buildType for platform admin", async () => {
+		mockSnapshot({
+			features: { docker_access: false },
+			applicationTypes: ["static"],
+		});
+		const result = await PlanEntitlementService.checkBuildType("org-1", "dockerfile", true);
+		expect(result.allowed).toBe(true);
+	});
+
+	it("blocks dynamic cloud builders (nixpacks, railpack) on static-only plans", async () => {
+		mockSnapshot({
+			features: { docker_access: false },
+			applicationTypes: ["static"],
+		});
+		const resultNix = await PlanEntitlementService.checkBuildType("org-1", "nixpacks", false);
+		expect(resultNix.allowed).toBe(false);
+		expect(resultNix.reason).toContain("limited to Static Sites");
+
+		const resultRail = await PlanEntitlementService.checkBuildType("org-1", "railpack", false);
+		expect(resultRail.allowed).toBe(false);
+	});
+
+	it("allows nixpacks on plans that support dynamic application runtimes", async () => {
+		mockSnapshot({
+			features: { docker_access: false },
+			applicationTypes: ["static", "node", "python"],
+		});
+		const result = await PlanEntitlementService.checkBuildType("org-1", "nixpacks", false);
+		expect(result.allowed).toBe(true);
+	});
+
+	it("getBuilderEntitlements returns locked dockerfile and dynamic builders for static-only plan", async () => {
+		mockSnapshot({
+			features: { docker_access: false },
+			applicationTypes: ["static"],
+		});
+		const entitlements = await PlanEntitlementService.getBuilderEntitlements("org-1", false);
+		expect(entitlements.allowedBuildTypes.dockerfile).toBe(false);
+		expect(entitlements.allowedBuildTypes.nixpacks).toBe(false);
+		expect(entitlements.allowedBuildTypes.static).toBe(true);
+		expect(entitlements.reasons.dockerfile).toBeDefined();
+	});
+
+	it("getBuilderEntitlements unlocks all builders for platform admin", async () => {
+		const entitlements = await PlanEntitlementService.getBuilderEntitlements("org-1", true);
+		expect(entitlements.isPlatformAdmin).toBe(true);
+		expect(entitlements.allowedBuildTypes.dockerfile).toBe(true);
+		expect(entitlements.allowedBuildTypes.nixpacks).toBe(true);
+		expect(entitlements.allowedBuildTypes.static).toBe(true);
+	});
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

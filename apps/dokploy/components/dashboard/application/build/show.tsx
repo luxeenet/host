@@ -6,6 +6,7 @@ import {
 	Cog,
 	FileCode,
 	Layers,
+	Lock,
 	Settings2,
 	Sparkles,
 } from "lucide-react";
@@ -224,6 +225,27 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 		{ applicationId },
 		{ enabled: !!applicationId, refetchOnWindowFocus: false },
 	);
+	const { data: builderEntitlements } =
+		api.application.getBuilderEntitlements.useQuery();
+
+	const isNixpacksAllowed = builderEntitlements?.allowedBuildTypes
+		? builderEntitlements.allowedBuildTypes.nixpacks
+		: true;
+	const isDockerfileAllowed = builderEntitlements?.allowedBuildTypes
+		? builderEntitlements.allowedBuildTypes.dockerfile
+		: true;
+	const isStaticAllowed = builderEntitlements?.allowedBuildTypes
+		? builderEntitlements.allowedBuildTypes.static
+		: true;
+	const isRailpackAllowed = builderEntitlements?.allowedBuildTypes
+		? builderEntitlements.allowedBuildTypes.railpack
+		: true;
+	const isHerokuAllowed = builderEntitlements?.allowedBuildTypes
+		? builderEntitlements.allowedBuildTypes.heroku_buildpacks
+		: true;
+	const isPaketoAllowed = builderEntitlements?.allowedBuildTypes
+		? builderEntitlements.allowedBuildTypes.paketo_buildpacks
+		: true;
 
 	const form = useForm({
 		defaultValues: {
@@ -257,6 +279,18 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 	}, [form, data]);
 
 	const onSubmit = async (formData: AddTemplate) => {
+		const isAllowed = builderEntitlements?.allowedBuildTypes
+			? builderEntitlements.allowedBuildTypes[formData.buildType]
+			: true;
+
+		if (!isAllowed) {
+			toast.error(
+				builderEntitlements?.reasons[formData.buildType] ||
+					"This builder is not permitted under your current plan. Please upgrade to use this build configuration.",
+			);
+			return;
+		}
+
 		const payload = {
 			applicationId,
 			buildType: formData.buildType,
@@ -314,9 +348,22 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 										inspection.detected?.buildType &&
 										isValidBuildType(inspection.detected.buildType)
 									) {
+										const detectedType = inspection.detected.buildType as BuildType;
+										const isAllowed = builderEntitlements?.allowedBuildTypes
+											? builderEntitlements.allowedBuildTypes[detectedType]
+											: true;
+
+										if (!isAllowed) {
+											toast.error(
+												builderEntitlements?.reasons[detectedType] ||
+													`Your plan (${builderEntitlements?.planName}) does not support the detected ${detectedType} builder. Please upgrade to apply these settings.`,
+											);
+											return;
+										}
+
 										form.setValue(
 											"buildType",
-											inspection.detected.buildType as BuildType,
+											detectedType,
 										);
 										if ("publishDirectory" in inspection.detected && inspection.detected.publishDirectory) {
 											form.setValue(
@@ -361,7 +408,21 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 							</div>
 							<div>
 								<span className="font-medium text-foreground block">Builder:</span>
-								{inspection.detected.buildType}
+								<div className="flex items-center gap-1.5 flex-wrap">
+									<span>{inspection.detected.buildType}</span>
+									{builderEntitlements &&
+										!builderEntitlements.allowedBuildTypes[
+											inspection.detected.buildType as keyof typeof builderEntitlements.allowedBuildTypes
+										] && (
+											<Badge
+												variant="outline"
+												className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 flex items-center gap-1 font-normal"
+											>
+												<Lock className="size-2.5" />
+												Requires Plan Upgrade
+											</Badge>
+										)}
+								</div>
 							</div>
 							{inspection.detected.runtimeVersion && (
 								<div>
@@ -392,6 +453,17 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 								{inspection.detected.suggestedPort}
 							</div>
 						</div>
+						{builderEntitlements &&
+							!builderEntitlements.allowedBuildTypes[
+								inspection.detected.buildType as keyof typeof builderEntitlements.allowedBuildTypes
+							] && (
+								<div className="rounded border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-600 dark:text-amber-400 flex items-start gap-2">
+									<Lock className="size-3.5 shrink-0 mt-0.5" />
+									<span>
+										The detected builder (<strong>{inspection.detected.buildType}</strong>) requires a plan with Docker support ({builderEntitlements.planName} plan currently active). Please select an allowed builder below or upgrade your subscription.
+									</span>
+								</div>
+							)}
 						{inspection.detected.reason && (
 							<p className="text-[11px] text-muted-foreground border-t pt-2">
 								{inspection.detected.reason}
@@ -405,6 +477,14 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 						onSubmit={form.handleSubmit(onSubmit)}
 						className="grid w-full gap-6"
 					>
+						{builderEntitlements &&
+							!builderEntitlements.allowedBuildTypes[buildType] && (
+								<AlertBlock type="warning">
+									{builderEntitlements.reasons[buildType] ||
+										`Your current plan (${builderEntitlements.planName}) does not support the selected ${buildType} builder. Please select an allowed builder before saving.`}
+								</AlertBlock>
+							)}
+
 						{/* Main Build Options */}
 						<FormField
 							control={form.control}
@@ -416,28 +496,74 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 									</FormLabel>
 									<FormControl>
 										<RadioGroup
-											onValueChange={field.onChange}
+											onValueChange={(val) => {
+												const allowed = builderEntitlements?.allowedBuildTypes
+													? builderEntitlements.allowedBuildTypes[
+															val as keyof typeof builderEntitlements.allowedBuildTypes
+														]
+													: true;
+												if (!allowed) {
+													toast.error(
+														builderEntitlements?.reasons[val] ||
+															"This builder is not permitted under your plan. Please upgrade.",
+													);
+													return;
+												}
+												field.onChange(val);
+											}}
 											value={field.value}
 											className="grid grid-cols-1 md:grid-cols-3 gap-3"
 										>
 											{/* Recommended / Nixpacks */}
 											<FormItem>
-												<FormLabel className="[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/5 cursor-pointer">
+												<FormLabel
+													onClick={(e) => {
+														if (!isNixpacksAllowed) {
+															e.preventDefault();
+															toast.error(
+																builderEntitlements?.reasons.nixpacks ||
+																	"Auto-detect builder requires dynamic plan support. Upgrade your plan.",
+															);
+														}
+													}}
+													className={`[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/5 ${
+														isNixpacksAllowed
+															? "cursor-pointer"
+															: "cursor-not-allowed opacity-60"
+													}`}
+												>
 													<FormControl>
 														<RadioGroupItem
 															value={BuildType.nixpacks}
+															disabled={!isNixpacksAllowed}
 															className="sr-only"
 														/>
 													</FormControl>
-													<div className="p-4 rounded-lg border flex flex-col gap-2 transition-all">
+													<div
+														className={`p-4 rounded-lg border flex flex-col gap-2 transition-all ${
+															!isNixpacksAllowed
+																? "bg-muted/30 border-dashed"
+																: ""
+														}`}
+													>
 														<div className="flex items-center justify-between">
 															<span className="font-semibold text-sm flex items-center gap-1.5">
 																<Sparkles className="size-4 text-primary" />
 																Recommended
 															</span>
-															<Badge variant="secondary" className="text-[10px]">
-																Auto-detect
-															</Badge>
+															{isNixpacksAllowed ? (
+																<Badge variant="secondary" className="text-[10px]">
+																	Auto-detect
+																</Badge>
+															) : (
+																<Badge
+																	variant="outline"
+																	className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 flex items-center gap-1"
+																>
+																	<Lock className="size-2.5" />
+																	Upgrade
+																</Badge>
+															)}
 														</div>
 														<p className="text-xs text-muted-foreground">
 															Automatically detects Next.js, Vite, Python, Go,
@@ -449,23 +575,55 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 
 											{/* Dockerfile */}
 											<FormItem>
-												<FormLabel className="[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/5 cursor-pointer">
+												<FormLabel
+													onClick={(e) => {
+														if (!isDockerfileAllowed) {
+															e.preventDefault();
+															toast.error(
+																builderEntitlements?.reasons.dockerfile ||
+																	"Custom Dockerfile builds require the Business or Enterprise plan with Docker support.",
+															);
+														}
+													}}
+													className={`[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/5 ${
+														isDockerfileAllowed
+															? "cursor-pointer"
+															: "cursor-not-allowed opacity-60"
+													}`}
+												>
 													<FormControl>
 														<RadioGroupItem
 															value={BuildType.dockerfile}
+															disabled={!isDockerfileAllowed}
 															className="sr-only"
 														/>
 													</FormControl>
-													<div className="p-4 rounded-lg border flex flex-col gap-2 transition-all">
+													<div
+														className={`p-4 rounded-lg border flex flex-col gap-2 transition-all ${
+															!isDockerfileAllowed
+																? "bg-muted/30 border-dashed"
+																: ""
+														}`}
+													>
 														<div className="flex items-center justify-between">
 															<span className="font-semibold text-sm flex items-center gap-1.5">
 																<FileCode className="size-4 text-primary" />
 																Dockerfile
 															</span>
+															{!isDockerfileAllowed ? (
+																<Badge
+																	variant="outline"
+																	className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 flex items-center gap-1"
+																>
+																	<Lock className="size-2.5" />
+																	Requires Docker Plan
+																</Badge>
+															) : null}
 														</div>
 														<p className="text-xs text-muted-foreground">
-															Uses the custom Dockerfile included in your
-															project repository.
+															{isDockerfileAllowed
+																? "Uses the custom Dockerfile included in your project repository."
+																: "Requires Docker Access (Business/Enterprise plans). Upgrade your plan to build with custom Dockerfiles."}
 														</p>
 													</div>
 												</FormLabel>
@@ -473,19 +631,50 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 
 											{/* Static */}
 											<FormItem>
-												<FormLabel className="[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/5 cursor-pointer">
+												<FormLabel
+													onClick={(e) => {
+														if (!isStaticAllowed) {
+															e.preventDefault();
+															toast.error(
+																builderEntitlements?.reasons.static ||
+																	"Static builder is not allowed on your plan.",
+															);
+														}
+													}}
+													className={`[&:has([data-state=checked])>div]:border-primary [&:has([data-state=checked])>div]:bg-primary/5 ${
+														isStaticAllowed
+															? "cursor-pointer"
+															: "cursor-not-allowed opacity-60"
+													}`}
+												>
 													<FormControl>
 														<RadioGroupItem
 															value={BuildType.static}
+															disabled={!isStaticAllowed}
 															className="sr-only"
 														/>
 													</FormControl>
-													<div className="p-4 rounded-lg border flex flex-col gap-2 transition-all">
+													<div
+														className={`p-4 rounded-lg border flex flex-col gap-2 transition-all ${
+															!isStaticAllowed
+																? "bg-muted/30 border-dashed"
+																: ""
+														}`}
+													>
 														<div className="flex items-center justify-between">
 															<span className="font-semibold text-sm flex items-center gap-1.5">
 																<Layers className="size-4 text-primary" />
 																Static Site
 															</span>
+															{!isStaticAllowed ? (
+																<Badge
+																	variant="outline"
+																	className="text-[10px] text-amber-500 border-amber-500/30 bg-amber-500/10 flex items-center gap-1"
+																>
+																	<Lock className="size-2.5" />
+																	Upgrade
+																</Badge>
+															) : null}
 														</div>
 														<p className="text-xs text-muted-foreground">
 															Serve pre-built HTML, CSS, client-side React/Vue,
@@ -633,23 +822,49 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 														</SelectTrigger>
 													</FormControl>
 													<SelectContent>
-														<SelectItem value={BuildType.nixpacks}>
-															Nixpacks (Default Auto-detect)
+														<SelectItem
+															value={BuildType.nixpacks}
+															disabled={!isNixpacksAllowed}
+														>
+															Nixpacks (Default Auto-detect){" "}
+															{!isNixpacksAllowed ? "(Upgrade Required)" : ""}
 														</SelectItem>
-														<SelectItem value={BuildType.dockerfile}>
-															Dockerfile
+														<SelectItem
+															value={BuildType.dockerfile}
+															disabled={!isDockerfileAllowed}
+														>
+															Dockerfile{" "}
+															{!isDockerfileAllowed
+																? "(Requires Docker Plan)"
+																: ""}
 														</SelectItem>
-														<SelectItem value={BuildType.static}>
-															Static HTML / SPA
+														<SelectItem
+															value={BuildType.static}
+															disabled={!isStaticAllowed}
+														>
+															Static HTML / SPA{" "}
+															{!isStaticAllowed ? "(Upgrade Required)" : ""}
 														</SelectItem>
-														<SelectItem value={BuildType.railpack}>
-															Railpack (Railway Builder)
+														<SelectItem
+															value={BuildType.railpack}
+															disabled={!isRailpackAllowed}
+														>
+															Railpack (Railway Builder){" "}
+															{!isRailpackAllowed ? "(Upgrade Required)" : ""}
 														</SelectItem>
-														<SelectItem value={BuildType.heroku_buildpacks}>
-															Heroku Buildpacks
+														<SelectItem
+															value={BuildType.heroku_buildpacks}
+															disabled={!isHerokuAllowed}
+														>
+															Heroku Buildpacks{" "}
+															{!isHerokuAllowed ? "(Upgrade Required)" : ""}
 														</SelectItem>
-														<SelectItem value={BuildType.paketo_buildpacks}>
-															Paketo Cloud Native Buildpacks
+														<SelectItem
+															value={BuildType.paketo_buildpacks}
+															disabled={!isPaketoAllowed}
+														>
+															Paketo Cloud Native Buildpacks{" "}
+															{!isPaketoAllowed ? "(Upgrade Required)" : ""}
 														</SelectItem>
 													</SelectContent>
 												</Select>
@@ -720,7 +935,15 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 						</div>
 
 						<div className="flex justify-end">
-							<Button type="submit" isLoading={isPending}>
+							<Button
+								type="submit"
+								isLoading={isPending}
+								disabled={
+									builderEntitlements?.allowedBuildTypes
+										? !builderEntitlements.allowedBuildTypes[buildType]
+										: false
+								}
+							>
 								Save Build Configuration
 							</Button>
 						</div>

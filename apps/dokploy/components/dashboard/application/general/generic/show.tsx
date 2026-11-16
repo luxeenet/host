@@ -1,4 +1,4 @@
-import { GitBranch, Loader2, UploadCloud } from "lucide-react";
+import { GitBranch, Loader2, Lock, UploadCloud } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -54,6 +54,11 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 	const { data: installInfo } = api.github.getInstallationUrl.useQuery(undefined, {
 		retry: false,
 	});
+	const { data: builderEntitlements } =
+		api.application.getBuilderEntitlements.useQuery();
+	const isDockerAllowed = builderEntitlements?.allowedBuildTypes
+		? builderEntitlements.allowedBuildTypes.dockerfile
+		: true;
 
 	const isProviderEnabled = (provider: TabState) => {
 		if (provider === "docker" || provider === "git" || provider === "drop") {
@@ -227,7 +232,10 @@ export const ShowProviderForm = ({ applicationId }: Props) => {
 									className="rounded-none border-b-2 gap-2 border-b-transparent data-[state=active]:border-b-2 data-[state=active]:border-b-border"
 								>
 									<DockerIcon className="size-5 text-current" />
-									Docker
+									<span>Docker</span>
+									{!isDockerAllowed && (
+										<Lock className="size-3 text-amber-500" />
+									)}
 								</TabsTrigger>
 							)}
 							{isProviderEnabled("git") && (

@@ -244,3 +244,4 @@ export function validateSafeComposeYaml(
 		// If parsing fails, allow Docker CLI to report standard syntax errors
 	}
 }
+

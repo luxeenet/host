@@ -263,6 +263,183 @@ export class PlanEntitlementService {
 	}
 
 	/**
+	 * Check if an organization is entitled to use a specific build type.
+	 *
+	 * - Dockerfile: Requires docker_access feature flag OR "docker" in applicationTypes.
+	 * - Static: Requires "static" in applicationTypes (or unrestricted plan).
+	 * - Dynamic builders (nixpacks, railpack, heroku_buildpacks, paketo_buildpacks):
+	 *   Requires dynamic application runtimes. Restricted if plan is strictly static-only.
+	 */
+	static async checkBuildType(
+		organizationId: string,
+		buildType: string,
+		isPlatformAdmin = false,
+		executor: any = db,
+	): Promise<EntitlementResult> {
+		if (isPlatformAdmin) {
+			return { allowed: true };
+		}
+
+		const activeCheck = await this.checkSubscriptionActive(
+			organizationId,
+			executor,
+		);
+		if (!activeCheck.allowed) return activeCheck;
+
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
+		if (!snapshot) return { allowed: false, reason: "No plan found." };
+
+		const hasDockerAccess =
+			Boolean(snapshot.features["docker_access"]) ||
+			(snapshot.applicationTypes.length === 0 &&
+				snapshot.features["docker_access"] !== false) ||
+			snapshot.applicationTypes.includes("docker");
+
+		if (buildType === "dockerfile") {
+			if (!hasDockerAccess) {
+				return {
+					allowed: false,
+					reason:
+						"Your current plan does not include custom Dockerfile builds. Upgrade to a plan with Docker support (Business or Enterprise) to build using Dockerfiles.",
+				};
+			}
+			return { allowed: true };
+		}
+
+		if (buildType === "static") {
+			if (
+				snapshot.applicationTypes.length > 0 &&
+				!snapshot.applicationTypes.includes("static")
+			) {
+				return {
+					allowed: false,
+					reason:
+						"Your current plan does not support static site builds. Upgrade your plan to use this builder.",
+				};
+			}
+			return { allowed: true };
+		}
+
+		const isDynamicBuilder = [
+			"nixpacks",
+			"railpack",
+			"heroku_buildpacks",
+			"paketo_buildpacks",
+		].includes(buildType);
+
+		if (isDynamicBuilder) {
+			const hasOnlyStatic =
+				snapshot.applicationTypes.length > 0 &&
+				snapshot.applicationTypes.every((t) => t === "static");
+
+			if (hasOnlyStatic) {
+				return {
+					allowed: false,
+					reason:
+						"Your plan is limited to Static Sites. Upgrade to the Developer or Business plan to build full-stack dynamic applications with the Universal Cloud Builder.",
+				};
+			}
+		}
+
+		return { allowed: true };
+	}
+
+	/**
+	 * Retrieve authoritative builder entitlements and reasons for an organization.
+	 */
+	static async getBuilderEntitlements(
+		organizationId: string,
+		isPlatformAdmin = false,
+		executor: any = db,
+	) {
+		if (isPlatformAdmin) {
+			return {
+				isPlatformAdmin: true,
+				planName: "Platform Admin",
+				allowedBuildTypes: {
+					nixpacks: true,
+					dockerfile: true,
+					static: true,
+					railpack: true,
+					heroku_buildpacks: true,
+					paketo_buildpacks: true,
+				},
+				reasons: {} as Record<string, string>,
+			};
+		}
+
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
+		if (!snapshot) {
+			return {
+				isPlatformAdmin: false,
+				planName: "Unknown",
+				allowedBuildTypes: {
+					nixpacks: false,
+					dockerfile: false,
+					static: true,
+					railpack: false,
+					heroku_buildpacks: false,
+					paketo_buildpacks: false,
+				},
+				reasons: {
+					nixpacks: "No active plan found.",
+					dockerfile: "No active plan found.",
+					railpack: "No active plan found.",
+					heroku_buildpacks: "No active plan found.",
+					paketo_buildpacks: "No active plan found.",
+				},
+			};
+		}
+
+		const hasDockerAccess =
+			Boolean(snapshot.features["docker_access"]) ||
+			(snapshot.applicationTypes.length === 0 &&
+				snapshot.features["docker_access"] !== false) ||
+			snapshot.applicationTypes.includes("docker");
+
+		const hasOnlyStatic =
+			snapshot.applicationTypes.length > 0 &&
+			snapshot.applicationTypes.every((t) => t === "static");
+
+		const staticAllowed =
+			snapshot.applicationTypes.length === 0 ||
+			snapshot.applicationTypes.includes("static");
+
+		const dynamicAllowed = !hasOnlyStatic;
+
+		const reasons: Record<string, string> = {};
+		if (!hasDockerAccess) {
+			reasons.dockerfile =
+				"Your current plan does not include custom Dockerfile builds. Upgrade to a plan with Docker support (Business or Enterprise) to build using Dockerfiles.";
+		}
+		if (!staticAllowed) {
+			reasons.static = "Your plan does not support static site hosting.";
+		}
+		if (!dynamicAllowed) {
+			const reason =
+				"Your current plan is limited to Static Sites. Upgrade to deploy dynamic applications with the Universal Builder.";
+			reasons.nixpacks = reason;
+			reasons.railpack = reason;
+			reasons.heroku_buildpacks = reason;
+			reasons.paketo_buildpacks = reason;
+		}
+
+		return {
+			isPlatformAdmin: false,
+			planName: snapshot.planName,
+			allowedBuildTypes: {
+				nixpacks: dynamicAllowed,
+				dockerfile: hasDockerAccess,
+				static: staticAllowed,
+				railpack: dynamicAllowed,
+				heroku_buildpacks: dynamicAllowed,
+				paketo_buildpacks: dynamicAllowed,
+			},
+			reasons,
+		};
+	}
+
+	/**
 	 * Check if org can add another managed database (Postgres, MySQL, Mongo, Redis, MariaDB).
 	 */
 	static async checkCanCreateDatabase(

@@ -543,6 +543,16 @@ export const applicationRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const application = await findApplicationById(input.applicationId);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			if (!isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkBuildType(
+						ctx.session.activeOrganizationId,
+						application.buildType,
+						false,
+					),
+				);
+			}
 			await PlanEntitlementService.assertRuntimeResources(
 				ctx.session.activeOrganizationId,
 				application,
@@ -607,12 +617,29 @@ export const applicationRouter = createTRPCRouter({
 			});
 			return true;
 		}),
+	getBuilderEntitlements: protectedProcedure.query(async ({ ctx }) => {
+		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+		return await PlanEntitlementService.getBuilderEntitlements(
+			ctx.session.activeOrganizationId,
+			isPlatformAdmin,
+		);
+	}),
 	saveBuildType: protectedProcedure
 		.input(apiSaveBuildType)
 		.mutation(async ({ input, ctx }) => {
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
 				service: ["create"],
 			});
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			if (!isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkBuildType(
+						ctx.session.activeOrganizationId,
+						input.buildType,
+						false,
+					),
+				);
+			}
 			await updateApplication(input.applicationId, {
 				buildType: input.buildType,
 				dockerfile: input.dockerfile,
@@ -751,6 +778,16 @@ export const applicationRouter = createTRPCRouter({
 			await checkServicePermissionAndAccess(ctx, input.applicationId, {
 				service: ["create"],
 			});
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			if (!isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkBuildType(
+						ctx.session.activeOrganizationId,
+						"dockerfile",
+						false,
+					),
+				);
+			}
 			await updateApplication(input.applicationId, {
 				dockerImage: input.dockerImage,
 				username: input.username,
@@ -972,6 +1009,16 @@ export const applicationRouter = createTRPCRouter({
 				deployment: ["create"],
 			});
 			const application = await findApplicationById(input.applicationId);
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			if (!isPlatformAdmin) {
+				await assertEntitlement(
+					PlanEntitlementService.checkBuildType(
+						ctx.session.activeOrganizationId,
+						application.buildType,
+						false,
+					),
+				);
+			}
 			await PlanEntitlementService.assertRuntimeResources(
 				ctx.session.activeOrganizationId,
 				application,

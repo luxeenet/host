@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AlertBlock } from "@/components/shared/alert-block";
 import { Button } from "@/components/ui/button";
 import {
 	Form,
@@ -32,6 +33,11 @@ interface Props {
 
 export const SaveDockerProvider = ({ applicationId }: Props) => {
 	const { data, refetch } = api.application.one.useQuery({ applicationId });
+	const { data: builderEntitlements } =
+		api.application.getBuilderEntitlements.useQuery();
+	const isDockerAllowed = builderEntitlements?.allowedBuildTypes
+		? builderEntitlements.allowedBuildTypes.dockerfile
+		: true;
 
 	const { mutateAsync } = api.application.saveDockerProvider.useMutation();
 	const form = useForm<DockerProvider>({
@@ -56,6 +62,13 @@ export const SaveDockerProvider = ({ applicationId }: Props) => {
 	}, [form.reset, data?.applicationId, form]);
 
 	const onSubmit = async (values: DockerProvider) => {
+		if (!isDockerAllowed) {
+			toast.error(
+				builderEntitlements?.reasons.dockerfile ||
+					"Deploying Docker images requires the Business or Enterprise plan with Docker support.",
+			);
+			return;
+		}
 		await mutateAsync({
 			dockerImage: values.dockerImage,
 			password: values.password || null,
@@ -78,6 +91,12 @@ export const SaveDockerProvider = ({ applicationId }: Props) => {
 				onSubmit={form.handleSubmit(onSubmit)}
 				className="flex flex-col gap-4"
 			>
+				{!isDockerAllowed && (
+					<AlertBlock type="warning">
+						{builderEntitlements?.reasons.dockerfile ||
+							"Your current plan does not include Docker access. Upgrade to the Business or Enterprise plan to deploy custom Docker containers."}
+					</AlertBlock>
+				)}
 				<div className="grid md:grid-cols-2 gap-4 ">
 					<div className="space-y-4">
 						<FormField
@@ -152,6 +171,7 @@ export const SaveDockerProvider = ({ applicationId }: Props) => {
 					<Button
 						type="submit"
 						className="w-fit"
+						disabled={!isDockerAllowed}
 						isLoading={form.formState.isSubmitting}
 					>
 						Save{" "}

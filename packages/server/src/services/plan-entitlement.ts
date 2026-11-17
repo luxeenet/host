@@ -73,6 +73,119 @@ export interface OrganizationResourceLimits {
 
 export class PlanEntitlementService {
 	/**
+	 * Resolves all organization IDs belonging to the same owner as the given organizationId.
+	 * If the organization is not found, has no owner, or executor is a unit test mock, returns [organizationId].
+	 */
+	static async resolveOwnerOrgIds(
+		organizationId: string,
+		executor: any = db,
+	): Promise<string[]> {
+		try {
+			if (!executor?.query?.organization?.findFirst) {
+				return [organizationId];
+			}
+			const org = await executor.query.organization.findFirst({
+				where: eq(schema.organization.id, organizationId),
+				columns: { ownerId: true },
+			});
+			if (!org?.ownerId) return [organizationId];
+
+			const ownerOrgs = await executor.query.organization.findMany({
+				where: eq(schema.organization.ownerId, org.ownerId),
+				columns: { id: true },
+			});
+			const ids = (ownerOrgs || []).map((o: any) => o.id);
+			return ids.length > 0 ? ids : [organizationId];
+		} catch (_) {
+			return [organizationId];
+		}
+	}
+
+	/**
+	 * Check if a user is allowed to create another organization based on their active plan.
+	 */
+	static async checkCanCreateOrganization(
+		userId: string,
+		executor: any = db,
+	): Promise<EntitlementResult> {
+		try {
+			if (!executor?.query?.user?.findFirst) {
+				return { allowed: true };
+			}
+
+			const userRecord = await executor.query.user.findFirst({
+				where: eq(schema.user.id, userId),
+			});
+			if ((userRecord as any)?.isPlatformAdmin) {
+				return { allowed: true };
+			}
+
+			const ownedOrgs = await executor.query.organization.findMany({
+				where: eq(schema.organization.ownerId, userId),
+			});
+			const ownedCount = ownedOrgs?.length ?? 0;
+			const ownedOrgIds = (ownedOrgs || []).map((o: any) => o.id);
+
+			let activeSub = null;
+			if (ownedOrgIds.length > 0 && executor.query?.subscriptions?.findFirst) {
+				activeSub = await executor.query.subscriptions.findFirst({
+					where: and(
+						inArray(schema.subscriptions.organizationId, ownedOrgIds as any),
+						inArray(schema.subscriptions.status, [
+							"active",
+							"trial",
+							"grace_period",
+						] as any),
+					),
+					with: {
+						plan: {
+							with: {
+								resources: true,
+							},
+						},
+					},
+					orderBy: (s: any, { desc }: any) => [desc(s.createdAt)],
+				});
+			}
+
+			let maxAllowedOrgs = 1;
+			let planName = "Free / Starter";
+
+			if (activeSub?.plan) {
+				planName = activeSub.plan.name;
+				const orgResource = activeSub.plan.resources?.find(
+					(r: any) => r.resourceKey === "max_organizations",
+				);
+				if (orgResource) {
+					maxAllowedOrgs = orgResource.value;
+				} else {
+					if (activeSub.plan.slug === "enterprise") maxAllowedOrgs = -1;
+					else if (
+						activeSub.plan.slug === "standard" ||
+						activeSub.plan.slug === "pro"
+					)
+						maxAllowedOrgs = 3;
+					else maxAllowedOrgs = 1;
+				}
+			}
+
+			if (maxAllowedOrgs !== -1 && ownedCount >= maxAllowedOrgs) {
+				return {
+					allowed: false,
+					reason: `Your ${planName} plan allows a maximum of ${maxAllowedOrgs} organization${maxAllowedOrgs === 1 ? "" : "s"}. Please upgrade your plan to create more.`,
+					current: ownedCount,
+					limit: maxAllowedOrgs,
+				};
+			}
+
+			return { allowed: true, current: ownedCount, limit: maxAllowedOrgs };
+		} catch (err: any) {
+			console.error("[checkCanCreateOrganization] Error:", err?.message);
+			return { allowed: true };
+		}
+	}
+
+	/**
 	 * Load the full plan snapshot for an organization.
 	 * Returns null if no active subscription exists.
 	 */
@@ -80,7 +193,7 @@ export class PlanEntitlementService {
 		organizationId: string,
 		executor: any = db,
 	): Promise<PlanSnapshot | null> {
-		const subscription = await executor.query.subscriptions.findFirst({
+		let subscription = await executor.query.subscriptions.findFirst({
 			where: eq(schema.subscriptions.organizationId, organizationId),
 			with: {
 				plan: {
@@ -93,6 +206,41 @@ export class PlanEntitlementService {
 			},
 			orderBy: (sub: any, { desc }: any) => [desc(sub.createdAt)],
 		});
+
+		// Fallback: If this organization does not have an active subscription,
+		// check if the owner has an active subscription on any of their other organizations.
+		if (
+			(!subscription ||
+				!["trial", "active", "grace_period"].includes(subscription.status)) &&
+			executor.query?.organization?.findFirst
+		) {
+			const ownerOrgIds = await this.resolveOwnerOrgIds(organizationId, executor);
+			if (ownerOrgIds.length > 0 && executor.query?.subscriptions?.findFirst) {
+				const ownerSub = await executor.query.subscriptions.findFirst({
+					where: and(
+						inArray(schema.subscriptions.organizationId, ownerOrgIds as any),
+						inArray(schema.subscriptions.status, [
+							"trial",
+							"active",
+							"grace_period",
+						] as any),
+					),
+					with: {
+						plan: {
+							with: {
+								resources: true,
+								features: true,
+								applicationTypes: true,
+							},
+						},
+					},
+					orderBy: (s: any, { desc }: any) => [desc(s.createdAt)],
+				});
+				if (ownerSub) {
+					subscription = ownerSub;
+				}
+			}
+		}
 
 		if (!subscription) return null;
 
@@ -127,16 +275,36 @@ export class PlanEntitlementService {
 		organizationId: string,
 		executor: any = db,
 	): Promise<EntitlementResult> {
-		const sub = await executor.query.subscriptions.findFirst({
+		const activeStatuses = ["trial", "active", "grace_period"];
+
+		let sub = await executor.query.subscriptions.findFirst({
 			where: eq(schema.subscriptions.organizationId, organizationId),
 			orderBy: (sub: any, { desc }: any) => [desc(sub.createdAt)],
 		});
+
+		if (
+			(!sub || !activeStatuses.includes(sub.status)) &&
+			executor.query?.organization?.findFirst
+		) {
+			const ownerOrgIds = await this.resolveOwnerOrgIds(organizationId, executor);
+			if (ownerOrgIds.length > 0 && executor.query?.subscriptions?.findFirst) {
+				const ownerSub = await executor.query.subscriptions.findFirst({
+					where: and(
+						inArray(schema.subscriptions.organizationId, ownerOrgIds as any),
+						inArray(schema.subscriptions.status, activeStatuses as any),
+					),
+					orderBy: (s: any, { desc }: any) => [desc(s.createdAt)],
+				});
+				if (ownerSub) {
+					sub = ownerSub;
+				}
+			}
+		}
 
 		if (!sub) {
 			return { allowed: false, reason: "No active subscription found." };
 		}
 
-		const activeStatuses = ["trial", "active", "grace_period"];
 		if (!activeStatuses.includes(sub.status)) {
 			return {
 				allowed: false,
@@ -166,16 +334,22 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_projects"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
+		const ownerOrgIds = await this.resolveOwnerOrgIds(organizationId, executor);
+		const orgFilter =
+			ownerOrgIds.length === 1
+				? eq(schema.projects.organizationId, ownerOrgIds[0]!)
+				: inArray(schema.projects.organizationId, ownerOrgIds as any);
+
 		const res = await executor
 			.select({ value: count() })
 			.from(schema.projects)
-			.where(eq(schema.projects.organizationId, organizationId));
+			.where(orgFilter);
 		const value = res[0]?.value ?? 0;
 
 		if (value >= limit) {
 			return {
 				allowed: false,
-				reason: `Your plan allows a maximum of ${limit} project${limit === 1 ? "" : "s"}. Please upgrade to create more.`,
+				reason: `Your plan allows a maximum of ${limit} project${limit === 1 ? "" : "s"} across your account. You currently have ${value} project${value === 1 ? "" : "s"}. Please upgrade to create more.`,
 				current: value,
 				limit,
 			};
@@ -203,7 +377,13 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_applications"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		// Count total applications across all projects in the org
+		const ownerOrgIds = await this.resolveOwnerOrgIds(organizationId, executor);
+		const orgFilter =
+			ownerOrgIds.length === 1
+				? eq(schema.projects.organizationId, ownerOrgIds[0]!)
+				: inArray(schema.projects.organizationId, ownerOrgIds as any);
+
+		// Count total applications across all projects in all customer organizations
 		const res = await executor
 			.select({ value: count() })
 			.from(schema.applications)
@@ -215,13 +395,13 @@ export class PlanEntitlementService {
 				schema.projects,
 				eq(schema.environments.projectId, schema.projects.projectId),
 			)
-			.where(eq(schema.projects.organizationId, organizationId));
+			.where(orgFilter);
 		const value = res[0]?.value ?? 0;
 
 		if (value >= limit) {
 			return {
 				allowed: false,
-				reason: `Your plan allows a maximum of ${limit} application${limit === 1 ? "" : "s"}. Please upgrade.`,
+				reason: `Your plan allows a maximum of ${limit} application${limit === 1 ? "" : "s"} across your account. You have currently used ${value}. Please upgrade.`,
 				current: value,
 				limit,
 			};
@@ -466,7 +646,13 @@ export class PlanEntitlementService {
 		const limit = snapshot.resources["max_databases"] ?? -1;
 		if (limit === -1) return { allowed: true };
 
-		// Count all 5 managed database types in the org
+		const ownerOrgIds = await this.resolveOwnerOrgIds(organizationId, executor);
+		const orgFilter =
+			ownerOrgIds.length === 1
+				? eq(schema.projects.organizationId, ownerOrgIds[0]!)
+				: inArray(schema.projects.organizationId, ownerOrgIds as any);
+
+		// Count all 6 managed database types across customer organizations
 		const pgCount = await executor
 			.select({ value: count() })
 			.from(schema.postgres)
@@ -478,7 +664,7 @@ export class PlanEntitlementService {
 				schema.projects,
 				eq(schema.environments.projectId, schema.projects.projectId),
 			)
-			.where(eq(schema.projects.organizationId, organizationId));
+			.where(orgFilter);
 
 		const mysqlCount = await executor
 			.select({ value: count() })
@@ -491,7 +677,7 @@ export class PlanEntitlementService {
 				schema.projects,
 				eq(schema.environments.projectId, schema.projects.projectId),
 			)
-			.where(eq(schema.projects.organizationId, organizationId));
+			.where(orgFilter);
 
 		const mongoCount = await executor
 			.select({ value: count() })
@@ -504,7 +690,7 @@ export class PlanEntitlementService {
 				schema.projects,
 				eq(schema.environments.projectId, schema.projects.projectId),
 			)
-			.where(eq(schema.projects.organizationId, organizationId));
+			.where(orgFilter);
 
 		const redisCount = await executor
 			.select({ value: count() })
@@ -517,7 +703,7 @@ export class PlanEntitlementService {
 				schema.projects,
 				eq(schema.environments.projectId, schema.projects.projectId),
 			)
-			.where(eq(schema.projects.organizationId, organizationId));
+			.where(orgFilter);
 
 		const mariadbCount = await executor
 			.select({ value: count() })
@@ -530,7 +716,7 @@ export class PlanEntitlementService {
 				schema.projects,
 				eq(schema.environments.projectId, schema.projects.projectId),
 			)
-			.where(eq(schema.projects.organizationId, organizationId));
+			.where(orgFilter);
 
 		const libsqlCount = await executor
 			.select({ value: count() })
@@ -543,7 +729,7 @@ export class PlanEntitlementService {
 				schema.projects,
 				eq(schema.environments.projectId, schema.projects.projectId),
 			)
-			.where(eq(schema.projects.organizationId, organizationId));
+			.where(orgFilter);
 
 		const totalDbs =
 			(pgCount[0]?.value ?? 0) +
@@ -556,7 +742,7 @@ export class PlanEntitlementService {
 		if (totalDbs >= limit) {
 			return {
 				allowed: false,
-				reason: `Your plan allows a maximum of ${limit} database${limit === 1 ? "" : "s"}. Upgrade to add more.`,
+				reason: `Your plan allows a maximum of ${limit} database${limit === 1 ? "" : "s"} across your account. You have currently used ${totalDbs}. Upgrade to add more.`,
 				current: totalDbs,
 				limit,
 			};

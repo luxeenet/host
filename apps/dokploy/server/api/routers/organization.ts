@@ -37,9 +37,8 @@ export const organizationRouter = createTRPCRouter({
 				});
 			}
 
-			if (IS_CLOUD) {
-				await assertOrganizationLimit(ctx.user.id);
-			}
+			// Enforce plan organization creation limits (platform admins bypass)
+			await assertOrganizationLimit(ctx.user.id);
 
 			const result = await db
 				.insert(organization)

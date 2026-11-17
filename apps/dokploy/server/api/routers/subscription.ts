@@ -2,7 +2,7 @@
  * Subscriptions router — customer subscription management.
  */
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { db } from "../../db";
@@ -111,6 +111,31 @@ export const subscriptionRouter = createTRPCRouter({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found." });
 			}
 
+			// Prevent claiming free plan multiple times across owned organizations
+			if (Number(plan.price) === 0) {
+				const ownerOrgIds = await PlanEntitlementService.resolveOwnerOrgIds(orgId);
+				if (ownerOrgIds.length > 0) {
+					const existingFree = await db.query.subscriptions.findFirst({
+						where: and(
+							inArray(schema.subscriptions.organizationId, ownerOrgIds),
+							eq(schema.subscriptions.planId, plan.id),
+							inArray(schema.subscriptions.status, [
+								"active",
+								"trial",
+								"grace_period",
+							]),
+						),
+					});
+					if (existingFree) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message:
+								"The free Starter plan has already been activated for your account. Please select a paid plan to upgrade.",
+						});
+					}
+				}
+			}
+
 			const now = new Date();
 			const trialEndsAt =
 				plan.trialDays > 0
@@ -194,6 +219,31 @@ export const subscriptionRouter = createTRPCRouter({
 			});
 			if (!plan || plan.status !== "active") {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found." });
+			}
+
+			// Prevent claiming free plan multiple times across owned organizations
+			if (Number(plan.price) === 0) {
+				const ownerOrgIds = await PlanEntitlementService.resolveOwnerOrgIds(orgId);
+				if (ownerOrgIds.length > 0) {
+					const existingFree = await db.query.subscriptions.findFirst({
+						where: and(
+							inArray(schema.subscriptions.organizationId, ownerOrgIds),
+							eq(schema.subscriptions.planId, plan.id),
+							inArray(schema.subscriptions.status, [
+								"active",
+								"trial",
+								"grace_period",
+							]),
+						),
+					});
+					if (existingFree) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message:
+								"The free Starter plan has already been activated for your account. Please select a paid plan to upgrade.",
+						});
+					}
+				}
 			}
 
 			const sub = await db.query.subscriptions.findFirst({

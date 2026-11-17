@@ -11,7 +11,7 @@
  * 4. Limits always come from trusted server-side plan definitions, never client parameters.
  * 5. Accurate accounting: real container statistics, volume storage matching, and outbound egress.
  */
-import { desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { db } from "../db";
 import * as schema from "../db/schema";
 import { readLastValueStatsFile, recordAdvancedStats } from "../monitoring/utils";
@@ -282,8 +282,17 @@ export class CustomerUsageService {
 			throw new Error("Active organization identifier is required.");
 		}
 
-		// 1. Resolve active subscription & plan definitions
-		const subscription = await executor.query.subscriptions.findFirst({
+		let ownerOrgIds = [organizationId];
+		try {
+			const { PlanEntitlementService } = await import("./plan-entitlement");
+			ownerOrgIds = await PlanEntitlementService.resolveOwnerOrgIds(
+				organizationId,
+				executor,
+			);
+		} catch (_) {}
+
+		// 1. Resolve active subscription & plan definitions (directly or from owner's active plan)
+		let subscription = await executor.query.subscriptions.findFirst({
 			where: eq(schema.subscriptions.organizationId, organizationId),
 			with: {
 				plan: {
@@ -296,8 +305,43 @@ export class CustomerUsageService {
 			orderBy: (sub: any, { desc }: any) => [desc(sub.createdAt)],
 		});
 
-		const planName = subscription?.plan?.name ?? "Starter Plan";
-		const subscriptionStatus = subscription?.status ?? "active";
+		if (
+			(!subscription ||
+				!["trial", "active", "grace_period"].includes(subscription.status)) &&
+			ownerOrgIds.length > 0 &&
+			executor.query?.subscriptions?.findFirst
+		) {
+			const ownerSub = await executor.query.subscriptions.findFirst({
+				where: and(
+					inArray(schema.subscriptions.organizationId, ownerOrgIds as any),
+					inArray(schema.subscriptions.status, [
+						"trial",
+						"active",
+						"grace_period",
+					] as any),
+				),
+				with: {
+					plan: {
+						with: {
+							resources: true,
+							features: true,
+						},
+					},
+				},
+				orderBy: (sub: any, { desc }: any) => [desc(sub.createdAt)],
+			});
+			if (ownerSub) {
+				subscription = ownerSub;
+			}
+		}
+
+		const hasValidSub = Boolean(
+			subscription &&
+				["trial", "active", "grace_period"].includes(subscription.status),
+		);
+
+		const planName = subscription?.plan?.name ?? (hasValidSub ? "Starter Plan" : "No Active Plan");
+		const subscriptionStatus = subscription?.status ?? (hasValidSub ? "active" : "none");
 		const billingPeriodEnd = subscription?.currentPeriodEnd
 			? new Date(subscription.currentPeriodEnd).toISOString()
 			: null;
@@ -309,36 +353,44 @@ export class CustomerUsageService {
 			}
 		}
 
-		const ramLimitMb = planResources["max_ram_mb"] ?? 2048; // Default 2 GB if unset
-		const cpuLimitMillicores = planResources["max_cpu_millicores"] ?? 2000; // Default 2 Cores
-		const storageLimitGb = planResources["max_storage_gb"] ?? 20; // Default 20 GB
-		const bandwidthLimitGb = planResources["max_bandwidth_gb"] ?? 250; // Default 250 GB
-		const appLimit = planResources["max_applications"] ?? 5;
-		const dbLimit = planResources["max_databases"] ?? 3;
-		const projectLimit = planResources["max_projects"] ?? 3;
+		const ramLimitMb = hasValidSub ? (planResources["max_ram_mb"] ?? 2048) : 0;
+		const cpuLimitMillicores = hasValidSub ? (planResources["max_cpu_millicores"] ?? 2000) : 0;
+		const storageLimitGb = hasValidSub ? (planResources["max_storage_gb"] ?? 20) : 0;
+		const bandwidthLimitGb = hasValidSub ? (planResources["max_bandwidth_gb"] ?? 250) : 0;
+		const appLimit = hasValidSub ? (planResources["max_applications"] ?? 5) : 0;
+		const dbLimit = hasValidSub ? (planResources["max_databases"] ?? 3) : 0;
+		const projectLimit = hasValidSub ? (planResources["max_projects"] ?? 3) : 0;
 
-		// 2. Fetch all projects strictly belonging to this organization (only non-sensitive columns)
-		let orgProjects: { projectId: string; name: string }[] = [];
+		// 2. Fetch all projects strictly belonging to this customer account (across owned organizations)
+		let orgProjects: { projectId: string; name: string; organizationId: string }[] = [];
+		const orgFilter =
+			ownerOrgIds.length === 1
+				? eq(schema.projects.organizationId, ownerOrgIds[0]!)
+				: inArray(schema.projects.organizationId, ownerOrgIds as any);
+
 		try {
 			if (typeof executor.select === "function") {
 				orgProjects = await executor
 					.select({
 						projectId: schema.projects.projectId,
 						name: schema.projects.name,
+						organizationId: schema.projects.organizationId,
 					})
 					.from(schema.projects)
-					.where(eq(schema.projects.organizationId, organizationId));
+					.where(orgFilter);
 			} else if (executor?.query?.projects?.findMany) {
 				const raw = await executor.query.projects.findMany({
-					where: eq(schema.projects.organizationId, organizationId),
+					where: orgFilter,
 					columns: {
 						projectId: true,
 						name: true,
+						organizationId: true,
 					},
 				});
 				orgProjects = (raw || []).map((p: any) => ({
 					projectId: p.projectId,
 					name: p.name,
+					organizationId: p.organizationId,
 				}));
 			}
 		} catch (err: any) {

@@ -74,11 +74,19 @@ const assertLimitForPlan = (
 };
 
 export const assertOrganizationLimit = async (userId: string) => {
-	const plan = await getCurrentPlanForUser(userId);
-	const organizations = await db.query.organization.findMany({
-		where: eq(organization.ownerId, userId),
-	});
-	assertLimitForPlan(plan, "organization", organizations.length);
+	const { PlanEntitlementService } = await import(
+		"@dokploy/server/services/plan-entitlement"
+	);
+	const result =
+		await PlanEntitlementService.checkCanCreateOrganization(userId);
+	if (!result.allowed) {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message:
+				result.reason ||
+				"You have reached your plan limit for organizations. Upgrade your plan to create more.",
+		});
+	}
 };
 
 export const assertMemberLimit = async (organizationId: string) => {

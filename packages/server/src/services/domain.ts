@@ -1853,7 +1853,7 @@ export const getDnsInstructionsForDomain = async (
 				message = `DNS record not found yet. Add a CNAME record with Name "${recordName}" and Target "${cnameTarget}" at your DNS provider.`;
 			}
 		} else if (verification.cdnProvider) {
-			message = `Domain is verified and routed through ${verification.cdnProvider}. SSL and traffic will proxy through the CDN.`;
+			message = `Domain is verified and routed through the Edge Network. SSL and traffic are proxied through our secure edge network.`;
 		} else if (verification.cnameMatched) {
 			message = `Domain is verified and CNAME is pointing to ${cnameTarget}.`;
 		}
@@ -1891,7 +1891,7 @@ export const getDnsInstructionsForDomain = async (
 				? undefined
 				: {
 					supportsCnameFlattening: true,
-					note: `Apex domains (@) require a DNS provider supporting CNAME Flattening or ALIAS/ANAME records (e.g. Cloudflare, Route53, Namecheap). Alternatively, add a www.${cleanHost} CNAME record pointing to ${cnameTarget}.`,
+					note: `Apex domains (@) require a DNS provider supporting CNAME Flattening or ALIAS/ANAME records. Alternatively, add a www.${cleanHost} CNAME record pointing to ${cnameTarget}.`,
 					recommendedAlternative: `www.${cleanHost}`,
 				},
 		};
@@ -1909,7 +1909,7 @@ export const getDnsInstructionsForDomain = async (
 			message = `DNS record not found yet. Add an A record with Name "${recordName}" and Value "${expectedIp}" at your DNS provider.`;
 		}
 	} else if (validation.cdnProvider) {
-		message = `Domain is routed through ${validation.cdnProvider}. SSL and traffic will proxy through the CDN.`;
+		message = `Domain is routed through the Edge Network. SSL and traffic are proxied through our secure edge network.`;
 	}
 
 	return {

@@ -140,7 +140,7 @@ export const checkTargetDnsStatus = async (
 	try {
 		const ips = await resolveDns(cleanTarget);
 		const cdn = ips.map((ip) => detectCDNProvider(ip)).find((p) => p !== null);
-		const isProxied = cdn !== undefined && cdn.displayName === "Cloudflare";
+		const isProxied = cdn !== undefined && (cdn.name === "cloudflare" || cdn.displayName === "Edge Network");
 
 		return {
 			target: cleanTarget,
@@ -303,7 +303,7 @@ export const verifyDomainCname = async (
 
 	// 4. Check CDN detection on customer domain
 	const cdn = customerIps.map((ip) => detectCDNProvider(ip)).find((p) => p !== null);
-	const isCloudflare = cdn !== undefined && cdn.displayName === "Cloudflare";
+	const isCloudflare = cdn !== undefined && (cdn.name === "cloudflare" || cdn.displayName === "Edge Network");
 
 	const isValid = cnameMatched || ipMatched || cdn !== undefined;
 

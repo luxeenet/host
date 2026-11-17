@@ -268,7 +268,7 @@ export const createColumns = ({
 												<>
 													<CheckCircle2 className="size-3 mr-1" />
 													{validationState.message && validationState.cdnProvider
-														? `${validationState.cdnProvider}`
+														? "Proxied"
 														: "Valid"}
 												</>
 											) : validationState?.error ? (
@@ -286,11 +286,11 @@ export const createColumns = ({
 									</TooltipTrigger>
 									<TooltipContent className="max-w-xs">
 										{validationState?.isValid && validationState?.message ? (
-											<p>{validationState.message}</p>
+											<p>{validationState.message.replace(/cloudflare/gi, "Edge Network")}</p>
 										) : validationState?.error ? (
 											<div className="flex flex-col gap-1">
 												<p className="font-medium text-red-500">Error:</p>
-												<p>{validationState.error}</p>
+												<p>{validationState.error.replace(/cloudflare/gi, "Edge Network")}</p>
 											</div>
 										) : (
 											"Click to validate DNS configuration"

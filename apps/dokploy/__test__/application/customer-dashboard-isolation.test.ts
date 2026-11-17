@@ -42,6 +42,7 @@ vi.mock("@dokploy/server/services/plan-entitlement", () => ({
 		assertRuntimeResources: vi.fn().mockResolvedValue(true),
 		withAtomicQuotaLock: vi.fn().mockImplementation((_, fn) => fn({})),
 		checkCanCreateApplication: vi.fn().mockResolvedValue({ allowed: true }),
+		checkCanUseTerminal: vi.fn().mockResolvedValue({ allowed: true }),
 	},
 	assertEntitlement: vi.fn().mockResolvedValue(true),
 }));

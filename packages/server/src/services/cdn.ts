@@ -645,33 +645,33 @@ const ARVANCLOUD_IP_RANGES = [
 const CDN_PROVIDERS: CDNProvider[] = [
 	{
 		name: "cloudflare",
-		displayName: "Cloudflare",
+		displayName: "Edge Network",
 		checkIp: (ip: string) => isCloudflareIp(ip),
 		warningMessage:
-			"Domain is behind Cloudflare - actual IP is masked by Cloudflare proxy",
+			"Domain is routed through the Edge Network - actual IP is protected by Edge Proxy",
 	},
 	{
 		name: "bunnycdn",
-		displayName: "Bunny CDN",
+		displayName: "Edge CDN",
 		checkIp: (ip: string) => BUNNY_CDN_IPS.has(ip),
 		warningMessage:
-			"Domain is behind Bunny CDN - actual IP is masked by CDN proxy",
+			"Domain is routed through an Edge CDN - actual IP is protected by CDN proxy",
 	},
 	{
 		name: "fastly",
-		displayName: "Fastly",
+		displayName: "Edge CDN",
 		checkIp: (ip: string) =>
 			FASTLY_IP_RANGES.some((range) => isIPInCIDR(ip, range)),
 		warningMessage:
-			"Domain is behind Fastly - actual IP is masked by CDN proxy",
+			"Domain is routed through an Edge CDN - actual IP is protected by CDN proxy",
 	},
 	{
 		name: "arvancloud",
-		displayName: "Arvancloud",
+		displayName: "Edge CDN",
 		checkIp: (ip: string) =>
 			ARVANCLOUD_IP_RANGES.some((range) => isIPInCIDR(ip, range)),
 		warningMessage:
-			"Domain is behind Arvancloud - actual IP is masked by CDN proxy",
+			"Domain is routed through an Edge CDN - actual IP is protected by CDN proxy",
 	},
 ];
 

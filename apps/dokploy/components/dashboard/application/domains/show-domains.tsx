@@ -804,13 +804,13 @@ export const ShowDomains = ({ id, type }: Props) => {
 																			<CheckCircle2 className="size-3 mr-1" />
 																			{validationState.message &&
 																			validationState.cdnProvider
-																				? `Behind ${validationState.cdnProvider}`
+																				? "Edge Proxied"
 																				: "DNS Valid"}
 																		</>
 																	) : validationState?.error ? (
 																		<>
 																			<XCircle className="size-3 mr-1" />
-																			{validationState.error}
+																			{validationState.error.replace(/cloudflare/gi, "Edge Network")}
 																		</>
 																	) : (
 																		<>
@@ -823,13 +823,13 @@ export const ShowDomains = ({ id, type }: Props) => {
 															<TooltipContent className="max-w-xs">
 																{validationState?.isValid &&
 																validationState?.message ? (
-																	<p>{validationState.message}</p>
+																	<p>{validationState.message.replace(/cloudflare/gi, "Edge Network")}</p>
 																) : validationState?.error ? (
 																	<div className="flex flex-col gap-1">
 																		<p className="font-medium text-red-500">
 																			Error:
 																		</p>
-																		<p>{validationState.error}</p>
+																		<p>{validationState.error.replace(/cloudflare/gi, "Edge Network")}</p>
 																	</div>
 																) : (
 																	"Click to validate DNS configuration"

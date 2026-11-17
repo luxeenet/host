@@ -498,7 +498,7 @@ export async function deprovisionOrganizationResources(
 
 				for (const comp of env.compose) {
 					try {
-						await removeCompose(comp.composeId);
+						await removeCompose(comp, true);
 					} catch (_) {}
 				}
 

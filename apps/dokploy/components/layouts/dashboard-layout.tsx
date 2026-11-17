@@ -33,13 +33,26 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 		router.pathname !== "/dashboard/home" &&
 		onboardingStatus?.shouldShowOnboarding === true;
 
+	const isAllowedUnsubscribedPath =
+		router.pathname.startsWith("/onboarding") ||
+		router.pathname.startsWith("/dashboard/billing") ||
+		router.pathname.startsWith("/dashboard/settings/profile") ||
+		router.pathname.startsWith("/dashboard/settings/sessions");
+
+	const shouldRedirectToPlanSelection =
+		haveRootAccess !== true &&
+		onboardingStatus?.needsPlanSelection === true &&
+		!isAllowedUnsubscribedPath;
+
 	useEffect(() => {
-		if (shouldRedirectToOnboarding) {
+		if (shouldRedirectToPlanSelection) {
+			router.replace("/onboarding");
+		} else if (shouldRedirectToOnboarding) {
 			router.replace("/dashboard/home");
 		}
-	}, [shouldRedirectToOnboarding, router]);
+	}, [shouldRedirectToPlanSelection, shouldRedirectToOnboarding, router]);
 
-	if (shouldRedirectToOnboarding) {
+	if (shouldRedirectToPlanSelection || shouldRedirectToOnboarding) {
 		return null;
 	}
 

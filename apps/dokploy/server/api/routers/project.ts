@@ -687,17 +687,35 @@ export const projectRouter = createTRPCRouter({
 		const billingStatus = await getBillingStatus(ctx.user.ownerId);
 		const currentUser = await findUserById(ctx.user.id);
 
-		const isOwner = ctx.user.role === "owner";
-		const billingGatePassed = IS_CLOUD ? !billingStatus.hasActiveAccess : true;
+		let planSnapshot = null;
+		try {
+			planSnapshot = await PlanEntitlementService.getPlanSnapshot(
+				ctx.session.activeOrganizationId,
+			);
+		} catch (err) {
+			console.error("[project.onboardingStatus] Error getting plan snapshot:", err);
+		}
+
+		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+		const hasActivePlan = Boolean(planSnapshot);
+		const hasActiveAccess =
+			!IS_CLOUD || isPlatformAdmin || hasActivePlan || Boolean(billingStatus?.hasActiveAccess);
+		const needsPlanSelection = IS_CLOUD && !isPlatformAdmin && !hasActivePlan;
+
+		const isOwner = ctx.user.role === "owner" || isPlatformAdmin;
 
 		return {
+			...billingStatus,
+			hasActivePlan,
+			hasActiveAccess,
+			needsPlanSelection,
 			shouldShowOnboarding:
 				isOwner &&
 				!currentUser.onboardingCompletedAt &&
 				projectCount === 0 &&
-				billingGatePassed,
+				hasActiveAccess,
 			projectCount,
-			...billingStatus,
+			plan: planSnapshot?.planName ?? billingStatus?.plan ?? null,
 		};
 	}),
 

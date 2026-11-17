@@ -5,7 +5,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 
-export function SignInWithGoogle() {
+interface SignInWithGoogleProps {
+	callbackURL?: string;
+	newUserCallbackURL?: string;
+	text?: string;
+}
+
+export function SignInWithGoogle({
+	callbackURL = "/dashboard/home",
+	newUserCallbackURL = "/dashboard/home?signup=google",
+	text = "Sign in with Google",
+}: SignInWithGoogleProps = {}) {
 	const [isLoading, setIsLoading] = useState(false);
 
 	const handleClick = async () => {
@@ -13,8 +23,8 @@ export function SignInWithGoogle() {
 		try {
 			const { error } = await authClient.signIn.social({
 				provider: "google",
-				callbackURL: "/dashboard/home",
-				newUserCallbackURL: "/dashboard/home?signup=google",
+				callbackURL,
+				newUserCallbackURL,
 				errorCallbackURL: "/",
 			});
 			if (error) {
@@ -56,7 +66,7 @@ export function SignInWithGoogle() {
 					d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
 				/>
 			</svg>
-			Sign in with Google
+			{text}
 		</Button>
 	);
 }

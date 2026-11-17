@@ -1,63 +1,124 @@
 import Head from "next/head";
+import Link from "next/link";
 import { useRouter } from "next/router";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle, Zap, Server, Code, Building } from "lucide-react";
+import {
+	CheckCircle,
+	Zap,
+	Server,
+	Code,
+	Building,
+	ShieldCheck,
+	Check,
+	Layers,
+	Cpu,
+	Globe,
+	Clock,
+	Database,
+	Lock,
+	LogOut,
+	HelpCircle,
+	Sparkles,
+} from "lucide-react";
 import { api } from "@/utils/api";
 import { brand, formatCurrency } from "@paas/branding";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Logo } from "@/components/shared/logo";
+import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import type { GetServerSidePropsContext } from "next";
 import { validateRequest } from "@dokploy/server/lib/auth";
 
 const PLAN_ICONS: Record<string, ReactElement> = {
-	starter: <Zap className="w-5 h-5" />,
-	basic: <Server className="w-5 h-5" />,
-	developer: <Code className="w-5 h-5" />,
-	business: <Building className="w-5 h-5" />,
-	enterprise: <Building className="w-5 h-5" />,
+	starter: <Zap className="size-5" />,
+	basic: <Server className="size-5" />,
+	developer: <Code className="size-5" />,
+	standard: <Layers className="size-5" />,
+	pro: <Code className="size-5" />,
+	business: <Building className="size-5" />,
+	enterprise: <ShieldCheck className="size-5" />,
 };
 
-const PLAN_COLORS: Record<string, string> = {
-	starter: "from-slate-600 to-slate-500",
-	basic: "from-blue-600 to-blue-500",
-	developer: "from-indigo-600 to-violet-600",
-	business: "from-cyan-600 to-teal-500",
-	enterprise: "from-amber-600 to-orange-500",
+const PLAN_GRADIENTS: Record<string, string> = {
+	starter: "from-blue-600 to-cyan-600",
+	basic: "from-indigo-600 to-blue-600",
+	developer: "from-violet-600 to-indigo-600",
+	standard: "from-violet-600 to-indigo-600",
+	pro: "from-purple-600 to-pink-600",
+	business: "from-amber-600 to-orange-600",
+	enterprise: "from-emerald-600 to-teal-600",
 };
 
 export default function OnboardingPage() {
 	const router = useRouter();
 	const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+	const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
 	const [subscribing, setSubscribing] = useState(false);
 
-	const { data: plans, isLoading } = api.plan.list.useQuery();
+	const { data: rawPlans, isLoading } = api.plan.list.useQuery();
+	const utils = api.useUtils();
+
+	const plans = useMemo(() => {
+		if (!rawPlans) return [];
+		// Filter by selected billing cycle if plan variants exist, otherwise return all
+		const cycleMatches = rawPlans.filter((p) => p.billingCycle === billingCycle);
+		if (cycleMatches.length > 0) return cycleMatches;
+		return rawPlans;
+	}, [rawPlans, billingCycle]);
+
+	// Auto-select featured or first plan if none selected
+	useMemo(() => {
+		if (!selectedPlanId && plans.length > 0) {
+			const featured = plans.find((p) => p.isFeatured) ?? plans[0];
+			if (featured) setSelectedPlanId(featured.id);
+		}
+	}, [plans, selectedPlanId]);
+
+	const selectedPlan = useMemo(() => {
+		return plans.find((p) => p.id === selectedPlanId) ?? plans[0] ?? null;
+	}, [plans, selectedPlanId]);
+
 	const subscribeMutation = api.subscription.create.useMutation({
 		onSuccess: async () => {
-			toast.success("Subscription created! Welcome aboard 🎉");
+			toast.success("Subscription activated! Welcome aboard 🎉");
+			await Promise.all([
+				utils.subscription.getCurrent.invalidate(),
+				utils.project.onboardingStatus.invalidate(),
+			]);
 			await router.push("/dashboard/home");
 		},
 		onError: (err) => {
-			toast.error(err.message);
+			toast.error(err.message || "Failed to activate plan. Please try again.");
 			setSubscribing(false);
 		},
 	});
 
 	const handleSelectPlan = async () => {
 		if (!selectedPlanId) {
-			toast.error("Please select a plan first.");
+			toast.error("Please select a plan to continue.");
 			return;
 		}
 		setSubscribing(true);
 		subscribeMutation.mutate({ planId: selectedPlanId });
 	};
 
+	const handleSignOut = async () => {
+		try {
+			await authClient.signOut();
+			router.push("/");
+		} catch {
+			router.push("/");
+		}
+	};
+
 	const getResourceValue = (
 		resources: { resourceKey: string; value: number; unit?: string | null }[],
 		key: string,
 	) => {
-		const r = resources.find((r) => r.resourceKey === key);
+		const r = resources.find((item) => item.resourceKey === key);
 		if (!r) return null;
 		return r.value === -1 ? "Unlimited" : `${r.value}${r.unit ? ` ${r.unit}` : ""}`;
 	};
@@ -70,80 +131,161 @@ export default function OnboardingPage() {
 	return (
 		<>
 			<Head>
-				<title>Choose Your Plan — {brand.APP_NAME}</title>
-				<meta name="description" content={`Select the perfect hosting plan on ${brand.APP_NAME}.`} />
+				<title>Choose Your Cloud Plan — {brand.APP_NAME}</title>
+				<meta
+					name="description"
+					content={`Select your hosting plan and deploy applications on ${brand.APP_NAME}.`}
+				/>
 			</Head>
 
-			<div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 py-12 px-4">
-				{/* Background decorations */}
-				<div className="absolute inset-0 pointer-events-none overflow-hidden">
-					<div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-full bg-indigo-500/8 blur-3xl" />
-				</div>
-
-				<div className="relative max-w-6xl mx-auto">
-					{/* Header */}
-					<div className="text-center mb-12">
-						<div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-4 py-1.5 mb-4">
-							<CheckCircle className="w-4 h-4 text-indigo-400" />
-							<span className="text-indigo-300 text-sm font-medium">Account created successfully</span>
-						</div>
-						<h1 className="text-4xl font-bold text-white mb-3">
-							Choose your plan
-						</h1>
-						<p className="text-slate-400 text-lg max-w-2xl mx-auto">
-							Start with a 14-day free trial. No credit card required.
-							Cancel anytime.
-						</p>
+			<div className="min-h-screen bg-background text-foreground flex flex-col justify-between">
+				{/* Top Navigation */}
+				<header className="sticky top-0 z-30 w-full border-b border-border bg-background/80 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between">
+					<div className="flex items-center gap-3">
+						<Logo className="size-8" />
+						<span className="text-lg font-bold tracking-tight text-foreground">
+							{brand.APP_NAME}
+						</span>
+						<Separator orientation="vertical" className="h-4 hidden sm:block" />
+						<span className="text-xs text-muted-foreground hidden sm:inline-flex items-center gap-1.5 font-medium">
+							<span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+							Cloud Setup
+						</span>
 					</div>
 
-					{/* Plans grid */}
+					<div className="flex items-center gap-3">
+						<a
+							href={`mailto:${brand.SUPPORT_EMAIL}`}
+							className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium transition-colors"
+						>
+							<HelpCircle className="size-3.5" />
+							Support
+						</a>
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={handleSignOut}
+							className="text-xs text-muted-foreground hover:text-foreground h-8"
+						>
+							<LogOut className="size-3.5 mr-1" />
+							Sign out
+						</Button>
+					</div>
+				</header>
+
+				{/* Main Content */}
+				<main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+					{/* Header */}
+					<div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14 space-y-3">
+						<div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1 text-xs font-medium text-primary">
+							<Sparkles className="size-3.5 text-primary" />
+							<span>Step 1 of 2: Pick Your Hosting Plan</span>
+						</div>
+						<h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
+							Choose the plan that fits your growth
+						</h1>
+						<p className="text-muted-foreground text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
+							Deploy with zero-downtime rollouts, automated edge SSL, and isolated tenant
+							compute. Start with a 14-day free trial on any tier — cancel anytime.
+						</p>
+
+						{/* Billing Period Selector */}
+						<div className="pt-4 flex items-center justify-center">
+							<div className="inline-flex items-center rounded-xl bg-muted p-1 border border-border">
+								<button
+									type="button"
+									onClick={() => setBillingCycle("monthly")}
+									className={cn(
+										"px-4 py-1.5 text-xs font-semibold rounded-lg transition-all",
+										billingCycle === "monthly"
+											? "bg-background text-foreground shadow-sm"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+								>
+									Monthly Billing
+								</button>
+								<button
+									type="button"
+									onClick={() => setBillingCycle("yearly")}
+									className={cn(
+										"px-4 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5",
+										billingCycle === "yearly"
+											? "bg-background text-foreground shadow-sm"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+								>
+									<span>Yearly Billing</span>
+									<span className="rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] px-1.5 py-0.5 font-bold">
+										Save 20%
+									</span>
+								</button>
+							</div>
+						</div>
+					</div>
+
+					{/* Plans Grid */}
 					{isLoading ? (
-						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
-							{[1, 2, 3].map((i) => (
-								<div key={i} className="h-[400px] rounded-2xl bg-slate-800/50" />
+						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
+							{[1, 2, 3, 4].map((i) => (
+								<div key={i} className="h-96 rounded-2xl bg-muted/60 border border-border" />
 							))}
 						</div>
 					) : (
-						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-							{plans?.map((plan) => {
+						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-stretch">
+							{plans.map((plan) => {
 								const isSelected = selectedPlanId === plan.id;
 								const isFeatured = plan.isFeatured;
-								const colorClass = PLAN_COLORS[plan.slug] ?? "from-slate-600 to-slate-500";
+								const gradient =
+									PLAN_GRADIENTS[plan.slug] ?? "from-primary to-primary/80";
 
 								return (
 									<div
 										key={plan.id}
 										onClick={() => setSelectedPlanId(plan.id)}
 										className={cn(
-											"relative rounded-2xl border cursor-pointer transition-all duration-300 group",
-											"bg-slate-900/70 backdrop-blur-sm",
+											"relative flex flex-col justify-between rounded-2xl border p-6 cursor-pointer transition-all duration-200 select-none",
+											"bg-card text-card-foreground shadow-sm hover:shadow-md",
 											isSelected
-												? "border-indigo-500 ring-2 ring-indigo-500/30 scale-[1.02]"
-												: "border-slate-800 hover:border-slate-700 hover:scale-[1.01]",
-											isFeatured && !isSelected && "border-indigo-500/40",
+												? "border-primary ring-2 ring-primary/25 shadow-lg scale-[1.01]"
+												: "border-border hover:border-primary/50",
 										)}
 									>
+										{/* Featured Badge */}
 										{isFeatured && (
-											<div className="absolute -top-3 left-1/2 -translate-x-1/2">
-												<Badge className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white border-0 text-xs px-3 py-0.5">
+											<div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+												<Badge className="bg-primary text-primary-foreground border-0 text-[11px] font-semibold px-3 py-0.5 shadow-sm">
 													Most Popular
 												</Badge>
 											</div>
 										)}
 
-										<div className="p-6">
-											{/* Plan header */}
+										<div>
+											{/* Header */}
 											<div className="flex items-center gap-3 mb-4">
-												<div className={cn(
-													"w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white",
-													colorClass,
-												)}>
-													{PLAN_ICONS[plan.slug] ?? <Zap className="w-5 h-5" />}
+												<div
+													className={cn(
+														"size-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shrink-0 shadow-inner",
+														gradient,
+													)}
+												>
+													{PLAN_ICONS[plan.slug] ?? <Zap className="size-5" />}
 												</div>
 												<div>
-													<h3 className="font-semibold text-white text-lg">{plan.name}</h3>
-													{plan.trialDays > 0 && (
-														<span className="text-xs text-emerald-400">{plan.trialDays}-day free trial</span>
+													<h3 className="font-bold text-foreground text-lg leading-tight">
+														{plan.name}
+													</h3>
+													{plan.trialDays > 0 ? (
+														<span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+															{plan.trialDays}-day free trial
+														</span>
+													) : Number(plan.price) === 0 ? (
+														<span className="text-xs text-muted-foreground">
+															Free forever
+														</span>
+													) : (
+														<span className="text-xs text-muted-foreground">
+															Full cloud access
+														</span>
 													)}
 												</div>
 											</div>
@@ -151,117 +293,182 @@ export default function OnboardingPage() {
 											{/* Price */}
 											<div className="mb-4">
 												{Number(plan.price) === 0 ? (
-													<div className="text-3xl font-bold text-white">Free</div>
+													<div className="text-3xl font-extrabold tracking-tight text-foreground">
+														Free
+													</div>
 												) : (
 													<div className="flex items-baseline gap-1">
-														<span className="text-3xl font-bold text-white">
+														<span className="text-3xl font-extrabold tracking-tight text-foreground">
 															{formatCurrency(Number(plan.price), plan.currency)}
 														</span>
-														<span className="text-slate-400 text-sm">/{plan.billingCycle === "yearly" ? "yr" : "mo"}</span>
+														<span className="text-muted-foreground text-sm font-medium">
+															/{plan.billingCycle === "yearly" ? "yr" : "mo"}
+														</span>
 													</div>
 												)}
 											</div>
 
-											<p className="text-slate-400 text-sm mb-5 leading-relaxed">{plan.description}</p>
+											<p className="text-muted-foreground text-xs leading-relaxed mb-5 min-h-[36px]">
+												{plan.description}
+											</p>
 
-											{/* Key limits */}
-											<div className="space-y-2 mb-5">
-												{[
-													{ key: "max_applications", label: "Applications" },
-													{ key: "max_databases", label: "Databases" },
-													{ key: "max_domains", label: "Custom Domains" },
-													{ key: "max_ram_mb", label: "RAM" },
-													{ key: "build_minutes_per_month", label: "Build Minutes" },
-												].map(({ key, label }) => {
-													const val = getResourceValue(plan.resources, key);
-													if (!val) return null;
-													return (
-														<div key={key} className="flex items-center justify-between text-sm">
-															<span className="text-slate-500">{label}</span>
-															<span className={cn(
-																"font-medium",
-																val === "Unlimited" ? "text-emerald-400" : "text-slate-300",
-															)}>
-																{val}
-															</span>
-														</div>
-													);
-												})}
+											<Separator className="mb-4" />
+
+											{/* Quotas breakdown */}
+											<div className="space-y-2.5 mb-5 text-xs">
+												<div className="flex items-center justify-between">
+													<span className="text-muted-foreground flex items-center gap-1.5">
+														<Layers className="size-3.5" />
+														Applications
+													</span>
+													<span className="font-semibold text-foreground">
+														{getResourceValue(plan.resources, "max_applications") ?? "Unlimited"}
+													</span>
+												</div>
+												<div className="flex items-center justify-between">
+													<span className="text-muted-foreground flex items-center gap-1.5">
+														<Database className="size-3.5" />
+														Databases
+													</span>
+													<span className="font-semibold text-foreground">
+														{getResourceValue(plan.resources, "max_databases") ?? "Unlimited"}
+													</span>
+												</div>
+												<div className="flex items-center justify-between">
+													<span className="text-muted-foreground flex items-center gap-1.5">
+														<Globe className="size-3.5" />
+														Custom Domains
+													</span>
+													<span className="font-semibold text-foreground">
+														{getResourceValue(plan.resources, "max_domains") ?? "Unlimited"}
+													</span>
+												</div>
+												<div className="flex items-center justify-between">
+													<span className="text-muted-foreground flex items-center gap-1.5">
+														<Cpu className="size-3.5" />
+														RAM Limit
+													</span>
+													<span className="font-semibold text-foreground">
+														{getResourceValue(plan.resources, "max_ram_mb") ?? "Unlimited"}
+													</span>
+												</div>
+												<div className="flex items-center justify-between">
+													<span className="text-muted-foreground flex items-center gap-1.5">
+														<Clock className="size-3.5" />
+														Build Minutes
+													</span>
+													<span className="font-semibold text-foreground">
+														{getResourceValue(plan.resources, "build_minutes_per_month") ?? "Unlimited"}
+													</span>
+												</div>
 											</div>
 
-											{/* Feature chips */}
-											<div className="flex flex-wrap gap-1.5 mb-5">
-												{[
-													{ key: "ssl", label: "SSL" },
-													{ key: "custom_domains", label: "Custom Domains" },
-													{ key: "automatic_deployments", label: "Auto Deploy" },
-													{ key: "databases", label: "Databases" },
-													{ key: "backups", label: "Backups" },
-													{ key: "team_members", label: "Team" },
-												]
-													.filter(({ key }) => isFeatureEnabled(plan.features, key))
-													.map(({ key, label }) => (
-														<span
-															key={key}
-															className="text-xs bg-slate-800 text-slate-300 rounded-full px-2 py-0.5 border border-slate-700"
-														>
-															✓ {label}
-														</span>
-													))}
-											</div>
+											<Separator className="mb-4" />
 
-											{/* Selection indicator */}
-											<div className={cn(
-												"flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all",
-												isSelected
-													? "bg-indigo-600 text-white"
-													: "bg-slate-800 text-slate-400 group-hover:bg-slate-700 group-hover:text-slate-200",
-											)}>
-												{isSelected ? (
-													<>
-														<CheckCircle className="w-4 h-4" />
-														Selected
-													</>
-												) : (
-													"Select Plan"
+											{/* Included feature pills */}
+											<div className="space-y-2 mb-6 text-xs text-muted-foreground">
+												<div className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>Automatic Edge SSL & HTTPS</span>
+												</div>
+												<div className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>Zero-downtime Rollouts</span>
+												</div>
+												<div className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>Tenant Container Isolation</span>
+												</div>
+												{isFeatureEnabled(plan.features, "backups") && (
+													<div className="flex items-center gap-2">
+														<Check className="size-3.5 text-emerald-500 shrink-0" />
+														<span>Automated Database Backups</span>
+													</div>
+												)}
+												{isFeatureEnabled(plan.features, "team_members") && (
+													<div className="flex items-center gap-2">
+														<Check className="size-3.5 text-emerald-500 shrink-0" />
+														<span>Team Collaboration & RBAC</span>
+													</div>
 												)}
 											</div>
 										</div>
+
+										{/* Card Button */}
+										<Button
+											type="button"
+											variant={isSelected ? "default" : "outline"}
+											className={cn(
+												"w-full font-semibold transition-all h-10",
+												isSelected && "shadow-sm",
+											)}
+										>
+											{isSelected ? (
+												<span className="flex items-center gap-1.5">
+													<CheckCircle className="size-4" />
+													Selected
+												</span>
+											) : (
+												`Select ${plan.name}`
+											)}
+										</Button>
 									</div>
 								);
 							})}
 						</div>
 					)}
+				</main>
 
-					{/* CTA */}
-					<div className="mt-10 flex justify-center">
-						<Button
-							onClick={handleSelectPlan}
-							disabled={!selectedPlanId || subscribing}
-							size="lg"
-							className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-semibold h-12 px-10 text-base transition-all duration-200 shadow-lg shadow-indigo-500/25"
-						>
-							{subscribing ? (
-								<span className="flex items-center gap-2">
-									<svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-										<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-										<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-									</svg>
-									Setting up workspace...
-								</span>
-							) : (
-								"Continue with Selected Plan →"
-							)}
-						</Button>
+				{/* Sticky Bottom Action Bar */}
+				<footer className="sticky bottom-0 z-30 w-full border-t border-border bg-background/95 backdrop-blur-md px-4 sm:px-8 py-4 shadow-lg">
+					<div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+						<div className="flex items-center gap-4 text-sm">
+							<div className="hidden sm:flex size-10 rounded-full bg-primary/10 border border-primary/20 items-center justify-center text-primary shrink-0">
+								<Lock className="size-4" />
+							</div>
+							<div>
+								{selectedPlan ? (
+									<div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
+										<span className="font-bold text-foreground">
+											Selected: {selectedPlan.name} Plan
+										</span>
+										<span className="text-muted-foreground text-xs hidden sm:inline">•</span>
+										<span className="text-muted-foreground text-xs">
+											{Number(selectedPlan.price) === 0
+												? "Free Forever"
+												: `${formatCurrency(Number(selectedPlan.price), selectedPlan.currency)}/${selectedPlan.billingCycle === "yearly" ? "yr" : "mo"}`}
+											{selectedPlan.trialDays > 0 &&
+												` (${selectedPlan.trialDays}-day free trial)`}
+										</span>
+									</div>
+								) : (
+									<span className="text-muted-foreground text-xs">
+										Choose a plan to get started
+									</span>
+								)}
+								<p className="text-xs text-muted-foreground">
+									No setup fees • Instant cloud workspace provisioning • Cancel anytime
+								</p>
+							</div>
+						</div>
+
+						<div className="flex items-center gap-3 w-full sm:w-auto">
+							<Button
+								onClick={handleSelectPlan}
+								disabled={!selectedPlanId || subscribing}
+								isLoading={subscribing}
+								size="lg"
+								className="w-full sm:w-auto min-w-[240px] font-semibold h-11 text-sm shadow-md"
+							>
+								{selectedPlan?.trialDays && selectedPlan.trialDays > 0
+									? `Start ${selectedPlan.trialDays}-Day Free Trial →`
+									: Number(selectedPlan?.price) === 0
+										? "Activate Free Starter Plan →"
+										: "Continue to Workspace →"}
+							</Button>
+						</div>
 					</div>
-
-					<p className="text-center mt-4 text-sm text-slate-500">
-						Need a custom plan?{" "}
-						<a href={`mailto:${brand.SUPPORT_EMAIL}`} className="text-indigo-400 hover:underline">
-							Contact us
-						</a>
-					</p>
-				</div>
+				</footer>
 			</div>
 		</>
 	);
@@ -274,5 +481,24 @@ export async function getServerSideProps(ctx: GetServerSidePropsContext) {
 	if (!session) {
 		return { redirect: { destination: "/signup", permanent: false } };
 	}
+
+	// Security: If user/org already has an active subscription, redirect directly to dashboard
+	try {
+		const orgId = session.activeOrganizationId;
+		if (orgId) {
+			const { PlanEntitlementService } = await import(
+				"@dokploy/server/services/plan-entitlement"
+			);
+			const planSnapshot = await PlanEntitlementService.getPlanSnapshot(orgId);
+			if (planSnapshot) {
+				return {
+					redirect: { destination: "/dashboard/home", permanent: false },
+				};
+			}
+		}
+	} catch (err) {
+		console.error("[onboarding.getServerSideProps] error checking active plan:", err);
+	}
+
 	return { props: {} };
 }

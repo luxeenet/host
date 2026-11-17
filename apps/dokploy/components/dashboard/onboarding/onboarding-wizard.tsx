@@ -3,6 +3,7 @@ import { CheckIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { GithubIcon } from "@/components/icons/data-tools-icons";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
@@ -66,8 +67,14 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 		if (nextId) stepper.goTo(nextId);
 	};
 
+	const { data: onboardingStatus } = api.project.onboardingStatus.useQuery();
 	const [skipAllOpen, setSkipAllOpen] = useState(false);
 	const handleSkipAll = async () => {
+		if (onboardingStatus?.needsPlanSelection) {
+			toast.info("Please select a hosting plan to continue setup.");
+			router.push("/onboarding");
+			return;
+		}
 		await onClose();
 		router.push(
 			projectId && environmentId

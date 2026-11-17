@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { Fragment, useEffect, useState } from "react";
 import ConfettiExplosion from "react-confetti-explosion";
+import { brand } from "@paas/branding";
 import { DeployStep } from "@/components/dashboard/onboarding/steps/deploy-step";
 import { ProjectStep } from "@/components/dashboard/onboarding/steps/project-step";
 import { ServerStep } from "@/components/dashboard/onboarding/steps/server-step";
@@ -125,11 +126,10 @@ const CompleteIntro = ({ onFinish }: { onFinish: () => void }) => {
 					Go to dashboard
 				</Button>
 				<Link
-					href="https://discord.com/invite/2tBnJ3jDJc"
-					target="_blank"
+					href={`mailto:${brand.SUPPORT_EMAIL}`}
 					className="text-sm text-muted-foreground hover:text-foreground transition-colors"
 				>
-					Need help? Join our Discord →
+					Need help? Contact support →
 				</Link>
 			</div>
 		</div>

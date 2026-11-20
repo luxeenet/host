@@ -180,6 +180,7 @@ export async function updateSonicPesaSettings(
  */
 export async function testSonicPesaConnection(input?: {
 	apiKey?: string | null;
+	apiSecret?: string | null;
 	baseUrl?: string | null;
 	mode?: "live" | "sandbox";
 }): Promise<TestSonicPesaResult> {
@@ -188,6 +189,10 @@ export async function testSonicPesaConnection(input?: {
 		input?.apiKey && !input.apiKey.includes("••")
 			? input.apiKey.trim()
 			: current.apiKey;
+	const apiSecret =
+		input?.apiSecret && !input.apiSecret.includes("••")
+			? input.apiSecret.trim()
+			: current.apiSecret;
 	const mode = input?.mode || current.mode;
 	const defaultBaseUrl = mode === "sandbox"
 		? "https://sandbox.sonicpesa.com/api/v1"
@@ -205,13 +210,18 @@ export async function testSonicPesaConnection(input?: {
 
 	const startTime = Date.now();
 	try {
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+			"X-API-KEY": apiKey,
+		};
+		if (apiSecret) {
+			headers["X-API-SECRET"] = apiSecret;
+		}
+
 		// Probe order_status endpoint with test probe ID
 		const res = await fetch(`${baseUrl}/payment/order_status`, {
 			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"X-API-KEY": apiKey,
-			},
+			headers,
 			body: JSON.stringify({ order_id: "probe-connection-check" }),
 			signal: AbortSignal.timeout(8000),
 		});

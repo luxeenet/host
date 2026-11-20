@@ -101,12 +101,17 @@ export class SonicPesaService {
 				};
 			}
 
+			const headers: Record<string, string> = {
+				"Content-Type": "application/json",
+				"X-API-KEY": creds.apiKey,
+			};
+			if (creds.apiSecret) {
+				headers["X-API-SECRET"] = creds.apiSecret;
+			}
+
 			const res = await fetch(`${creds.baseUrl}/payment/create_order`, {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"X-API-KEY": creds.apiKey,
-				},
+				headers,
 				body: JSON.stringify(payload),
 			});
 
@@ -154,12 +159,17 @@ export class SonicPesaService {
 				};
 			}
 
+			const headers: Record<string, string> = {
+				"Content-Type": "application/json",
+				"X-API-KEY": creds.apiKey,
+			};
+			if (creds.apiSecret) {
+				headers["X-API-SECRET"] = creds.apiSecret;
+			}
+
 			const res = await fetch(`${creds.baseUrl}/payment/order_status`, {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"X-API-KEY": creds.apiKey,
-				},
+				headers,
 				body: JSON.stringify({ order_id: orderId }),
 			});
 

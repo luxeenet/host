@@ -25,6 +25,10 @@ export interface PaymentInitiateRequest {
 	currency: string;
 	/** Phone number or account identifier (e.g. 255712345678) */
 	payerIdentifier: string;
+	/** Customer email address */
+	payerEmail?: string;
+	/** Customer full name */
+	payerName?: string;
 	/** Our invoice ID — used as reference */
 	invoiceId: string;
 	/** Optional description shown to payer */
@@ -246,19 +250,24 @@ class SonicPesaProvider implements PaymentProvider {
 			}
 
 			const payload = {
-				buyer_email: process.env.BRAND_SUPPORT_EMAIL ?? "customer@localhost",
-				buyer_name: req.description ?? `Invoice ${req.invoiceId}`,
+				buyer_email: req.payerEmail || process.env.BRAND_SUPPORT_EMAIL || "billing@hatdot.cloud",
+				buyer_name: req.payerName || req.description || `Invoice ${req.invoiceId}`,
 				buyer_phone: phone,
-				amount: req.amount,
+				amount: Math.round(req.amount),
 				currency: req.currency || "TZS",
 			};
 
+			const headers: Record<string, string> = {
+				"Content-Type": "application/json",
+				"X-API-KEY": creds.apiKey,
+			};
+			if (creds.apiSecret) {
+				headers["X-API-SECRET"] = creds.apiSecret;
+			}
+
 			const res = await fetch(`${creds.baseUrl}/payment/create_order`, {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"X-API-KEY": creds.apiKey,
-				},
+				headers,
 				body: JSON.stringify(payload),
 			});
 
@@ -299,12 +308,17 @@ class SonicPesaProvider implements PaymentProvider {
 				throw new Error("SonicPesa API Key is missing. Please configure SonicPesa in the Admin Dashboard.");
 			}
 
+			const headers: Record<string, string> = {
+				"Content-Type": "application/json",
+				"X-API-KEY": creds.apiKey,
+			};
+			if (creds.apiSecret) {
+				headers["X-API-SECRET"] = creds.apiSecret;
+			}
+
 			const res = await fetch(`${creds.baseUrl}/payment/order_status`, {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"X-API-KEY": creds.apiKey,
-				},
+				headers,
 				body: JSON.stringify({ order_id: providerReference }),
 			});
 

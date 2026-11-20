@@ -7,9 +7,10 @@
  * Route: POST /api/webhooks/sonicpesa
  *
  * Security: Verifies X-SonicPesa-Signature HMAC SHA256 header
- * if SONICPESA_API_SECRET is configured.
+ * according to official SonicPesa Developer Documentation.
  */
-import createHmac from "node:crypto";
+import crypto from "node:crypto";
+import { buffer } from "node:stream/consumers";
 import { eq } from "drizzle-orm";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { db } from "@dokploy/server/db";
@@ -17,10 +18,16 @@ import * as schema from "@dokploy/server/db/schema";
 import { activateSubscriptionOnPayment } from "@dokploy/server/services/billing-cycle";
 import { getSonicPesaResolvedCredentials } from "@dokploy/server";
 
+export const config = {
+	api: {
+		bodyParser: false,
+	},
+};
+
 interface SonicPesaWebhookEvent {
-	event: string;
+	event?: string;
 	order_id?: string;
-	amount?: number;
+	amount?: number | string;
 	currency?: string;
 	status?: string;
 	transid?: string;
@@ -40,27 +47,46 @@ export default async function handler(
 	}
 
 	try {
+		const rawBuffer = await buffer(req);
+		const rawBody = rawBuffer.toString("utf-8");
+
 		const signatureHeader = req.headers["x-sonicpesa-signature"];
 		const creds = await getSonicPesaResolvedCredentials();
 		const apiSecret = creds.apiSecret;
 
-		// Verify signature if secret is provided
+		// Verify signature if API Secret is configured
 		if (apiSecret && signatureHeader) {
-			const rawBody =
-				typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-			const expectedSignature = createHmac
+			const expectedSignature = crypto
 				.createHmac("sha256", apiSecret)
 				.update(rawBody)
 				.digest("hex");
 
-			if (expectedSignature !== signatureHeader) {
-				console.warn("[sonicpesa-webhook] Invalid signature header");
+			const sigStr = (Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader) || "";
+			let isValid = false;
+			try {
+				isValid =
+					sigStr.length === expectedSignature.length &&
+					crypto.timingSafeEqual(Buffer.from(sigStr, "utf-8"), Buffer.from(expectedSignature, "utf-8"));
+			} catch {
+				isValid = false;
+			}
+
+			if (!isValid) {
+				console.warn("[sonicpesa-webhook] Invalid signature header received");
 				return res.status(401).json({ message: "Invalid signature" });
 			}
 		}
 
-		const body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) as SonicPesaWebhookEvent;
+		let body: SonicPesaWebhookEvent = {};
+		try {
+			body = JSON.parse(rawBody) as SonicPesaWebhookEvent;
+		} catch (parseErr) {
+			console.error("[sonicpesa-webhook] JSON parse error:", parseErr);
+			return res.status(400).json({ message: "Invalid JSON payload" });
+		}
+
 		const orderId = body.order_id;
+		const eventType = body.event || "";
 		const paymentStatus = (body.payment_status || body.status || "").toUpperCase();
 
 		if (!orderId) {
@@ -82,7 +108,11 @@ export default async function handler(
 			return res.status(200).json({ status: "success", message: "Accepted" });
 		}
 
-		if (paymentStatus === "SUCCESS" || paymentStatus === "COMPLETED") {
+		if (
+			eventType === "payment.success" ||
+			paymentStatus === "SUCCESS" ||
+			paymentStatus === "COMPLETED"
+		) {
 			await db
 				.update(schema.payments)
 				.set({
@@ -102,7 +132,7 @@ export default async function handler(
 			await activateSubscriptionOnPayment(payment.invoice.subscriptionId);
 
 			console.log(
-				`[sonicpesa-webhook] Payment ${payment.id} succeeded. TransId: ${body.transid}`,
+				`[sonicpesa-webhook] Payment ${payment.id} succeeded. TransId: ${body.transid || "N/A"}`,
 			);
 		} else if (
 			paymentStatus === "CANCELLED" ||
@@ -121,14 +151,16 @@ export default async function handler(
 				.where(eq(schema.payments.id, payment.id));
 
 			const sub = payment.invoice.subscription;
-			const currentFailed = Number.parseInt(sub.failedPaymentCount ?? "0", 10);
-			await db
-				.update(schema.subscriptions)
-				.set({
-					failedPaymentCount: String(currentFailed + 1),
-					updatedAt: new Date(),
-				})
-				.where(eq(schema.subscriptions.id, sub.id));
+			if (sub) {
+				const currentFailed = Number.parseInt(sub.failedPaymentCount ?? "0", 10);
+				await db
+					.update(schema.subscriptions)
+					.set({
+						failedPaymentCount: String(currentFailed + 1),
+						updatedAt: new Date(),
+					})
+					.where(eq(schema.subscriptions.id, sub.id));
+			}
 
 			console.warn(
 				`[sonicpesa-webhook] Payment ${payment.id} marked failed (${paymentStatus})`,

@@ -62,6 +62,8 @@ export const paymentRouter = createTRPCRouter({
 				amount: Number(invoice.amount),
 				currency: invoice.currency,
 				payerIdentifier: input.payerIdentifier ?? "",
+				payerEmail: ctx.user.email ?? undefined,
+				payerName: ctx.user.name ?? undefined,
 				invoiceId: invoice.id,
 				description: `Payment for invoice ${invoice.invoiceNumber}`,
 			});

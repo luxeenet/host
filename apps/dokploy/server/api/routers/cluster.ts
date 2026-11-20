@@ -99,6 +99,13 @@ export const clusterRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Cluster management requires platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const targetServer = await findServerById(input.serverId);
 				if (targetServer.organizationId !== ctx.session.activeOrganizationId) {
@@ -133,6 +140,13 @@ export const clusterRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Cluster management requires platform administrator privileges.",
+				});
+			}
 			if (input.serverId) {
 				const targetServer = await findServerById(input.serverId);
 				if (targetServer.organizationId !== ctx.session.activeOrganizationId) {
@@ -157,5 +171,147 @@ export const clusterRouter = createTRPCRouter({
 				command: `docker swarm join --token ${result.JoinTokens.Manager} ${ip}:2377`,
 				version: docker_version.Version,
 			};
+		}),
+
+	updateAvailability: withPermission("server", "create")
+		.input(
+			z.object({
+				nodeId: z.string(),
+				availability: z.enum(["active", "pause", "drain"]),
+				serverId: z.string().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Cluster management requires platform administrator privileges.",
+				});
+			}
+			if (input.serverId) {
+				const targetServer = await findServerById(input.serverId);
+				if (targetServer.organizationId !== ctx.session.activeOrganizationId) {
+					throw new TRPCError({
+						code: "UNAUTHORIZED",
+						message: "You don't have access to this server.",
+					});
+				}
+			}
+			try {
+				const cmd = `docker node update --availability ${quote([input.availability])} ${quote([input.nodeId])}`;
+				if (input.serverId) {
+					await execAsyncRemote(input.serverId, cmd);
+				} else {
+					await execAsync(cmd);
+				}
+				await audit(ctx, {
+					action: "update",
+					resourceType: "cluster",
+					resourceId: input.nodeId,
+					resourceName: `Availability -> ${input.availability}`,
+				});
+				return true;
+			} catch (error) {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Error updating node availability",
+					cause: error,
+				});
+			}
+		}),
+
+	promoteNode: withPermission("server", "create")
+		.input(
+			z.object({
+				nodeId: z.string(),
+				serverId: z.string().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Cluster management requires platform administrator privileges.",
+				});
+			}
+			if (input.serverId) {
+				const targetServer = await findServerById(input.serverId);
+				if (targetServer.organizationId !== ctx.session.activeOrganizationId) {
+					throw new TRPCError({
+						code: "UNAUTHORIZED",
+						message: "You don't have access to this server.",
+					});
+				}
+			}
+			try {
+				const cmd = `docker node promote ${quote([input.nodeId])}`;
+				if (input.serverId) {
+					await execAsyncRemote(input.serverId, cmd);
+				} else {
+					await execAsync(cmd);
+				}
+				await audit(ctx, {
+					action: "update",
+					resourceType: "cluster",
+					resourceId: input.nodeId,
+					resourceName: "Promote to Manager",
+				});
+				return true;
+			} catch (error) {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Error promoting node to manager",
+					cause: error,
+				});
+			}
+		}),
+
+	demoteNode: withPermission("server", "create")
+		.input(
+			z.object({
+				nodeId: z.string(),
+				serverId: z.string().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			if (!(ctx.user as any)?.isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Cluster management requires platform administrator privileges.",
+				});
+			}
+			if (input.serverId) {
+				const targetServer = await findServerById(input.serverId);
+				if (targetServer.organizationId !== ctx.session.activeOrganizationId) {
+					throw new TRPCError({
+						code: "UNAUTHORIZED",
+						message: "You don't have access to this server.",
+					});
+				}
+			}
+			try {
+				const cmd = `docker node demote ${quote([input.nodeId])}`;
+				if (input.serverId) {
+					await execAsyncRemote(input.serverId, cmd);
+				} else {
+					await execAsync(cmd);
+				}
+				await audit(ctx, {
+					action: "update",
+					resourceType: "cluster",
+					resourceId: input.nodeId,
+					resourceName: "Demote to Worker",
+				});
+				return true;
+			} catch (error) {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Error demoting node to worker",
+					cause: error,
+				});
+			}
 		}),
 });

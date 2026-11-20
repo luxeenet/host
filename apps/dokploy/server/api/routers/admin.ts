@@ -212,4 +212,40 @@ export const adminRouter = createTRPCRouter({
 		const { reconcileCloudflareHostnames } = await import("@dokploy/server");
 		return await reconcileCloudflareHostnames({ forceAll: true });
 	}),
+
+	/** Platform Admin: Get sanitized SonicPesa payment gateway credentials and status */
+	getSonicPesaSettings: platformAdminProcedure.query(async () => {
+		const { getSonicPesaSanitizedSettings } = await import("@dokploy/server");
+		return await getSonicPesaSanitizedSettings();
+	}),
+
+	/** Platform Admin: Update SonicPesa payment gateway credentials and configuration */
+	updateSonicPesaSettings: platformAdminProcedure
+		.input(
+			z.object({
+				enabled: z.boolean().optional(),
+				apiKey: z.string().nullable().optional(),
+				apiSecret: z.string().nullable().optional(),
+				baseUrl: z.string().nullable().optional(),
+				mode: z.enum(["live", "sandbox"]).optional(),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const { updateSonicPesaSettings } = await import("@dokploy/server");
+			return await updateSonicPesaSettings(input);
+		}),
+
+	/** Platform Admin: Test SonicPesa API credentials and connection latency */
+	testSonicPesaConnection: platformAdminProcedure
+		.input(
+			z.object({
+				apiKey: z.string().nullable().optional(),
+				baseUrl: z.string().nullable().optional(),
+				mode: z.enum(["live", "sandbox"]).optional(),
+			}).optional(),
+		)
+		.mutation(async ({ input }) => {
+			const { testSonicPesaConnection } = await import("@dokploy/server");
+			return await testSonicPesaConnection(input);
+		}),
 });

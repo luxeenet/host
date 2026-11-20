@@ -40,7 +40,12 @@ export default function AdminDashboardPage() {
 						</p>
 					</div>
 
-					<div className="flex items-center gap-3">
+					<div className="flex flex-wrap items-center gap-3">
+						<Link href="/admin/payments">
+							<Button variant="outline" className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-950/30 font-medium text-xs">
+								Payment Gateways (SonicPesa)
+							</Button>
+						</Link>
 						<Link href="/admin#cloudflare-saas">
 							<Button variant="outline" className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/30 font-medium text-xs">
 								Cloudflare for SaaS
@@ -48,7 +53,7 @@ export default function AdminDashboardPage() {
 						</Link>
 						<Link href="/admin/plans">
 							<Button className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-medium text-xs shadow-lg shadow-amber-600/20">
-								Manage Hosting Plans
+								Setup Packages & Quotas
 							</Button>
 						</Link>
 					</div>

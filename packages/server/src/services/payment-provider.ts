@@ -13,6 +13,8 @@
  *  2. Register it in getPaymentProvider()
  */
 
+import { getSonicPesaResolvedCredentials } from "./sonicpesa-settings";
+
 // ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
@@ -225,22 +227,14 @@ class MpesaTanzaniaProvider implements PaymentProvider {
 class SonicPesaProvider implements PaymentProvider {
 	name = "sonicpesa";
 
-	private get apiKey(): string {
-		return process.env.SONICPESA_API_KEY ?? "";
-	}
-	private get apiSecret(): string {
-		return process.env.SONICPESA_API_SECRET ?? "";
-	}
-	private get baseUrl(): string {
-		return (
-			process.env.SONICPESA_BASE_URL ?? "https://api.sonicpesa.com/api/v1"
-		);
-	}
-
 	async initiate(req: PaymentInitiateRequest): Promise<PaymentInitiateResult> {
 		try {
-			if (!this.apiKey) {
-				throw new Error("SONICPESA_API_KEY environment variable is missing.");
+			const creds = await getSonicPesaResolvedCredentials();
+			if (!creds.apiKey) {
+				throw new Error("SonicPesa API Key is missing. Please configure SonicPesa in the Admin Dashboard.");
+			}
+			if (!creds.enabled) {
+				throw new Error("SonicPesa gateway is currently disabled in Platform Settings.");
 			}
 
 			// Format phone number to 255XXXXXXXXX format
@@ -259,11 +253,11 @@ class SonicPesaProvider implements PaymentProvider {
 				currency: req.currency || "TZS",
 			};
 
-			const res = await fetch(`${this.baseUrl}/payment/create_order`, {
+			const res = await fetch(`${creds.baseUrl}/payment/create_order`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					"X-API-KEY": this.apiKey,
+					"X-API-KEY": creds.apiKey,
 				},
 				body: JSON.stringify(payload),
 			});
@@ -300,15 +294,16 @@ class SonicPesaProvider implements PaymentProvider {
 
 	async verify(providerReference: string): Promise<PaymentVerifyResult> {
 		try {
-			if (!this.apiKey) {
-				throw new Error("SONICPESA_API_KEY environment variable is missing.");
+			const creds = await getSonicPesaResolvedCredentials();
+			if (!creds.apiKey) {
+				throw new Error("SonicPesa API Key is missing. Please configure SonicPesa in the Admin Dashboard.");
 			}
 
-			const res = await fetch(`${this.baseUrl}/payment/order_status`, {
+			const res = await fetch(`${creds.baseUrl}/payment/order_status`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					"X-API-KEY": this.apiKey,
+					"X-API-KEY": creds.apiKey,
 				},
 				body: JSON.stringify({ order_id: providerReference }),
 			});

@@ -15,6 +15,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../db";
 import * as schema from "../db/schema";
+import { getSonicPesaResolvedCredentials } from "./sonicpesa-settings";
 
 export const SONICPESA_BASE_URL =
 	process.env.SONICPESA_BASE_URL || "https://api.sonicpesa.com/api/v1";
@@ -92,11 +93,19 @@ export class SonicPesaService {
 		};
 
 		try {
-			const res = await fetch(`${SONICPESA_BASE_URL}/payment/create_order`, {
+			const creds = await getSonicPesaResolvedCredentials();
+			if (!creds.apiKey) {
+				return {
+					status: "error",
+					message: "SonicPesa API Key is not configured. Please add credentials in Admin Settings.",
+				};
+			}
+
+			const res = await fetch(`${creds.baseUrl}/payment/create_order`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					"X-API-KEY": SONICPESA_API_KEY,
+					"X-API-KEY": creds.apiKey,
 				},
 				body: JSON.stringify(payload),
 			});
@@ -136,11 +145,20 @@ export class SonicPesaService {
 	 */
 	static async checkOrderStatus(orderId: string): Promise<SonicPesaStatusResponse> {
 		try {
-			const res = await fetch(`${SONICPESA_BASE_URL}/payment/order_status`, {
+			const creds = await getSonicPesaResolvedCredentials();
+			if (!creds.apiKey) {
+				return {
+					status: "error",
+					message: "SonicPesa API Key is not configured.",
+					paymentStatus: "UNKNOWN",
+				};
+			}
+
+			const res = await fetch(`${creds.baseUrl}/payment/order_status`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					"X-API-KEY": SONICPESA_API_KEY,
+					"X-API-KEY": creds.apiKey,
 				},
 				body: JSON.stringify({ order_id: orderId }),
 			});

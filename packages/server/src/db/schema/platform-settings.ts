@@ -57,6 +57,11 @@ export const PLATFORM_SETTING_KEYS = {
 	CLOUDFLARE_SAAS_DEFAULT_SSL_METHOD: "cloudflare_saas_default_ssl_method",
 	CLOUDFLARE_SAAS_AUTO_PROVISION: "cloudflare_saas_auto_provision",
 	CLOUDFLARE_SAAS_FALLBACK_ORIGIN_STATUS: "cloudflare_saas_fallback_origin_status",
+	SONICPESA_ENABLED: "sonicpesa_enabled",
+	SONICPESA_API_KEY: "sonicpesa_api_key",
+	SONICPESA_API_SECRET: "sonicpesa_api_secret",
+	SONICPESA_BASE_URL: "sonicpesa_base_url",
+	SONICPESA_MODE: "sonicpesa_mode",
 } as const;
 
 export type PlatformSettingKey =

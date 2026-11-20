@@ -168,4 +168,147 @@ export const planRouter = createTRPCRouter({
 				.returning();
 			return created;
 		}),
+
+	/** Admin: Setup / Save full package with all pricing, resource quotas, and features atomically */
+	savePackage: platformAdminProcedure
+		.input(
+			z.object({
+				id: z.string().optional(),
+				name: z.string().min(1).max(100),
+				slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
+				description: z.string().optional().nullable(),
+				price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid price format"),
+				currency: z.string().min(3).max(4).default("TZS"),
+				billingCycle: z.enum(["monthly", "yearly"]).default("monthly"),
+				status: z.enum(["active", "inactive", "archived"]).default("active"),
+				isPublic: z.boolean().default(true),
+				isFeatured: z.boolean().default(false),
+				trialDays: z.number().int().min(0).max(365).default(0),
+				sortOrder: z.number().int().default(0),
+				resources: z.array(
+					z.object({
+						resourceKey: z.string(),
+						value: z.number().int(),
+						unit: z.string().optional().nullable(),
+					}),
+				).optional(),
+				features: z.array(
+					z.object({
+						featureKey: z.string(),
+						enabled: z.boolean(),
+					}),
+				).optional(),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const { id, resources, features, ...planData } = input;
+
+			let targetId = id;
+
+			if (targetId) {
+				const [updated] = await db
+					.update(schema.plans)
+					.set({
+						...planData,
+						updatedAt: new Date(),
+					})
+					.where(eq(schema.plans.id, targetId))
+					.returning();
+				if (!updated) {
+					throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found." });
+				}
+			} else {
+				targetId = nanoid();
+				await db
+					.insert(schema.plans)
+					.values({
+						...planData,
+						id: targetId,
+					});
+			}
+
+			// Update resources if provided
+			if (resources && resources.length > 0) {
+				for (const res of resources) {
+					const existing = await db.query.planResources.findFirst({
+						where: (r, { and, eq }) =>
+							and(eq(r.planId, targetId!), eq(r.resourceKey, res.resourceKey)),
+					});
+
+					if (existing) {
+						await db
+							.update(schema.planResources)
+							.set({ value: res.value, unit: res.unit || null })
+							.where(eq(schema.planResources.id, existing.id));
+					} else {
+						await db
+							.insert(schema.planResources)
+							.values({
+								id: nanoid(),
+								planId: targetId!,
+								resourceKey: res.resourceKey,
+								value: res.value,
+								unit: res.unit || null,
+							});
+					}
+				}
+			}
+
+			// Update features if provided
+			if (features && features.length > 0) {
+				for (const feat of features) {
+					const existing = await db.query.planFeatures.findFirst({
+						where: (f, { and, eq }) =>
+							and(eq(f.planId, targetId!), eq(f.featureKey, feat.featureKey)),
+					});
+
+					if (existing) {
+						await db
+							.update(schema.planFeatures)
+							.set({ enabled: feat.enabled })
+							.where(eq(schema.planFeatures.id, existing.id));
+					} else {
+						await db
+							.insert(schema.planFeatures)
+							.values({
+								id: nanoid(),
+								planId: targetId!,
+								featureKey: feat.featureKey,
+								enabled: feat.enabled,
+							});
+					}
+				}
+			}
+
+			const fullPlan = await db.query.plans.findFirst({
+				where: eq(schema.plans.id, targetId!),
+				with: {
+					resources: true,
+					features: true,
+					applicationTypes: true,
+				},
+			});
+
+			return fullPlan;
+		}),
+
+	/** Admin: Toggle plan status (active / inactive / archived) */
+	toggleStatus: platformAdminProcedure
+		.input(
+			z.object({
+				id: z.string().min(1),
+				status: z.enum(["active", "inactive", "archived"]),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const [updated] = await db
+				.update(schema.plans)
+				.set({ status: input.status, updatedAt: new Date() })
+				.where(eq(schema.plans.id, input.id))
+				.returning();
+			if (!updated) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found." });
+			}
+			return updated;
+		}),
 });

@@ -27,7 +27,8 @@ import { authClient } from "@/lib/auth-client";
 
 export const ADMIN_NAV_ITEMS = [
 	{ label: "Admin Overview", icon: LayoutDashboard, href: "/admin" },
-	{ label: "Plans & Pricing", icon: Zap, href: "/admin/plans" },
+	{ label: "Plans & Packages", icon: Zap, href: "/admin/plans" },
+	{ label: "Payment Gateways", icon: CreditCard, href: "/admin/payments" },
 	{ label: "Customers", icon: Users, href: "/admin/customers" },
 	{ label: "Server Nodes", icon: Server, href: "/admin/servers" },
 	{ label: "Cloudflare for SaaS", icon: Cloud, href: "/admin#cloudflare-saas" },

@@ -15,6 +15,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { db } from "@dokploy/server/db";
 import * as schema from "@dokploy/server/db/schema";
 import { activateSubscriptionOnPayment } from "@dokploy/server/services/billing-cycle";
+import { getSonicPesaResolvedCredentials } from "@dokploy/server";
 
 interface SonicPesaWebhookEvent {
 	event: string;
@@ -40,7 +41,8 @@ export default async function handler(
 
 	try {
 		const signatureHeader = req.headers["x-sonicpesa-signature"];
-		const apiSecret = process.env.SONICPESA_API_SECRET;
+		const creds = await getSonicPesaResolvedCredentials();
+		const apiSecret = creds.apiSecret;
 
 		// Verify signature if secret is provided
 		if (apiSecret && signatureHeader) {

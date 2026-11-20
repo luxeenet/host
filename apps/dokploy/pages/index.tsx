@@ -74,12 +74,12 @@ export default function LandingPage() {
 				<title>{brand.APP_NAME} — {brand.TAGLINE}</title>
 				<meta
 					name="description"
-					content={`Deploy and manage containerized applications, databases, and Docker Compose services on high-performance cloud infrastructure with ${brand.APP_NAME}.`}
+					content={`Deploy and manage modern applications, databases, and multi-service cloud stacks on high-performance cloud infrastructure with ${brand.APP_NAME}.`}
 				/>
 				<meta property="og:title" content={`${brand.APP_NAME} — ${brand.TAGLINE}`} />
 				<meta
 					property="og:description"
-					content={`Next-generation developer PaaS. Deploy Git repositories, Dockerfiles, and managed databases with zero-downtime rollouts and automatic edge SSL.`}
+					content={`Next-generation developer PaaS. Deploy Git repositories, web services, and managed databases with zero-downtime rollouts and automatic edge SSL.`}
 				/>
 				<meta property="og:type" content="website" />
 			</Head>
@@ -255,8 +255,8 @@ export default function LandingPage() {
 
 						{/* Subheading */}
 						<p className="mx-auto mt-6 max-w-2xl text-base sm:text-xl text-muted-foreground leading-relaxed">
-							Deploy containerized web services, managed databases, and multi-service Docker
-							Compose stacks on high-performance cloud infrastructure with automated edge SSL and zero downtime.
+							Deploy modern web services, managed databases, and connected multi-service
+							stacks on high-performance cloud infrastructure with automated edge SSL and zero downtime.
 						</p>
 
 						{/* CTAs */}
@@ -328,7 +328,7 @@ export default function LandingPage() {
 												</Badge>
 											</div>
 											<p className="text-xs text-muted-foreground mt-0.5">
-												Port: 3000 • Nixpacks Builder • Connected to GitHub (main)
+												Port: 3000 • Smart Engine Builder • Connected to GitHub (main)
 											</p>
 										</div>
 									</div>
@@ -398,9 +398,9 @@ export default function LandingPage() {
 										<span className="text-[10px] text-emerald-400">RELEASE #42 • PASS</span>
 									</div>
 									<p className="text-emerald-400">✓ [git] Fetched main branch commit 7c72ce6 (latest)</p>
-									<p className="text-zinc-400">ℹ [builder] Auto-detected Node.js / TypeScript environment via Nixpacks</p>
-									<p className="text-zinc-400">✓ [docker] Built isolated OCI container image in 14.2s</p>
-									<p className="text-zinc-400">✓ [traefik] Updated dynamic routing rules with zero-downtime healthcheck</p>
+									<p className="text-zinc-400">ℹ [builder] Auto-detected Node.js / TypeScript environment via Smart Engine</p>
+									<p className="text-zinc-400">✓ [engine] Optimized production application release in 14.2s</p>
+									<p className="text-zinc-400">✓ [edge] Updated global routing rules with zero-downtime healthcheck</p>
 									<p className="text-emerald-400 font-semibold">
 										🚀 [active] Service live at https://api.my-app.{brand.PLATFORM_SUBDOMAIN_BASE} (TLS 1.3 Active)
 									</p>
@@ -421,7 +421,7 @@ export default function LandingPage() {
 								Powerful Deployment Tailored to You
 							</h2>
 							<p className="text-muted-foreground text-base sm:text-lg leading-relaxed">
-								Unlock seamless cloud deployments, enterprise tenant isolation, and automated
+								Unlock seamless cloud deployments, enterprise security boundaries, and automated
 								database management — all with {brand.APP_NAME}’s developer-first features.
 							</p>
 						</div>
@@ -437,12 +437,12 @@ export default function LandingPage() {
 										Flexible Application Deployment
 									</h3>
 									<p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-										Deploy any application using Nixpacks, standard Dockerfile, or static builds with
-										instant automatic stack detection.
+										Deploy any application with automatic runtime detection, static builds, and
+										instant zero-configuration compilation.
 									</p>
 								</div>
 								<div className="mt-5 pt-3 border-t border-border/60 text-xs font-semibold text-primary flex items-center gap-1">
-									Nixpacks & Docker <ArrowRight className="size-3" />
+									Auto-Detect Runtime <ArrowRight className="size-3" />
 								</div>
 							</div>
 
@@ -453,15 +453,15 @@ export default function LandingPage() {
 										<Boxes className="size-5" />
 									</div>
 									<h3 className="text-lg font-bold text-foreground">
-										Native Docker Compose Support
+										Multi-Service Cloud Stacks
 									</h3>
 									<p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-										Deploy complex multi-service architectures and worker microservices natively with full Docker
-										Compose integration.
+										Deploy complex multi-service architectures and worker microservices seamlessly with unified
+										stack specification files.
 									</p>
 								</div>
 								<div className="mt-5 pt-3 border-t border-border/60 text-xs font-semibold text-primary flex items-center gap-1">
-									Full Compose Spec <ArrowRight className="size-3" />
+									Multi-Service Spec <ArrowRight className="size-3" />
 								</div>
 							</div>
 
@@ -510,10 +510,10 @@ export default function LandingPage() {
 										<Shield className="size-5" />
 									</div>
 									<h3 className="text-lg font-bold text-foreground">
-										Enterprise Tenant Isolation
+										Enterprise Cloud Security
 									</h3>
 									<p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-										Every customer environment runs in strict container network namespaces with hard CPU/RAM caps
+										Every customer environment runs in dedicated private security boundaries with hard CPU/RAM caps
 										and zero interference.
 									</p>
 								</div>
@@ -532,12 +532,12 @@ export default function LandingPage() {
 										Granular RBAC & Teams
 									</h3>
 									<p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-										Collaborate with teammates using role-based permissions, organization isolation, SSO, and
+										Collaborate with teammates using role-based permissions, private organization boundaries, SSO, and
 										comprehensive audit logs.
 									</p>
 								</div>
 								<div className="mt-5 pt-3 border-t border-border/60 text-xs font-semibold text-primary flex items-center gap-1">
-									Multi-Tenant Roles <ArrowRight className="size-3" />
+									Team Workspaces <ArrowRight className="size-3" />
 								</div>
 							</div>
 
@@ -602,8 +602,8 @@ export default function LandingPage() {
 						<div className="flex overflow-x-auto pb-3 gap-2 justify-start sm:justify-center border-b border-border/80">
 							{[
 								{ id: "apps-db", label: "Applications & Databases", icon: Layers },
-								{ id: "compose", label: "Docker Compose", icon: Boxes },
-								{ id: "isolation", label: "Tenant Isolation", icon: ShieldCheck },
+								{ id: "compose", label: "Multi-Service Stacks", icon: Boxes },
+								{ id: "security", label: "Security & Boundaries", icon: ShieldCheck },
 								{ id: "logs", label: "Live Logs", icon: Terminal },
 								{ id: "monitoring", label: "Monitoring", icon: Activity },
 								{ id: "backups", label: "Backups", icon: HardDrive },
@@ -668,7 +668,7 @@ export default function LandingPage() {
 										</div>
 										<p className="text-zinc-400">Name: <span className="text-white">my-nextjs-service</span></p>
 										<p className="text-zinc-400">Branch: <span className="text-white">refs/heads/main</span></p>
-										<p className="text-zinc-400">Builder: <span className="text-emerald-400">nixpacks</span></p>
+										<p className="text-zinc-400">Builder: <span className="text-emerald-400">smart-engine</span></p>
 										<p className="text-zinc-400">Attached DB: <span className="text-primary">postgres-primary</span></p>
 										<p className="text-zinc-400">Internal URL: <span className="text-zinc-300">http://web-svc:3000</span></p>
 										<p className="text-zinc-400">Edge Domain: <span className="text-emerald-400">https://my-nextjs-service.{brand.PLATFORM_SUBDOMAIN_BASE}</span></p>
@@ -683,16 +683,16 @@ export default function LandingPage() {
 											Multi-Service Orchestration
 										</Badge>
 										<h3 className="text-2xl sm:text-3xl font-extrabold text-foreground">
-											Native Docker Compose Support
+											Connected Multi-Service Stacks
 										</h3>
 										<p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
-											Bring your existing docker-compose.yml files without rewriting them. {brand.APP_NAME} automatically
-											handles network bridging, volume mounts, secret injection, and multi-service health checking.
+											Bring your multi-service configuration files without rewriting them. {brand.APP_NAME} automatically
+											handles private networking, persistent storage, secret injection, and multi-service health checking.
 										</p>
 										<ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
 											<li className="flex items-center gap-2">
 												<CheckCircle className="size-4 text-emerald-500 shrink-0" />
-												<span>Full standard Compose syntax & environment substitution</span>
+												<span>Full standard multi-service syntax & environment substitution</span>
 											</li>
 											<li className="flex items-center gap-2">
 												<CheckCircle className="size-4 text-emerald-500 shrink-0" />
@@ -700,43 +700,43 @@ export default function LandingPage() {
 											</li>
 											<li className="flex items-center gap-2">
 												<CheckCircle className="size-4 text-emerald-500 shrink-0" />
-												<span>Automatic isolation from other tenant networks</span>
+												<span>Automated perimeter security between customer environments</span>
 											</li>
 										</ul>
 									</div>
 									<div className="rounded-xl border border-border bg-zinc-950 p-5 font-mono text-xs text-zinc-300 space-y-1 shadow-inner">
 										<div className="text-zinc-500 border-b border-zinc-800 pb-2 mb-2">
-											<span>DOCKER-COMPOSE.YML</span>
+											<span>STACK-SPECIFICATION.YML</span>
 										</div>
 										<p className="text-blue-400">services:</p>
 										<p className="text-blue-400 ml-4">web:</p>
-										<p className="text-zinc-400 ml-8">image: <span className="text-emerald-400">luxeenet/api:v1.2</span></p>
+										<p className="text-zinc-400 ml-8">build: <span className="text-emerald-400">./web</span></p>
 										<p className="text-zinc-400 ml-8">ports: <span className="text-white">["3000:3000"]</span></p>
 										<p className="text-zinc-400 ml-8">environment:</p>
 										<p className="text-zinc-400 ml-12">- DATABASE_URL=postgres://user:pass@db:5432/main</p>
-										<p className="text-blue-400 ml-4">redis:</p>
-										<p className="text-zinc-400 ml-8">image: <span className="text-emerald-400">redis:7-alpine</span></p>
+										<p className="text-blue-400 ml-4">cache:</p>
+										<p className="text-zinc-400 ml-8">service: <span className="text-emerald-400">cache-layer:v2</span></p>
 									</div>
 								</div>
 							)}
 
-							{activeTab === "isolation" && (
+							{activeTab === "security" && (
 								<div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
 									<div className="space-y-4">
 										<Badge className="bg-primary/10 text-primary border-primary/20">
 											Security First
 										</Badge>
 										<h3 className="text-2xl sm:text-3xl font-extrabold text-foreground">
-											Zero-Interference Tenant Isolation
+											Enterprise Security & Resource Boundaries
 										</h3>
 										<p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
-											Every tenant runs inside sandboxed network namespaces and cgroup limits. No customer can observe
+											Every customer runs inside dedicated, hardware-backed resource perimeters. No customer can observe
 											or interfere with another customer's processes, RAM, storage, or internal network endpoints.
 										</p>
 										<ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
 											<li className="flex items-center gap-2">
 												<CheckCircle className="size-4 text-emerald-500 shrink-0" />
-												<span>Strict kernel-level cgroups CPU & memory quotas</span>
+												<span>Hardware-backed CPU & memory resource guarantees</span>
 											</li>
 											<li className="flex items-center gap-2">
 												<CheckCircle className="size-4 text-emerald-500 shrink-0" />
@@ -750,14 +750,14 @@ export default function LandingPage() {
 									</div>
 									<div className="rounded-xl border border-border bg-zinc-950 p-5 font-mono text-xs text-zinc-300 space-y-2 shadow-inner">
 										<div className="text-zinc-500 flex justify-between border-b border-zinc-800 pb-2">
-											<span>ISOLATION POLICY STATUS</span>
+											<span>SECURITY POLICY STATUS</span>
 											<span className="text-emerald-400">ENFORCED</span>
 										</div>
-										<p className="text-zinc-400">Tenant Namespace: <span className="text-white">org_7c72ce612</span></p>
-										<p className="text-zinc-400">Network Bridge: <span className="text-white">isolated_vlan_4096</span></p>
+										<p className="text-zinc-400">Security Boundary: <span className="text-white">zone_7c72ce612</span></p>
+										<p className="text-zinc-400">Dedicated Perimeter: <span className="text-white">cloud_mesh_secure</span></p>
 										<p className="text-zinc-400">Cross-Tenant Egress: <span className="text-rose-400">DENIED (DROP)</span></p>
 										<p className="text-zinc-400">Memory Cap: <span className="text-emerald-400">4096 MB HARD LIMIT</span></p>
-										<p className="text-zinc-400">CPU Millicores: <span className="text-emerald-400">2000m (2.0 vCPU)</span></p>
+										<p className="text-zinc-400">CPU Allocation: <span className="text-emerald-400">2.0 Dedicated vCPU</span></p>
 									</div>
 								</div>
 							)}
@@ -792,7 +792,7 @@ export default function LandingPage() {
 									</div>
 									<div className="rounded-xl border border-border bg-zinc-950 p-5 font-mono text-xs text-zinc-300 space-y-1.5 shadow-inner">
 										<div className="text-zinc-500 flex justify-between border-b border-zinc-800 pb-2">
-											<span>CONTAINER LOGS • STDOUT</span>
+											<span>SERVICE LOG STREAM • STDOUT</span>
 											<span className="text-emerald-400">LIVE</span>
 										</div>
 										<p className="text-zinc-500">14:02:11.231 [server] Listening on port 3000</p>
@@ -819,7 +819,7 @@ export default function LandingPage() {
 										<ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
 											<li className="flex items-center gap-2">
 												<CheckCircle className="size-4 text-emerald-500 shrink-0" />
-												<span>Per-container CPU & RAM consumption breakdown</span>
+												<span>Per-service CPU & RAM consumption breakdown</span>
 											</li>
 											<li className="flex items-center gap-2">
 												<CheckCircle className="size-4 text-emerald-500 shrink-0" />
@@ -964,7 +964,7 @@ export default function LandingPage() {
 								Stats You Didn't Ask For (But Secretly Love to See)
 							</h2>
 							<p className="text-muted-foreground text-base sm:text-lg leading-relaxed">
-								Real numbers behind our high-performance edge and container orchestration platform.
+								Real numbers behind our high-performance cloud platform and global edge network.
 							</p>
 						</div>
 
@@ -993,7 +993,7 @@ export default function LandingPage() {
 								<span className="text-4xl sm:text-5xl font-extrabold text-foreground tracking-tight">
 									100%
 								</span>
-								<p className="text-sm font-semibold text-primary">Tenant Isolation</p>
+								<p className="text-sm font-semibold text-primary">Resource Security</p>
 								<p className="text-xs text-muted-foreground">
 									Hardware-governed network and memory boundary enforcement.
 								</p>
@@ -1005,7 +1005,7 @@ export default function LandingPage() {
 								</span>
 								<p className="text-sm font-semibold text-primary">Downtime on Rollouts</p>
 								<p className="text-xs text-muted-foreground">
-									New container is healthy before previous container stops.
+									New release is verified healthy before switching traffic.
 								</p>
 							</div>
 						</div>
@@ -1053,8 +1053,8 @@ export default function LandingPage() {
 									{"★".repeat(5)}
 								</div>
 								<p className="text-sm text-foreground italic leading-relaxed">
-									"The Docker Compose integration is first-class. We deployed our web app, Redis queue, and
-									Postgres database in a single configuration file without any headache."
+									"The multi-service stack deployment is first-class. We deployed our web app, Redis queue, and
+									Postgres database together seamlessly without any headache."
 								</p>
 								<div className="pt-2 border-t border-border/60 flex items-center gap-3">
 									<div className="size-9 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs">
@@ -1100,7 +1100,7 @@ export default function LandingPage() {
 								Simple, Predictable Cloud Pricing
 							</h2>
 							<p className="text-muted-foreground text-base sm:text-lg leading-relaxed">
-								Every plan comes with full tenant isolation, automatic SSL, and zero surprise bandwidth fees.
+								Every plan comes with dedicated resource boundaries, automatic SSL, and zero surprise bandwidth fees.
 							</p>
 						</div>
 
@@ -1287,8 +1287,8 @@ export default function LandingPage() {
 								</AccordionTrigger>
 								<AccordionContent className="text-muted-foreground text-sm leading-relaxed pb-4">
 									{brand.APP_NAME} is an enterprise-grade Platform as a Service (PaaS) that lets developers and teams
-									deploy applications, managed databases, and multi-service Docker Compose stacks with zero configuration.
-									We provide automatic edge SSL, tenant isolation, live telemetry, and zero-downtime rollouts.
+									deploy applications, managed databases, and multi-service stacks with zero configuration.
+									We provide automatic edge SSL, dedicated resource security, live telemetry, and zero-downtime rollouts.
 								</AccordionContent>
 							</AccordionItem>
 
@@ -1297,9 +1297,9 @@ export default function LandingPage() {
 									How does application deployment work?
 								</AccordionTrigger>
 								<AccordionContent className="text-muted-foreground text-sm leading-relaxed pb-4">
-									Simply connect your GitHub or GitLab repository, select a branch, or provide a Docker image or
-									Docker Compose file. Our automated builder detects your stack using Nixpacks or Dockerfile, builds an
-									isolated OCI container, attaches edge routing, and launches your app with a production URL in seconds.
+									Simply connect your GitHub or GitLab repository, select a branch, or provide your application
+									specification. Our automated builder detects your stack, optimizes your production release, attaches
+									high-speed edge routing, and launches your app with a production URL in seconds.
 								</AccordionContent>
 							</AccordionItem>
 
@@ -1308,9 +1308,9 @@ export default function LandingPage() {
 									How are databases managed and backed up?
 								</AccordionTrigger>
 								<AccordionContent className="text-muted-foreground text-sm leading-relaxed pb-4">
-									Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and LibSQL) run inside isolated, persistent
-									container environments. You can configure automatic cron-based snapshot backups sent to AWS S3,
-									Cloudflare R2, MinIO, or download backups directly from the portal.
+									Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and LibSQL) run inside dedicated, persistent
+									cloud environments. You can configure automatic cron-based snapshot backups sent to AWS S3,
+									compatible S3 storage, MinIO, or download backups directly from the portal.
 								</AccordionContent>
 							</AccordionItem>
 
@@ -1371,7 +1371,7 @@ export default function LandingPage() {
 							</Button>
 						</div>
 						<p className="text-xs text-muted-foreground">
-							Instant provisioning • Complete tenant isolation • Cancel anytime
+							Instant provisioning • Dedicated resource boundaries • Cancel anytime
 						</p>
 					</div>
 				</section>
@@ -1400,7 +1400,7 @@ export default function LandingPage() {
 							<ul className="space-y-1.5">
 								<li><a href="#features" className="hover:text-foreground transition-colors">Applications</a></li>
 								<li><a href="#features" className="hover:text-foreground transition-colors">Databases</a></li>
-								<li><a href="#features" className="hover:text-foreground transition-colors">Docker Compose</a></li>
+								<li><a href="#features" className="hover:text-foreground transition-colors">Multi-Service Stacks</a></li>
 								<li><a href="#features" className="hover:text-foreground transition-colors">Edge Proxy</a></li>
 								<li><a href="#features" className="hover:text-foreground transition-colors">Monitoring</a></li>
 							</ul>
@@ -1410,7 +1410,7 @@ export default function LandingPage() {
 						<div className="space-y-2.5">
 							<p className="font-bold text-foreground text-xs uppercase tracking-wider">Platform</p>
 							<ul className="space-y-1.5">
-								<li><a href="#ecosystem" className="hover:text-foreground transition-colors">Tenant Isolation</a></li>
+								<li><a href="#ecosystem" className="hover:text-foreground transition-colors">Security & Guarantees</a></li>
 								<li><a href="#stats" className="hover:text-foreground transition-colors">Uptime & Stats</a></li>
 								<li><a href="#why-hatdot" className="hover:text-foreground transition-colors">Why {brand.APP_NAME}</a></li>
 								<li><Link href="/signup" className="hover:text-foreground transition-colors">Free Trial</Link></li>

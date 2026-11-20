@@ -57,13 +57,13 @@ const SLIDES: ShowcaseItem[][] = [
 			icon: Rocket,
 			title: "Any stack",
 			description:
-				"Deploy any application using Nixpacks, Heroku Buildpacks, or your own Dockerfile.",
+				"Deploy any application with automatic runtime detection and zero-config builds.",
 		},
 		{
 			icon: Boxes,
-			title: "Docker Compose",
+			title: "Multi-Service Stacks",
 			description:
-				"Deploy complex applications natively with full Docker Compose integration.",
+				"Deploy complex multi-service architectures and microservices effortlessly.",
 		},
 		{
 			icon: Cloud,

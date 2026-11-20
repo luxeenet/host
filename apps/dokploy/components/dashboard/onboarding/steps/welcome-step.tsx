@@ -10,9 +10,9 @@ interface Props {
 const points = [
 	{
 		icon: GitBranchIcon,
-		title: "Instant Git & Container Deployments",
+		title: "Instant Code-to-Cloud Deployments",
 		description:
-			"Push from GitHub, GitLab, Docker, or Nixpacks with zero-downtime automated rollouts.",
+			"Push from GitHub or GitLab with automatic runtime detection and zero-downtime rollouts.",
 	},
 	{
 		icon: PuzzleIcon,
@@ -24,7 +24,7 @@ const points = [
 		icon: ShieldCheckIcon,
 		title: "High-Performance Cloud & Edge Security",
 		description:
-			"Fully isolated tenant environments, enterprise DDoS protection, and automatic SSL on the edge network.",
+			"Dedicated private cloud environments, enterprise DDoS protection, and automatic SSL on the edge network.",
 	},
 ];
 
@@ -43,7 +43,7 @@ export const WelcomeStep = ({ onNext }: Props) => {
 				</h1>
 				<p className="text-muted-foreground text-base sm:text-lg max-w-lg leading-relaxed">
 					Deploy your projects in minutes with automated builds, high-speed edge routing,
-					and fully isolated cloud infrastructure.
+					and enterprise-grade private cloud infrastructure.
 				</p>
 			</div>
 

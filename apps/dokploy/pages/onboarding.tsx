@@ -377,7 +377,7 @@ export default function OnboardingPage() {
 												</div>
 												<div className="flex items-center gap-2">
 													<Check className="size-3.5 text-emerald-500 shrink-0" />
-													<span>Tenant Container Isolation</span>
+													<span>Dedicated Resource Security</span>
 												</div>
 												{isFeatureEnabled(plan.features, "backups") && (
 													<div className="flex items-center gap-2">

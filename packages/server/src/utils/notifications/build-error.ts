@@ -90,7 +90,7 @@ export const sendBuildErrorNotifications = async ({
 				if (email) {
 					await sendEmailNotification(
 						email,
-						"Build failed for dokploy",
+						`Build failed for ${applicationName}`,
 						template,
 					);
 				}
@@ -98,7 +98,7 @@ export const sendBuildErrorNotifications = async ({
 				if (resend) {
 					await sendResendNotification(
 						resend,
-						"Build failed for dokploy",
+						`Build failed for ${applicationName}`,
 						template,
 					);
 				}
@@ -155,7 +155,7 @@ export const sendBuildErrorNotifications = async ({
 					],
 					timestamp: date.toISOString(),
 					footer: {
-						text: "Dokploy Build Notification",
+						text: "Build Notification",
 					},
 				});
 			}
@@ -268,7 +268,7 @@ ${errorMessage}
 
 [View Build Details](${buildLink})`,
 					channel: mattermost.channel,
-					username: mattermost.username || "Dokploy Bot",
+					username: mattermost.username || "System Bot",
 				});
 			}
 

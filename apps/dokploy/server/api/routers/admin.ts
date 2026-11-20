@@ -248,4 +248,42 @@ export const adminRouter = createTRPCRouter({
 			const { testSonicPesaConnection } = await import("@dokploy/server");
 			return await testSonicPesaConnection(input);
 		}),
+
+	/** Platform Admin: Get sanitized SMTP mail delivery settings */
+	getSmtpSettings: platformAdminProcedure.query(async () => {
+		const { getSmtpSanitizedSettings } = await import("@dokploy/server");
+		return await getSmtpSanitizedSettings();
+	}),
+
+	/** Platform Admin: Update SMTP mail delivery settings */
+	updateSmtpSettings: platformAdminProcedure
+		.input(
+			z.object({
+				host: z.string().nullable().optional(),
+				port: z.number().int().positive().nullable().optional(),
+				user: z.string().nullable().optional(),
+				pass: z.string().nullable().optional(),
+				from: z.string().nullable().optional(),
+				fromName: z.string().nullable().optional(),
+				secure: z.boolean().optional(),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const { updateSmtpSettings } = await import("@dokploy/server");
+			return await updateSmtpSettings(input);
+		}),
+
+	/** Platform Admin: Test SMTP mail connection and optionally dispatch a test email */
+	testSmtpConnection: platformAdminProcedure
+		.input(
+			z
+				.object({
+					targetEmail: z.string().email().optional(),
+				})
+				.optional(),
+		)
+		.mutation(async ({ input }) => {
+			const { testSmtpConnection } = await import("@dokploy/server");
+			return await testSmtpConnection(input?.targetEmail);
+		}),
 });

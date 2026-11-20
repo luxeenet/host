@@ -1,34 +1,38 @@
 import { render } from "@react-email/components";
+import { brand } from "@paas/branding";
 import InvitationEmail from "../emails/emails/invitation";
 import VerifyEmailTemplate from "../emails/emails/verify-email";
-import { sendEmailNotification } from "../utils/notifications/utils";
+import { sendPlatformMail } from "../services/smtp-settings";
 
 export const sendEmail = async ({
 	email,
 	subject,
 	text,
+	html,
 	attachments,
 }: {
 	email: string;
 	subject: string;
-	text: string;
+	text?: string;
+	html?: string;
 	attachments?: { filename: string; content: Buffer }[];
 }) => {
-	await sendEmailNotification(
-		{
-			fromAddress: process.env.SMTP_FROM_ADDRESS || "",
-			toAddresses: [email],
-			smtpServer: process.env.SMTP_SERVER || "",
-			smtpPort: Number(process.env.SMTP_PORT),
-			username: process.env.SMTP_USERNAME || "",
-			password: process.env.SMTP_PASSWORD || "",
-		},
-		subject,
-		text,
-		attachments,
-	);
+	// If only text is provided and it looks like HTML, use it as html
+	const htmlContent = html || (text && text.includes("<") ? text : undefined);
+	const textContent = text && !text.includes("<") ? text : undefined;
 
-	return true;
+	try {
+		return await sendPlatformMail({
+			to: email,
+			subject,
+			html: htmlContent,
+			text: textContent,
+			attachments,
+		});
+	} catch (err) {
+		console.error(`[email] Delivery failed for ${email}:`, err);
+		return false;
+	}
 };
 
 export const sendVerificationEmail = async ({
@@ -48,8 +52,8 @@ export const sendVerificationEmail = async ({
 	);
 	await sendEmail({
 		email,
-		subject: "Verify your email",
-		text: html,
+		subject: `Verify your email — ${brand.APP_NAME}`,
+		html,
 	});
 };
 
@@ -87,7 +91,7 @@ export const sendInvitationEmail = async ({
 	});
 	await sendEmail({
 		email,
-		subject: `You've been invited to join ${organizationName} on Dokploy`,
-		text: html,
+		subject: `You've been invited to join ${organizationName} on ${brand.APP_NAME}`,
+		html,
 	});
 };

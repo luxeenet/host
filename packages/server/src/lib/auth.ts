@@ -195,12 +195,49 @@ const createBetterAuth = () =>
 				},
 			},
 			sendResetPassword: async ({ user, url }) => {
+				const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 520px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e4e4e7; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <div style="background-color: #09090b; padding: 32px 40px; text-align: center;">
+      <div style="display: inline-flex; align-items: center; gap: 10px;">
+        <div style="width: 28px; height: 28px; border-radius: 8px; background-color: #3b82f6; display: inline-block; vertical-align: middle;"></div>
+        <span style="color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: -0.5px; vertical-align: middle;">${brand.APP_NAME}</span>
+      </div>
+    </div>
+    <div style="padding: 40px 40px 32px;">
+      <h1 style="color: #09090b; font-size: 22px; font-weight: 600; margin: 0 0 12px;">Reset Your Password</h1>
+      <p style="color: #71717a; font-size: 14px; line-height: 24px; margin: 0 0 28px;">
+        Hello ${user.name || "there"}, we received a request to reset your ${brand.APP_NAME} account password. Click the button below to choose a new password.
+      </p>
+      <div style="text-align: center; margin-bottom: 32px;">
+        <a href="${url}" style="display: inline-block; background-color: #09090b; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; padding: 12px 28px; border-radius: 8px;">Reset Password</a>
+      </div>
+      <p style="color: #71717a; font-size: 13px; line-height: 20px; margin: 0 0 16px;">
+        If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.
+      </p>
+      <hr style="border: none; border-top: 1px solid #e4e4e7; margin: 24px 0;" />
+      <p style="color: #a1a1aa; font-size: 12px; line-height: 18px; margin: 0; word-break: break-all;">
+        If the button above does not work, copy and paste this link into your browser:<br />
+        <a href="${url}" style="color: #3b82f6; text-decoration: underline;">${url}</a>
+      </p>
+    </div>
+    <div style="background-color: #fafafa; padding: 20px 40px; text-align: center; border-top: 1px solid #e4e4e7;">
+      <p style="color: #a1a1aa; font-size: 12px; line-height: 18px; margin: 0;">
+        This is an automated security notification from <a href="${brand.MARKETING_URL}" style="color: #71717a; text-decoration: underline; font-weight: 500;">${brand.APP_NAME}</a>.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+`;
 				await sendEmail({
 					email: user.email,
-					subject: "Reset your password",
-					text: `
-				<p>Click the link to reset your password: <a href="${url}">Reset Password</a></p>
-				`,
+					subject: `Reset your ${brand.APP_NAME} password`,
+					html: htmlContent,
+					text: `Reset your ${brand.APP_NAME} password by visiting: ${url}`,
 				});
 			},
 		},

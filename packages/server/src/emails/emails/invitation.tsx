@@ -6,13 +6,13 @@ import {
 	Heading,
 	Hr,
 	Html,
-	Img,
 	Link,
 	Preview,
 	Section,
 	Tailwind,
 	Text,
 } from "@react-email/components";
+import { brand } from "@paas/branding";
 import { emailTailwindConfig } from "../tailwind-config";
 
 interface InvitationEmailProps {
@@ -26,7 +26,7 @@ export const InvitationEmail = ({
 	toEmail,
 	organizationName = "an organization",
 }: InvitationEmailProps) => {
-	const previewText = `You've been invited to join ${organizationName} on Dokploy`;
+	const previewText = `You've been invited to join ${organizationName} on ${brand.APP_NAME}`;
 	return (
 		<Html>
 			<Head />
@@ -35,33 +35,32 @@ export const InvitationEmail = ({
 				<Body className="bg-[#f4f4f5] my-auto mx-auto font-sans">
 					<Container className="my-[40px] mx-auto max-w-[520px]">
 						{/* Header */}
-						<Section className="bg-[#09090b] rounded-t-xl px-[40px] py-[32px] text-center">
-							<Img
-								src="https://raw.githubusercontent.com/Dokploy/website/refs/heads/main/apps/docs/public/logo-dokploy-blackpng.png"
-								width="190"
-								height="120"
-								alt="Dokploy"
-								className="my-0 mx-auto"
-							/>
+						<Section className="bg-[#09090b] rounded-t-xl px-[40px] py-[28px] text-center">
+							<Heading className="text-white text-[24px] font-extrabold tracking-tight m-0">
+								{brand.APP_NAME}
+							</Heading>
+							<Text className="text-[#a1a1aa] text-[11px] font-semibold tracking-widest uppercase m-0 mt-[4px]">
+								Team Workspace Invitation
+							</Text>
 						</Section>
 
 						{/* Body */}
 						<Section className="bg-white px-[40px] py-[32px]">
 							<Heading className="text-[#09090b] text-[22px] font-semibold m-0 mb-[8px]">
-								You've been invited to join {organizationName}
+								Join {organizationName}
 							</Heading>
 							<Text className="text-[#71717a] text-[14px] leading-[22px] m-0 mb-[24px]">
 								You have been invited to join{" "}
 								<strong className="text-[#09090b]">{organizationName}</strong>{" "}
-								on Dokploy, the platform for deploying your apps to the cloud.
-								Click the button below to accept the invitation.
+								on {brand.APP_NAME}, the modern platform for deploying web applications,
+								databases, and connected cloud stacks. Click below to accept and get started.
 							</Text>
 
 							{/* CTA Button */}
 							<Section className="text-center mb-[24px]">
 								<Button
 									href={inviteLink}
-									className="bg-[#09090b] rounded-lg text-white text-[14px] font-semibold no-underline text-center px-[24px] py-[12px]"
+									className="bg-[#0284c7] hover:bg-[#0369a1] rounded-lg text-white text-[14px] font-semibold no-underline text-center px-[28px] py-[13px] shadow-sm"
 								>
 									Accept Invitation
 								</Button>
@@ -81,16 +80,17 @@ export const InvitationEmail = ({
 							<Hr className="border border-solid border-[#e4e4e7] my-0 mb-[16px] mx-0 w-full" />
 							<Text className="text-[#a1a1aa] text-[12px] leading-[18px] m-0">
 								This invitation was intended for{" "}
-								<span className="text-[#71717a]">{toEmail}</span>. This invite
-								was sent from{" "}
+								<span className="text-[#71717a]">{toEmail}</span>. Sent from{" "}
 								<Link
-									href="https://dokploy.com"
+									href={brand.MARKETING_URL}
 									className="text-[#71717a] underline"
 								>
-									Dokploy Cloud
+									{brand.APP_NAME} Cloud
 								</Link>
-								. If you were not expecting this invitation, you can safely
-								ignore this email.
+								. If you were not expecting this invitation, you can safely ignore this email.
+							</Text>
+							<Text className="text-[#a1a1aa] text-[11px] leading-[16px] m-0 mt-[8px]">
+								{brand.COPYRIGHT}
 							</Text>
 						</Section>
 					</Container>

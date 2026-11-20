@@ -4,12 +4,13 @@ import {
 	Head,
 	Heading,
 	Html,
-	Img,
+	Link,
 	Preview,
 	Section,
 	Tailwind,
 	Text,
 } from "@react-email/components";
+import { brand } from "@paas/branding";
 import { emailTailwindConfig } from "../tailwind-config";
 
 export type TemplateProps = {
@@ -32,79 +33,117 @@ export type TemplateProps = {
 };
 
 export const VolumeBackupEmail = ({
-	projectName = "dokploy",
-	applicationName = "frontend",
-	volumeName = "app-data",
+	projectName = "Project",
+	applicationName = "service",
+	volumeName = "storage",
 	serviceType = "application",
 	type = "success",
 	errorMessage,
 	backupSize,
-	date = "2023-05-01T00:00:00.000Z",
+	date = "2024-01-01T00:00:00.000Z",
 }: TemplateProps) => {
-	const previewText = `Volume backup for ${applicationName} was ${type === "success" ? "successful ✅" : "failed ❌"}`;
+	const isSuccess = type === "success";
+	const previewText = `Volume backup for ${applicationName} ${isSuccess ? "succeeded" : "failed"} on ${brand.APP_NAME}`;
 	return (
 		<Html>
 			<Preview>{previewText}</Preview>
 			<Tailwind config={emailTailwindConfig}>
 				<Head />
+				<Body className="bg-[#f4f4f5] my-auto mx-auto font-sans">
+					<Container className="my-[40px] mx-auto max-w-[520px]">
+						{/* Header */}
+						<Section className="bg-[#09090b] rounded-t-xl px-[40px] py-[32px] text-center">
+							<div
+								style={{
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "10px",
+									justifyContent: "center",
+								}}
+							>
+								<div
+									style={{
+										width: "28px",
+										height: "28px",
+										borderRadius: "8px",
+										background: "#3b82f6",
+										display: "inline-block",
+										verticalAlign: "middle",
+									}}
+								/>
+								<span
+									style={{
+										color: "#ffffff",
+										fontSize: "20px",
+										fontWeight: 700,
+										letterSpacing: "-0.5px",
+										verticalAlign: "middle",
+									}}
+								>
+									{brand.APP_NAME}
+								</span>
+							</div>
+						</Section>
 
-				<Body className="bg-white my-auto mx-auto font-sans px-2">
-					<Container className="border border-solid border-[#eaeaea] rounded-lg my-[40px] mx-auto p-[20px] max-w-[465px]">
-						<Section className="mt-[32px]">
-							<Img
-								src={
-									"https://raw.githubusercontent.com/Dokploy/dokploy/refs/heads/canary/apps/dokploy/logo.png"
-								}
-								width="100"
-								height="50"
-								alt="Dokploy"
-								className="my-0 mx-auto"
-							/>
-						</Section>
-						<Heading className="text-black text-[24px] font-normal text-center p-0 my-[30px] mx-0">
-							Volume backup for <strong>{applicationName}</strong>
-						</Heading>
-						<Text className="text-black text-[14px] leading-[24px]">
-							Hello,
-						</Text>
-						<Text className="text-black text-[14px] leading-[24px]">
-							Your volume backup for <strong>{applicationName}</strong> was{" "}
-							{type === "success"
-								? "successful ✅"
-								: "failed. Please check the error message below. ❌"}
-							.
-						</Text>
-						<Section className="flex text-black text-[14px]  leading-[24px] bg-[#F4F4F5] rounded-lg p-2">
-							<Text className="!leading-3 font-bold">Details: </Text>
-							<Text className="!leading-3">
-								Project Name: <strong>{projectName}</strong>
+						{/* Body */}
+						<Section className="bg-white px-[40px] py-[32px]">
+							<Heading className="text-[#09090b] text-[22px] font-semibold m-0 mb-[8px]">
+								Volume Backup: {isSuccess ? "Completed" : "Failed"}
+							</Heading>
+							<Text className="text-[#71717a] text-[14px] leading-[22px] m-0 mb-[24px]">
+								{isSuccess
+									? `Your storage volume backup for ${applicationName} completed successfully.`
+									: `Your storage volume backup for ${applicationName} failed to complete. Please review the details below.`}
 							</Text>
-							<Text className="!leading-3">
-								Application Name: <strong>{applicationName}</strong>
-							</Text>
-							<Text className="!leading-3">
-								Volume Name: <strong>{volumeName}</strong>
-							</Text>
-							<Text className="!leading-3">
-								Service Type: <strong>{serviceType}</strong>
-							</Text>
-							{backupSize && (
-								<Text className="!leading-3">
-									Backup Size: <strong>{backupSize}</strong>
+
+							<Section className="border border-solid border-[#e4e4e7] rounded-lg p-[16px] bg-[#fafafa] mb-[20px]">
+								<Text className="text-[#71717a] text-[12px] font-medium uppercase tracking-wider m-0 mb-[8px]">
+									Volume Details
 								</Text>
-							)}
-							<Text className="!leading-3">
-								Date: <strong>{date}</strong>
-							</Text>
-						</Section>
-						{type === "error" && errorMessage ? (
-							<Section className="flex text-black text-[14px]  mt-4 leading-[24px] bg-[#F4F4F5] rounded-lg p-2">
-								<Text className="!leading-3 font-bold">Reason: </Text>
-								<Text className="text-[12px] leading-[24px]">
-									{errorMessage || "Error message not provided"}
+								<Text className="text-[#09090b] text-[13px] leading-[20px] m-0">
+									Project: <strong>{projectName}</strong>
+								</Text>
+								<Text className="text-[#09090b] text-[13px] leading-[20px] m-0">
+									Service: <strong>{applicationName}</strong> ({serviceType})
+								</Text>
+								<Text className="text-[#09090b] text-[13px] leading-[20px] m-0">
+									Volume Name: <strong>{volumeName}</strong>
+								</Text>
+								{backupSize && (
+									<Text className="text-[#09090b] text-[13px] leading-[20px] m-0">
+										Backup Size: <strong>{backupSize}</strong>
+									</Text>
+								)}
+								<Text className="text-[#09090b] text-[13px] leading-[20px] m-0">
+									Timestamp: <strong>{date}</strong>
 								</Text>
 							</Section>
-						) : null}
+
+							{!isSuccess && errorMessage ? (
+								<Section className="bg-[#fef2f2] border border-solid border-[#fecaca] rounded-lg p-[16px] mb-[24px]">
+									<Text className="text-[#991b1b] text-[12px] font-semibold uppercase tracking-wider m-0 mb-[4px]">
+										Error Log:
+									</Text>
+									<Text className="text-[#7f1d1d] text-[13px] font-mono leading-[20px] m-0 whitespace-pre-wrap break-all">
+										{errorMessage}
+									</Text>
+								</Section>
+							) : null}
+						</Section>
+
+						{/* Footer */}
+						<Section className="bg-[#fafafa] rounded-b-xl px-[40px] py-[24px] text-center border-t border-solid border-[#e4e4e7]">
+							<Text className="text-[#a1a1aa] text-[12px] leading-[18px] m-0">
+								This is an automated backup notification from{" "}
+								<Link
+									href={brand.MARKETING_URL}
+									className="text-[#71717a] underline font-medium"
+								>
+									{brand.APP_NAME}
+								</Link>
+								.
+							</Text>
+						</Section>
 					</Container>
 				</Body>
 			</Tailwind>

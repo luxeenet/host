@@ -4,6 +4,7 @@ import { sendEmail } from "@dokploy/server/verification/send-verification-email"
 import { render } from "@react-email/components";
 import { format } from "date-fns";
 import type Stripe from "stripe";
+import { brand } from "@paas/branding";
 
 function formatAmount(amountInCents: number, currency: string): string {
 	const amount = amountInCents / 100;
@@ -51,7 +52,7 @@ export const sendInvoiceEmail = async (
 			const pdfBuffer = await downloadPdf(invoice.invoice_pdf);
 			if (pdfBuffer) {
 				attachments.push({
-					filename: `dokploy-invoice-${invoice.number || invoice.id}.pdf`,
+					filename: `${brand.APP_NAME.toLowerCase()}-invoice-${invoice.number || invoice.id}.pdf`,
 					content: pdfBuffer,
 				});
 			}
@@ -59,7 +60,8 @@ export const sendInvoiceEmail = async (
 
 		await sendEmail({
 			email: admin.email,
-			subject: `Dokploy Invoice ${invoice.number || ""} - ${amountFormatted}`,
+			subject: `${brand.APP_NAME} Invoice ${invoice.number || ""} - ${amountFormatted}`,
+			html: htmlContent,
 			text: htmlContent,
 			attachments,
 		});
@@ -97,7 +99,8 @@ export const sendPaymentFailedEmail = async (
 
 		await sendEmail({
 			email: admin.email,
-			subject: `Action required: Dokploy payment failed - ${amountFormatted}`,
+			subject: `Action required: ${brand.APP_NAME} payment failed - ${amountFormatted}`,
+			html: htmlContent,
 			text: htmlContent,
 		});
 

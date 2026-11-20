@@ -8,6 +8,7 @@ import type Stripe from "stripe";
 import { user } from "@/server/db/schema";
 import { planFromPriceIds } from "@/server/utils/billing";
 import { WEBSITE_URL } from "@/server/utils/stripe";
+import { brand } from "@paas/branding";
 
 const PLAN_LABELS: Record<string, string> = {
 	hobby: "Hobby",
@@ -69,8 +70,9 @@ export const sendTrialExpiringEmail = async (
 		email: owner.email,
 		subject:
 			daysRemaining === 1
-				? "Your Dokploy trial ends tomorrow"
-				: `Your Dokploy trial ends in ${daysRemaining} days`,
+				? `Your ${brand.APP_NAME} trial ends tomorrow`
+				: `Your ${brand.APP_NAME} trial ends in ${daysRemaining} days`,
+		html: htmlContent,
 		text: htmlContent,
 	});
 

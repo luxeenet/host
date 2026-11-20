@@ -21,7 +21,7 @@ import {
 
 export const sendDockerCleanupNotifications = async (
 	organizationId: string,
-	message = "Docker cleanup for dokploy",
+	message = "System storage maintenance completed",
 ) => {
 	const date = new Date();
 	const unixDate = ~~(Number(date) / 1000);
@@ -70,7 +70,7 @@ export const sendDockerCleanupNotifications = async (
 				if (email) {
 					await sendEmailNotification(
 						email,
-						"Docker cleanup for dokploy",
+						"System storage maintenance completed",
 						template,
 					);
 				}
@@ -78,7 +78,7 @@ export const sendDockerCleanupNotifications = async (
 				if (resend) {
 					await sendResendNotification(
 						resend,
-						"Docker cleanup for dokploy",
+						"System storage maintenance completed",
 						template,
 					);
 				}
@@ -114,7 +114,7 @@ export const sendDockerCleanupNotifications = async (
 					],
 					timestamp: date.toISOString(),
 					footer: {
-						text: "Dokploy Docker Cleanup Notification",
+						text: "System Storage Cleanup Notification",
 					},
 				});
 			}
@@ -175,7 +175,7 @@ export const sendDockerCleanupNotifications = async (
 				await sendMattermostNotification(mattermost, {
 					text: `**✅ Docker Cleanup**\n\n**Message:** ${message}\n**Date:** ${format(date, "PP")}\n**Time:** ${format(date, "pp")}`,
 					channel: mattermost.channel,
-					username: mattermost.username || "Dokploy",
+					username: mattermost.username || "System Bot",
 				});
 			}
 

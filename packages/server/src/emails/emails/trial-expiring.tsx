@@ -7,7 +7,6 @@ import {
 	Heading,
 	Hr,
 	Html,
-	Img,
 	Link,
 	Preview,
 	Row,
@@ -15,6 +14,7 @@ import {
 	Tailwind,
 	Text,
 } from "@react-email/components";
+import { brand } from "@paas/branding";
 import { emailTailwindConfig } from "../tailwind-config";
 
 export type TemplateProps = {
@@ -27,16 +27,16 @@ export type TemplateProps = {
 
 export const TrialExpiringEmail = ({
 	userName = "User",
-	planName = "Hobby",
+	planName = "Starter",
 	daysRemaining = 3,
 	endsOn = "2024-01-01",
-	billingUrl = "https://app.dokploy.com/dashboard/settings/billing",
+	billingUrl = "https://hatdot.cloud/dashboard/settings/billing",
 }: TemplateProps) => {
 	const dayLabel = daysRemaining === 1 ? "day" : "days";
 	const previewText =
 		daysRemaining === 1
-			? "Your Dokploy trial ends tomorrow"
-			: `Your Dokploy trial ends in ${daysRemaining} ${dayLabel}`;
+			? `Your ${brand.APP_NAME} trial ends tomorrow`
+			: `Your ${brand.APP_NAME} trial ends in ${daysRemaining} ${dayLabel}`;
 
 	return (
 		<Html>
@@ -45,14 +45,38 @@ export const TrialExpiringEmail = ({
 			<Tailwind config={emailTailwindConfig}>
 				<Body className="bg-[#f4f4f5] my-auto mx-auto font-sans">
 					<Container className="my-[40px] mx-auto max-w-[520px]">
+						{/* Header */}
 						<Section className="bg-[#09090b] rounded-t-xl px-[40px] py-[32px] text-center">
-							<Img
-								src="https://raw.githubusercontent.com/Dokploy/website/refs/heads/main/apps/docs/public/logo-dokploy-blackpng.png"
-								width="190"
-								height="120"
-								alt="Dokploy"
-								className="my-0 mx-auto"
-							/>
+							<div
+								style={{
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "10px",
+									justifyContent: "center",
+								}}
+							>
+								<div
+									style={{
+										width: "28px",
+										height: "28px",
+										borderRadius: "8px",
+										background: "#3b82f6",
+										display: "inline-block",
+										verticalAlign: "middle",
+									}}
+								/>
+								<span
+									style={{
+										color: "#ffffff",
+										fontSize: "20px",
+										fontWeight: 700,
+										letterSpacing: "-0.5px",
+										verticalAlign: "middle",
+									}}
+								>
+									{brand.APP_NAME}
+								</span>
+							</div>
 						</Section>
 
 						<Section className="bg-white px-[40px] py-[32px]">
@@ -62,8 +86,8 @@ export const TrialExpiringEmail = ({
 									: `Your trial ends in ${daysRemaining} ${dayLabel}`}
 							</Heading>
 							<Text className="text-[#71717a] text-[14px] leading-[22px] m-0 mb-[24px]">
-								Hello {userName}, add a payment method to keep your servers and
-								applications running once the trial ends.
+								Hello {userName}, activate your subscription to keep your
+								applications and databases running smoothly once the trial ends.
 							</Text>
 
 							<Section className="border border-solid border-[#e4e4e7] rounded-lg overflow-hidden mb-[24px]">
@@ -89,8 +113,8 @@ export const TrialExpiringEmail = ({
 
 							<Section className="bg-[#fefce8] border border-solid border-[#fef08a] rounded-lg px-[20px] py-[16px] mb-[24px]">
 								<Text className="text-[#854d0e] text-[13px] leading-[20px] m-0">
-									Without a payment method your subscription is cancelled when
-									the trial ends and your servers are deactivated.
+									Without an active subscription, services will pause when the trial concludes.
+									You can choose any plan to continue seamlessly.
 								</Text>
 							</Section>
 
@@ -99,34 +123,32 @@ export const TrialExpiringEmail = ({
 									href={billingUrl}
 									className="bg-[#09090b] rounded-lg text-white text-[14px] font-semibold no-underline text-center px-[24px] py-[12px]"
 								>
-									Add Payment Method
+									Activate Subscription
 								</Button>
 							</Section>
 
 							<Hr className="border-[#e4e4e7] my-[24px]" />
 
 							<Text className="text-[#a1a1aa] text-[12px] leading-[18px] m-0">
-								You are billed only when the trial ends. You can cancel at any
-								time before then.
+								You have full control over your billing and can upgrade or modify your plan at any time.
 							</Text>
 						</Section>
 
 						<Section className="bg-[#fafafa] rounded-b-xl px-[40px] py-[24px] text-center border-t border-solid border-[#e4e4e7]">
 							<Text className="text-[#a1a1aa] text-[12px] leading-[18px] m-0">
-								This is an automated email from{" "}
+								This is an automated notification from{" "}
 								<Link
-									href="https://dokploy.com"
-									className="text-[#71717a] underline"
+									href={brand.MARKETING_URL}
+									className="text-[#71717a] underline font-medium"
 								>
-									Dokploy Cloud
+									{brand.APP_NAME}
 								</Link>
-								. If you have any questions about your billing, please contact
-								our{" "}
+								. If you have questions about your account, contact{" "}
 								<Link
-									href="https://discord.gg/2tBnJ3jDJc"
-									className="text-[#71717a] underline"
+									href={`mailto:${brand.SUPPORT_EMAIL}`}
+									className="text-[#71717a] underline font-medium"
 								>
-									support team
+									{brand.SUPPORT_EMAIL}
 								</Link>
 								.
 							</Text>

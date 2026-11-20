@@ -7,7 +7,6 @@ import {
 	Heading,
 	Hr,
 	Html,
-	Img,
 	Link,
 	Preview,
 	Row,
@@ -15,6 +14,7 @@ import {
 	Tailwind,
 	Text,
 } from "@react-email/components";
+import { brand } from "@paas/branding";
 import { emailTailwindConfig } from "../tailwind-config";
 
 export type TemplateProps = {
@@ -34,7 +34,7 @@ export const InvoiceNotificationEmail = ({
 	date = "2024-01-01",
 	hostedInvoiceUrl = "https://invoice.stripe.com/example",
 }: TemplateProps) => {
-	const previewText = `Your Dokploy invoice ${invoiceNumber} for ${amountPaid} is ready`;
+	const previewText = `Your ${brand.APP_NAME} invoice ${invoiceNumber} for ${amountPaid} is ready`;
 	return (
 		<Html>
 			<Head />
@@ -43,14 +43,13 @@ export const InvoiceNotificationEmail = ({
 				<Body className="bg-[#f4f4f5] my-auto mx-auto font-sans">
 					<Container className="my-[40px] mx-auto max-w-[520px]">
 						{/* Header */}
-						<Section className="bg-[#09090b] rounded-t-xl px-[40px] py-[32px] text-center">
-							<Img
-								src="https://raw.githubusercontent.com/Dokploy/website/refs/heads/main/apps/docs/public/logo-dokploy-blackpng.png"
-								width="190"
-								height="120"
-								alt="Dokploy"
-								className="my-0 mx-auto"
-							/>
+						<Section className="bg-[#09090b] rounded-t-xl px-[40px] py-[28px] text-center">
+							<Heading className="text-white text-[24px] font-extrabold tracking-tight m-0">
+								{brand.APP_NAME}
+							</Heading>
+							<Text className="text-[#a1a1aa] text-[11px] font-semibold tracking-widest uppercase m-0 mt-[4px]">
+								Billing & Payment Receipt
+							</Text>
 						</Section>
 
 						{/* Body */}
@@ -136,20 +135,23 @@ export const InvoiceNotificationEmail = ({
 							<Text className="text-[#a1a1aa] text-[12px] leading-[18px] m-0">
 								This is an automated email from{" "}
 								<Link
-									href="https://dokploy.com"
+									href={brand.MARKETING_URL}
 									className="text-[#71717a] underline"
 								>
-									Dokploy Cloud
+									{brand.APP_NAME} Cloud
 								</Link>
 								. If you have any questions about your billing, please contact
 								our{" "}
 								<Link
-									href="https://discord.gg/2tBnJ3jDJc"
+									href={`mailto:${brand.SUPPORT_EMAIL}`}
 									className="text-[#71717a] underline"
 								>
 									support team
 								</Link>
 								.
+							</Text>
+							<Text className="text-[#a1a1aa] text-[11px] leading-[16px] m-0 mt-[8px]">
+								{brand.COPYRIGHT}
 							</Text>
 						</Section>
 					</Container>

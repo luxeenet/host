@@ -46,6 +46,11 @@ export default function AdminDashboardPage() {
 								Payment Gateways (SonicPesa)
 							</Button>
 						</Link>
+						<Link href="/admin/notifications">
+							<Button variant="outline" className="border-blue-500/40 text-blue-300 hover:bg-blue-950/30 font-medium text-xs">
+								Email & SMTP Relay
+							</Button>
+						</Link>
 						<Link href="/admin#cloudflare-saas">
 							<Button variant="outline" className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/30 font-medium text-xs">
 								Cloudflare for SaaS

@@ -673,7 +673,7 @@ export async function sendBillingNotification(
 						<p>Your applications, databases, and services are currently <strong>still running</strong> under a <strong>${details?.graceDays || 3}-day grace period</strong>.</p>
 						<div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 14px; margin: 18px 0; border-radius: 4px;">
 							<p style="margin: 0; font-weight: 600; color: #92400e;">
-								Please settle your open invoice before ${details?.graceEndsAt ? new Date(details.graceEndsAt).toLocaleDateString() : "the grace period ends"} to avoid service interruption and container suspension.
+								Please settle your open invoice before ${details?.graceEndsAt ? new Date(details.graceEndsAt).toLocaleDateString() : "the grace period ends"} to avoid service interruption and workload suspension.
 							</p>
 						</div>
 						<p style="margin: 24px 0;">
@@ -691,7 +691,7 @@ export async function sendBillingNotification(
 						<h2 style="color: #ef4444; margin-top: 0;">🛑 Services Paused due to Overdue Payment</h2>
 						<p>Hi ${userName},</p>
 						<p>The grace period for your subscription for <strong>${orgName}</strong> has ended without payment.</p>
-						<p>Your running applications and database containers have been <strong>temporarily stopped</strong> to prevent further charges.</p>
+						<p>Your running applications and database services have been <strong>temporarily paused</strong> to prevent further charges.</p>
 						<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin: 18px 0;">
 							<p style="margin: 0; font-weight: bold; color: #334155;">🔒 Your Data and Code Are Safe:</p>
 							<p style="margin: 8px 0 0 0; color: #64748b; font-size: 14px; line-height: 1.5;">
@@ -760,6 +760,7 @@ export async function sendBillingNotification(
 			await sendEmail({
 				email: recipientEmail,
 				subject,
+				html: htmlContent,
 				text: subject,
 			});
 		} catch (emailErr) {

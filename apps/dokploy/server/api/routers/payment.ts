@@ -66,22 +66,75 @@ export const paymentRouter = createTRPCRouter({
 				description: `Payment for invoice ${invoice.invoiceNumber}`,
 			});
 
-			// Persist payment record
-			const [payment] = await db
-				.insert(schema.payments)
-				.values({
-					id: nanoid(),
-					invoiceId: invoice.id,
-					organizationId: orgId,
-					amount: invoice.amount,
-					currency: invoice.currency,
-					provider: input.provider as any,
-					providerReference: result.providerReference,
-					status: result.status as any,
-					payerIdentifier: input.payerIdentifier,
-					providerMetadata: result.rawResponse as any,
-				})
-				.returning();
+			// Persist payment record with self-healing fallback
+			let payment: typeof schema.payments.$inferSelect | undefined;
+			try {
+				const inserted = await db
+					.insert(schema.payments)
+					.values({
+						id: nanoid(),
+						invoiceId: invoice.id,
+						organizationId: orgId,
+						amount: invoice.amount,
+						currency: invoice.currency,
+						provider: input.provider as any,
+						providerReference: result.providerReference,
+						status: result.status as any,
+						payerIdentifier: input.payerIdentifier,
+						providerMetadata: result.rawResponse as any,
+					})
+					.returning();
+				payment = inserted[0];
+			} catch (insertError: any) {
+				console.warn(
+					"[payment.initiate] Direct insert into paas_payment failed, executing self-healing schema upgrade:",
+					insertError?.message || insertError,
+				);
+				try {
+					const { sql } = await import("drizzle-orm");
+					await db.execute(sql`
+						DO $ BEGIN
+							ALTER TYPE "public"."paymentProviderEnum" ADD VALUE IF NOT EXISTS 'sonicpesa';
+						EXCEPTION WHEN others THEN null;
+						END $;
+					`);
+					await db.execute(sql`
+						DO $ BEGIN
+							ALTER TYPE "paymentProviderEnum" ADD VALUE IF NOT EXISTS 'sonicpesa';
+						EXCEPTION WHEN others THEN null;
+						END $;
+					`);
+					await db.execute(sql`
+						DO $ BEGIN
+							ALTER TABLE "paas_payment" ALTER COLUMN "provider" TYPE text USING "provider"::text;
+						EXCEPTION WHEN others THEN null;
+						END $;
+					`);
+
+					const retryInserted = await db
+						.insert(schema.payments)
+						.values({
+							id: nanoid(),
+							invoiceId: invoice.id,
+							organizationId: orgId,
+							amount: invoice.amount,
+							currency: invoice.currency,
+							provider: input.provider as any,
+							providerReference: result.providerReference,
+							status: result.status as any,
+							payerIdentifier: input.payerIdentifier,
+							providerMetadata: result.rawResponse as any,
+						})
+						.returning();
+					payment = retryInserted[0];
+				} catch (retryError: any) {
+					console.error("[payment.initiate] Self-healing insert failed:", retryError);
+					throw new TRPCError({
+						code: "INTERNAL_SERVER_ERROR",
+						message: `Payment order created with SonicPesa (${result.providerReference}), but saving transaction record failed: ${insertError?.message || "Database insert error"}`,
+					});
+				}
+			}
 
 			if (!payment) {
 				throw new TRPCError({
@@ -109,13 +162,23 @@ export const paymentRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			const orgId = ctx.session.activeOrganizationId;
 
-			const payment = await db.query.payments.findFirst({
+			let payment = await db.query.payments.findFirst({
 				where: and(
 					eq(schema.payments.id, input.paymentId),
 					eq(schema.payments.organizationId, orgId),
 				),
 				with: { invoice: { with: { subscription: true } } },
 			});
+
+			if (!payment && input.providerReference) {
+				payment = await db.query.payments.findFirst({
+					where: and(
+						eq(schema.payments.providerReference, input.providerReference),
+						eq(schema.payments.organizationId, orgId),
+					),
+					with: { invoice: { with: { subscription: true } } },
+				});
+			}
 
 			if (!payment) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Payment not found." });

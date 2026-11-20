@@ -1436,6 +1436,13 @@
       "when": 1792300000000,
       "tag": "0204_cloudflare_saas_custom_domains",
       "breakpoints": true
+    },
+    {
+      "idx": 205,
+      "version": "7",
+      "when": 1792310000000,
+      "tag": "0205_add_sonicpesa_payment_provider",
+      "breakpoints": true
     }
   ]
 }

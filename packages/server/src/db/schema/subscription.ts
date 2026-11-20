@@ -150,7 +150,19 @@ export const payments = pgTable("paas_payment", {
 		.references(() => organization.id, { onDelete: "cascade" }),
 	amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
 	currency: text("currency").notNull().default("TZS"),
-	provider: paymentProviderEnum("provider").notNull(),
+	provider: text("provider")
+		.$type<
+			|	"mpesa"
+			|	"sonicpesa"
+			|	"tigopesa"
+			|	"airtelmoney"
+			|	"halopesa"
+			|	"azampesa"
+			|	"bank_transfer"
+			|	"card"
+			|	"manual"
+		>()
+		.notNull(),
 	/** Provider-specific transaction reference */
 	providerReference: text("provider_reference"),
 	/** Provider-specific transaction ID */

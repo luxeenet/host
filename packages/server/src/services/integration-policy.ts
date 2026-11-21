@@ -632,10 +632,10 @@ export const unavailableMessage = (
 ): string => {
 	const label = INTEGRATION_DEFINITIONS[id].label;
 	if (state === "disabled") {
-		return `${label} is currently unavailable. Please contact your administrator or choose another source.`;
+		return `${label} is currently unavailable. Please choose another source or try again later.`;
 	}
 	if (state === "not_configured") {
-		return `${label} is not set up yet. Please contact your administrator.`;
+		return `${label} is coming soon. Please choose another source.`;
 	}
 	return `${label} is currently unavailable.`;
 };

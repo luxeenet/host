@@ -193,19 +193,21 @@ export const ShowRollbackSettings = ({ applicationId, children }: Props) => {
 											</SelectContent>
 										</Select>
 										{!registries || registries.length === 0 ? (
-											<FormDescription className="text-amber-600 dark:text-amber-500">
-												No registries available. Please{" "}
+											<FormDescription className="text-muted-foreground text-xs">
 												{isPlatformAdmin ? (
-													<Link
-														href="/dashboard/settings/registry"
-														className="underline font-medium hover:text-amber-700 dark:hover:text-amber-400"
-													>
-														configure a registry
-													</Link>
+													<>
+														No container registries available. Please{" "}
+														<Link
+															href="/dashboard/settings/registry"
+															className="underline font-medium text-amber-500 hover:text-amber-400"
+														>
+															configure a registry
+														</Link>{" "}
+														to enable rollback image archiving.
+													</>
 												) : (
-													<span>contact your system administrator</span>
-												)}{" "}
-												first to enable rollbacks.
+													"Automated container registry archiving for rollbacks is coming soon in an upcoming platform update."
+												)}
 											</FormDescription>
 										) : (
 											<FormDescription>

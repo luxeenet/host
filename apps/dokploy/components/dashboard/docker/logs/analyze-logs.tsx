@@ -7,6 +7,7 @@ import {
 	Loader2,
 	RotateCcw,
 	Settings,
+	Sparkles,
 	X,
 } from "lucide-react";
 import Link from "next/link";
@@ -116,19 +117,36 @@ export function AnalyzeLogs({ logs, context }: Props) {
 				<div className="p-4 space-y-3">
 					{!data?.analysis ? (
 						providers && providers.length === 0 ? (
-							<div className="flex flex-col items-center gap-3 py-2 text-center">
-								<p className="text-sm text-muted-foreground">
-									{isPlatformAdmin
-										? "No AI providers configured. Set up a provider to start analyzing logs."
-										: "AI log analysis is not configured on this platform. Please contact your system administrator."}
-								</p>
-								{isPlatformAdmin && (
-									<Button size="sm" variant="outline" asChild>
-										<Link href="/dashboard/settings/ai">
-											<Settings className="mr-2 h-3.5 w-3.5" />
-											Configure AI Provider
-										</Link>
-									</Button>
+							<div className="flex flex-col items-center gap-3 py-6 px-4 text-center">
+								{!isPlatformAdmin ? (
+									<>
+										<div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+											<Sparkles className="size-6" />
+										</div>
+										<div className="space-y-1.5 max-w-xs">
+											<span className="inline-flex items-center px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[10px] font-semibold uppercase tracking-wider">
+												Coming Soon
+											</span>
+											<h4 className="text-sm font-semibold text-foreground">
+												AI Log Analysis is Coming Soon
+											</h4>
+											<p className="text-xs text-muted-foreground leading-relaxed">
+												Intelligent error diagnosis, stack trace decoding, and automated remediation suggestions are arriving in an upcoming platform update.
+											</p>
+										</div>
+									</>
+								) : (
+									<>
+										<p className="text-sm text-muted-foreground">
+											No AI providers configured. Set up a provider to start analyzing logs.
+										</p>
+										<Button size="sm" variant="outline" asChild>
+											<Link href="/dashboard/settings/ai">
+												<Settings className="mr-2 h-3.5 w-3.5" />
+												Configure AI Provider
+											</Link>
+										</Button>
+									</>
 								)}
 							</div>
 						) : (

@@ -611,7 +611,7 @@ if [ -d ${quote([buildAppDirectory])} ]; then
   if [ "$REQUESTED_NODE" = "18" ]; then
     if [ "$ALLOW_LEGACY" = "false" ]; then
       echo "❌ Deployment Rejected by Policy: Node.js 18 reached End-Of-Life on 2025-04-30 and organizational policy forbids unmaintained runtimes." ;
-      echo "💡 Remediation: Upgrade your project to Node.js 20 or 22 in package.json / .nvmrc, or contact your administrator." ;
+      echo "💡 Remediation: Upgrade your project to Node.js 20 or 22 in package.json / .nvmrc." ;
       exit 1;
     fi
     echo "⚠️ Notice: Project specifies Node.js 18.x which reached End-Of-Life upstream on 2025-04-30." ;

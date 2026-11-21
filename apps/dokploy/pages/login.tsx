@@ -98,10 +98,10 @@ export default function LoginPage({ IS_CLOUD, enforceSSO }: Props) {
 
 		setError(
 			normalized.includes("account not linked")
-				? "This account already exists but isn't linked to that sign-in provider yet. Contact your administrator to link it."
+				? "This account already exists with password sign-in. Please sign in with your email and password."
 				: normalized.includes("access denied")
 					? "Access was denied by the identity provider."
-					: "We couldn't complete sign-in. Please try again or contact your administrator.",
+					: "We couldn't complete sign-in. Please try again or contact support.",
 		);
 
 		const { error: _removed, ...rest } = router.query;

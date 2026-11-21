@@ -89,7 +89,7 @@ export function ShowAuditLogs() {
 					lockedProps={{
 						title: "Audit Logs",
 						description:
-							"Get full visibility into every action performed across your organization. Audit logs are available as part of the Enterprise Edition.",
+							"Get full visibility into actions performed across your organization. Comprehensive audit logging will be available in an upcoming update.",
 						ctaLabel: "Manage License",
 					}}
 				>

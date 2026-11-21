@@ -86,10 +86,8 @@ export const ShowUsers = () => {
 												{membersWithCustomRoles?.length === 1
 													? "1 user"
 													: `${membersWithCustomRoles?.length} users`}{" "}
-												assigned to custom roles. Custom roles will not work
-												without a valid Enterprise license. Please activate your
-												license or change these users to a free role (Admin or
-												Member).
+												assigned to custom roles. Please assign these users to
+												Admin or Member for standard permissions.
 											</AlertBlock>
 										)}
 										<Table>

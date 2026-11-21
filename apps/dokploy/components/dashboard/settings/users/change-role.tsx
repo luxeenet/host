@@ -147,7 +147,7 @@ export const ChangeRole = ({ memberId, currentRole, userEmail }: Props) => {
 										{customRoles && customRoles.length > 0 && (
 											<>
 												<br />
-												<strong>Custom roles:</strong> Enterprise-defined
+												<strong>Custom roles:</strong> Organization-defined
 												permissions.
 											</>
 										)}

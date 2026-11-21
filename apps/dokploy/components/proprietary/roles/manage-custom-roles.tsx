@@ -7,13 +7,16 @@ import {
 	TrashIcon,
 	Users,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { brand } from "@paas/branding";
 import { EnterpriseFeatureGate } from "@/components/proprietary/enterprise-feature-gate";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { DialogAction } from "@/components/shared/dialog-action";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -621,6 +624,65 @@ const createRoleSchema = z.object({
 type CreateRoleSchema = z.infer<typeof createRoleSchema>;
 
 export const ManageCustomRoles = () => {
+	const { data: haveValidLicense, isPending } =
+		api.licenseKey.haveValidLicenseKey.useQuery();
+	const { data: user } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean((user as any)?.isPlatformAdmin);
+
+	if (isPending) {
+		return null;
+	}
+
+	if (!haveValidLicense) {
+		return (
+			<Card className="h-full bg-sidebar p-2.5 rounded-xl w-full">
+				<div className="rounded-xl bg-background shadow-md">
+					<CardHeader>
+						<div className="flex items-center justify-between">
+							<CardTitle className="text-xl flex flex-row items-center gap-2">
+								<ShieldCheck className="size-5 text-amber-500" />
+								Custom Roles &amp; Permissions
+							</CardTitle>
+							<Badge
+								variant="outline"
+								className="border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs px-2.5 py-0.5"
+							>
+								Coming Soon
+							</Badge>
+						</div>
+						<CardDescription>
+							Create and manage custom roles with fine-grained per-service permissions
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="border-t pt-6 pb-6">
+						<div className="flex flex-col items-center justify-center text-center p-8 rounded-xl border border-dashed border-border/80 bg-muted/20">
+							<div className="size-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mb-3">
+								<Sparkles className="size-6" />
+							</div>
+							<h3 className="font-semibold text-foreground text-base mb-1">
+								Granular Role-Based Access Control
+							</h3>
+							<p className="text-xs text-muted-foreground max-w-md leading-relaxed">
+								Custom role creation and granular per-resource permissions are coming soon to {brand.APP_NAME}. Standard team roles (Owner, Admin, Member) are fully active to manage your organization.
+							</p>
+							<div className="mt-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-card border border-border text-[11px] text-muted-foreground">
+								<ShieldCheck className="size-3.5 text-emerald-400 shrink-0" />
+								<span>Owner, Admin &amp; Member roles active</span>
+							</div>
+							{isPlatformAdmin && (
+								<div className="mt-4">
+									<Button asChild variant="outline" size="sm" className="text-xs">
+										<Link href="/dashboard/settings/license">Configure License (Admin)</Link>
+									</Button>
+								</div>
+							)}
+						</div>
+					</CardContent>
+				</div>
+			</Card>
+		);
+	}
+
 	return (
 		<Card className="h-full bg-sidebar p-2.5 rounded-xl w-full">
 			<div className="rounded-xl bg-background shadow-md">
@@ -634,16 +696,7 @@ export const ManageCustomRoles = () => {
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="border-t pt-6">
-					<EnterpriseFeatureGate
-						lockedProps={{
-							title: "Custom Roles",
-							description:
-								"Custom roles with fine-grained permissions are part of the Enterprise Edition. Add a valid license to create and assign custom roles.",
-							ctaLabel: "Go to License",
-						}}
-					>
-						<CustomRolesContent />
-					</EnterpriseFeatureGate>
+					<CustomRolesContent />
 				</CardContent>
 			</div>
 		</Card>

@@ -32,8 +32,8 @@ const Page = ({ isCloud }: Props) => {
 							lockedProps={{
 								title: "Enterprise SSO",
 								description:
-									"Single sign-on (SSO) with OIDC and SAML is part of the Enterprise Edition. Add a valid license to configure it.",
-								ctaLabel: "Go to License",
+									"Single sign-on (SSO) with OIDC and SAML will be available in an upcoming update.",
+								ctaLabel: "Configure License",
 							}}
 						>
 							<SSOSettings />
@@ -46,8 +46,8 @@ const Page = ({ isCloud }: Props) => {
 							lockedProps={{
 								title: "Application Authentication",
 								description:
-									"Protect deployed applications behind an OIDC SSO gate (oauth2-proxy). Part of the Enterprise Edition.",
-								ctaLabel: "Go to License",
+									"Protect deployed applications behind an OIDC SSO gate (oauth2-proxy). Available in an upcoming update.",
+								ctaLabel: "Configure License",
 							}}
 						>
 							<ForwardAuthServers />
@@ -59,10 +59,10 @@ const Page = ({ isCloud }: Props) => {
 						<div className="rounded-xl bg-background shadow-md">
 							<EnterpriseFeatureGate
 								lockedProps={{
-									title: "Self-hosted Restrictions",
+									title: "Deployment Restrictions",
 									description:
-										"Deployment and authentication restrictions are part of the Enterprise Edition. Add a valid license to configure them.",
-									ctaLabel: "Go to License",
+										"Deployment and authentication policy controls will be available in an upcoming update.",
+									ctaLabel: "Configure License",
 								}}
 							>
 								<CardHeader>

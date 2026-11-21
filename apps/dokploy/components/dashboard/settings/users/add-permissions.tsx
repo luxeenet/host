@@ -969,7 +969,7 @@ export const AddUserPermissions = ({ userId, role }: Props) => {
 								<EnterpriseFeatureLocked
 									compact
 									title="Git Provider Assignment"
-									description="Assign specific Git Providers to users with an Enterprise license."
+									description="Per-member Git Provider access assignment is coming soon."
 								/>
 							</div>
 						)}
@@ -1042,7 +1042,7 @@ export const AddUserPermissions = ({ userId, role }: Props) => {
 								<EnterpriseFeatureLocked
 									compact
 									title="Server Assignment"
-									description="Assign specific Servers to users with an Enterprise license."
+									description="Per-member dedicated Server access assignment is coming soon."
 								/>
 							</div>
 						)}

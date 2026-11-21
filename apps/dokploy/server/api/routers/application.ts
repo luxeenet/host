@@ -44,6 +44,10 @@ import {
 	execAsync,
 	execAsyncRemote,
 } from "@dokploy/server";
+import path from "node:path";
+import fsPromises from "node:fs/promises";
+import { paths } from "@dokploy/server/constants";
+import { getCreateFileCommand } from "@dokploy/server/utils/docker/utils";
 import { quote } from "shell-quote";
 import { db } from "@dokploy/server/db";
 import { ArchiveValidationError } from "@dokploy/server/utils/builders/archive-validation";
@@ -266,27 +270,203 @@ export const applicationRouter = createTRPCRouter({
 			}
 
 			const suffix = nanoid(6).toLowerCase();
+			const appName = `static-app-${suffix}`;
+
+			// Pre-packaged static sample website code (responsive HTML5 + CSS)
+			const sampleHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to HatDot Cloud</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #111827;
+      --border: #1f2937;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --accent: #f59e0b;
+      --emerald: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+      text-align: center;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--emerald);
+      margin-bottom: 1.5rem;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 10px var(--emerald);
+    }
+    h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+    h1 span {
+      color: var(--accent);
+    }
+    p.sub {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 580px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.6;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      max-width: 760px;
+      width: 100%;
+      margin-bottom: 2.5rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      text-align: left;
+    }
+    .card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #fff;
+    }
+    .card p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    footer {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="badge">
+    <span class="dot"></span>
+    Live on HatDot Edge Network
+  </div>
+  <h1>Your Website is <span>Live</span></h1>
+  <p class="sub">
+    Congratulations! Your static application has been provisioned and deployed with automated SSL and global edge routing.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>⚡ Lightning Fast</h3>
+      <p>Optimized static delivery with zero runtime overhead and instant edge caching.</p>
+    </div>
+    <div class="card">
+      <h3>🔒 Edge Security</h3>
+      <p>Automated SSL certificate issued with 256-bit encryption and DDoS defense.</p>
+    </div>
+    <div class="card">
+      <h3>🚀 Ready to Build</h3>
+      <p>Update code via Git, Zip upload, or deploy custom static frameworks anytime.</p>
+    </div>
+  </div>
+  <footer>
+    Powered by HatDot Cloud
+  </footer>
+</body>
+</html>`;
+
+			const sampleNginxConfig = `worker_processes auto;
+events { worker_connections 1024; }
+http {
+  include mime.types;
+  default_type application/octet-stream;
+  sendfile on;
+  keepalive_timeout 65;
+  gzip on;
+  gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+  server {
+    listen 80;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html index.htm;
+    location / {
+      try_files $uri $uri/ /index.html;
+    }
+  }
+}`;
+
+			const sampleDockerfile = `FROM nginx:alpine
+WORKDIR /usr/share/nginx/html/
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY . .
+CMD ["nginx", "-g", "daemon off;"]`;
+
 			const newApplication = await createApplication({
-				name: "Hello World",
-				appName: `hello-world-${suffix}`,
-				description: "Nginx demo app created by the onboarding wizard",
+				name: "Sample Static Website",
+				appName,
+				description: "Pre-configured static website deployed by onboarding wizard",
 				environmentId: input.environmentId,
 				serverId: effectiveServerId,
-				sourceType: "docker",
+				sourceType: "drop",
 			});
 
 			await addNewService(ctx, newApplication.applicationId);
 
 			await updateApplication(newApplication.applicationId, {
-				dockerImage: "nginxdemos/hello",
-				sourceType: "docker",
+				sourceType: "drop",
+				buildType: "static",
 				applicationStatus: "idle",
 			});
+
+			// Write pre-configured static sample website codes into the application code directory
+			const { APPLICATIONS_PATH } = paths(!!effectiveServerId);
+			const codeDirectory = path.join(APPLICATIONS_PATH, newApplication.appName, "code");
+
+			if (effectiveServerId) {
+				const cmd = [
+					getCreateFileCommand(codeDirectory, "index.html", sampleHtml),
+					getCreateFileCommand(codeDirectory, "nginx.conf", sampleNginxConfig),
+					getCreateFileCommand(codeDirectory, "Dockerfile", sampleDockerfile),
+				].join("\n");
+				await execAsyncRemote(effectiveServerId, cmd);
+			} else {
+				await fsPromises.mkdir(codeDirectory, { recursive: true });
+				await Promise.all([
+					fsPromises.writeFile(path.join(codeDirectory, "index.html"), sampleHtml, "utf-8"),
+					fsPromises.writeFile(path.join(codeDirectory, "nginx.conf"), sampleNginxConfig, "utf-8"),
+					fsPromises.writeFile(path.join(codeDirectory, "Dockerfile"), sampleDockerfile, "utf-8"),
+				]);
+			}
 
 			const { host, supportsHttps } =
 				await resolveGeneratedApplicationDomain(
 					newApplication.appName,
-					input.serverId,
+					effectiveServerId ?? undefined,
 				);
 
 			const domain = await createDomain({
@@ -309,15 +489,15 @@ export const applicationRouter = createTRPCRouter({
 				applicationId: newApplication.applicationId,
 				organizationId: ctx.session.activeOrganizationId,
 				projectId: (newApplication as any).environment?.projectId,
-				titleLog: "Onboarding quickstart deployment",
+				titleLog: "Onboarding static website quickstart",
 				descriptionLog: "",
 				type: "deploy",
 				applicationType: "application",
-				server: !!input.serverId,
-				serverId: input.serverId,
+				server: !!effectiveServerId,
+				serverId: effectiveServerId ?? undefined,
 			};
 
-			if (IS_CLOUD && input.serverId) {
+			if (IS_CLOUD && effectiveServerId) {
 				deploy(jobData).catch((error) => {
 					console.error("Background deployment failed:", error);
 				});

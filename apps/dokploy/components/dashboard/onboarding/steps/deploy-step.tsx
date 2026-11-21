@@ -339,11 +339,11 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 
 						<div>
 							<h3 className="text-lg font-bold text-white flex items-center gap-2">
-								Instant Web App
+								Instant Static Website
 								<Sparkles className="size-4 text-amber-400" />
 							</h3>
 							<p className="text-xs text-slate-400 mt-1 leading-relaxed">
-								A high-speed, zero-config cloud web service running on the HatDot edge network. Deploys in ~10 seconds with automatic HTTPS.
+								Pre-configured, high-speed static website running on the HatDot edge network. Deploys instantly with pre-packaged static codes and automated HTTPS.
 							</p>
 						</div>
 
@@ -353,7 +353,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 								<span>Supported on your {planName}</span>
 							</div>
 							<div className="text-slate-400">
-								Zero chance of memory or quota errors. Perfect first test.
+								Zero build delay or quota errors. 100% pre-packaged static sample site.
 							</div>
 						</div>
 					</div>
@@ -366,11 +366,11 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 						{starting === "nginx" ? (
 							<>
 								<Loader2 className="size-3.5 animate-spin" />
-								Deploying Web App...
+								Deploying Website...
 							</>
 						) : (
 							<>
-								Deploy Instant App Now &rarr;
+								Deploy Instant Website Now &rarr;
 							</>
 						)}
 					</Button>

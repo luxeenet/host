@@ -84,7 +84,6 @@ const createBetterAuth = () =>
 			"/organization/create",
 			"/organization/update",
 			"/organization/delete",
-			...(!IS_CLOUD ? ["/verify-email"] : []),
 		],
 		secret: betterAuthSecret,
 		onAPIError: {
@@ -172,12 +171,14 @@ const createBetterAuth = () =>
 			autoSignInAfterVerification: true,
 			sendOnSignIn: true,
 			sendVerificationEmail: async ({ user, url }) => {
-				if (IS_CLOUD) {
+				try {
 					await sendVerificationEmail({
 						userName: user.name || "User",
 						email: user.email,
 						verificationUrl: url,
 					});
+				} catch (err) {
+					console.error(`[emailVerification] Failed to send email to ${user.email}:`, err);
 				}
 			},
 		},
@@ -203,7 +204,7 @@ const createBetterAuth = () =>
   <div style="max-width: 520px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e4e4e7; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
     <div style="background-color: #09090b; padding: 32px 40px; text-align: center;">
       <div style="display: inline-flex; align-items: center; gap: 10px;">
-        <div style="width: 28px; height: 28px; border-radius: 8px; background-color: #3b82f6; display: inline-block; vertical-align: middle;"></div>
+        <div style="width: 28px; height: 28px; border-radius: 8px; background-color: #d97706; display: inline-block; vertical-align: middle;"></div>
         <span style="color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: -0.5px; vertical-align: middle;">${brand.APP_NAME}</span>
       </div>
     </div>
@@ -212,9 +213,12 @@ const createBetterAuth = () =>
       <p style="color: #71717a; font-size: 14px; line-height: 24px; margin: 0 0 28px;">
         Hello ${user.name || "there"}, we received a request to reset your ${brand.APP_NAME} account password. Click the button below to choose a new password.
       </p>
-      <div style="text-align: center; margin-bottom: 32px;">
-        <a href="${url}" style="display: inline-block; background-color: #09090b; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; padding: 12px 28px; border-radius: 8px;">Reset Password</a>
+      <div style="text-align: center; margin-bottom: 24px;">
+        <a href="${url}" style="display: inline-block; background-color: #d97706; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);">Reset Password</a>
       </div>
+      <p style="color: #d97706; font-size: 12px; line-height: 18px; margin: 0 0 20px; text-align: center; font-weight: 500;">
+        ⏱️ For security, this link is valid for 1 hour.
+      </p>
       <p style="color: #71717a; font-size: 13px; line-height: 20px; margin: 0 0 16px;">
         If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.
       </p>

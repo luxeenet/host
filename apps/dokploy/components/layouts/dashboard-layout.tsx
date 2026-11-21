@@ -6,6 +6,7 @@ import { api } from "@/utils/api";
 import { useWhitelabeling } from "@/utils/hooks/use-whitelabeling";
 import { ImpersonationBar } from "../dashboard/impersonation/impersonation-bar";
 import { HubSpotWidget } from "../shared/HubSpotWidget";
+import { EmailVerificationBanner } from "../shared/email-verification-banner";
 import Page from "./side";
 
 interface Props {
@@ -65,6 +66,7 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 					</title>
 				</Head>
 			)}
+			<EmailVerificationBanner />
 			<Page>{children}</Page>
 			{isChatEnabled && (
 				<>

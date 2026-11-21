@@ -55,7 +55,7 @@ export const VerifyEmailTemplate = ({
 							<Section className="text-center mb-[24px]">
 								<Button
 									href={verificationUrl}
-									className="bg-[#0284c7] hover:bg-[#0369a1] rounded-lg text-white text-[14px] font-semibold no-underline text-center px-[28px] py-[13px] shadow-sm"
+									className="bg-[#d97706] hover:bg-[#b45309] rounded-lg text-white text-[14px] font-semibold no-underline text-center px-[32px] py-[14px] shadow-md"
 								>
 									Verify Email Address
 								</Button>

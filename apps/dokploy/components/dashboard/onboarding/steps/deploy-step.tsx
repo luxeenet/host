@@ -78,6 +78,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 	// Plan & Subscription details
 	const { data: subscription } = api.subscription.getCurrent.useQuery();
 	const { data: resourceLimits } = api.subscription.getResourceLimits.useQuery();
+	const { data: builderEntitlements } = api.application.getBuilderEntitlements.useQuery();
 
 	const plan = subscription?.plan;
 	const planName = plan?.name || resourceLimits?.planName || "Starter Plan";
@@ -86,15 +87,32 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 		plan?.resources?.find((r) => r.resourceKey === "max_ram_mb")?.value ??
 		512;
 
+	const allowedBuilds = builderEntitlements?.allowedBuildTypes;
+	const isNixpacksOnly = Boolean(
+		allowedBuilds &&
+		allowedBuilds.nixpacks &&
+		!allowedBuilds.dockerfile
+	);
+	const isStaticOnly = Boolean(
+		allowedBuilds &&
+		!allowedBuilds.nixpacks &&
+		!allowedBuilds.dockerfile
+	);
+	const hasDocker = Boolean(
+		allowedBuilds?.dockerfile ||
+		resourceLimits?.isPlatformAdmin
+	);
+
+	const appTypes = plan?.applicationTypes?.map((t: any) => t.applicationType) || [];
 	const hasComposeFeature = Boolean(
 		plan?.features?.find((f) => f.featureKey === "compose_access")?.enabled
 	);
 	// In HatDot, multi-container stacks require compose capability or at least 1GB RAM
 	const supportsCompose =
 		Boolean(resourceLimits?.isPlatformAdmin) ||
-		hasComposeFeature ||
-		maxRamMb === -1 ||
-		maxRamMb >= 1024;
+		((appTypes.length === 0 || appTypes.includes("compose")) &&
+		 hasComposeFeature &&
+		 (maxRamMb === -1 || maxRamMb >= 1024));
 
 	const [deploying, setDeploying] = useState<Deploying | null>(null);
 	const [starting, setStarting] = useState<string | null>(null);
@@ -154,7 +172,12 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 	const handleNginx = async () => {
 		setStarting("nginx");
 		try {
-			const res = await deployNginx({ environmentId, serverId });
+			const buildType = isNixpacksOnly
+				? "nixpacks"
+				: isStaticOnly
+					? "static"
+					: undefined;
+			const res = await deployNginx({ environmentId, serverId, buildType });
 			setDeploying({ kind: "app", id: res.applicationId, url: res.domainUrl });
 		} catch (error) {
 			toast.error(
@@ -218,7 +241,15 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 						) : (
 							<Loader2 className="size-3.5 animate-spin" />
 						)}
-						{isDone ? "Live on Edge Network" : isError ? "Deploy failed" : "Provisioning Cloud Container"}
+						{isDone
+							? "Live on Edge Network"
+							: isError
+								? "Deploy failed"
+								: isNixpacksOnly
+									? "Provisioning Dynamic Runtime (Nixpacks)"
+									: isStaticOnly
+										? "Deploying Static Edge Container"
+										: "Provisioning Cloud Container"}
 					</span>
 
 					<h1 className={titleClassName}>
@@ -234,7 +265,11 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 							? "Your application is active, SSL-secured, and accessible worldwide:"
 							: isError
 								? "The deployment encountered an issue — you can view build logs in your dashboard."
-								: "Setting up private isolated runtime, generating SSL certificate, and connecting edge routing..."}
+								: isNixpacksOnly
+									? "Analyzing Node.js code with Universal Nixpacks, provisioning port 3000, and issuing SSL..."
+									: isStaticOnly
+										? "Packaging pre-configured static website, configuring edge Nginx on port 80, and issuing SSL..."
+										: "Setting up private isolated runtime, generating SSL certificate, and connecting edge routing..."}
 					</p>
 				</div>
 
@@ -279,12 +314,34 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 					<div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 max-w-lg space-y-3">
 						<div className="flex items-center gap-3 text-sm text-slate-200">
 							<Loader2 className="size-5 animate-spin text-amber-400 shrink-0" />
-							<span>Building application container &amp; mapping domain...</span>
+							<span>
+								{isNixpacksOnly
+									? "Building with Universal Nixpacks & mapping domain..."
+									: isStaticOnly
+										? "Packaging static site & configuring edge routing..."
+										: "Building application container & mapping domain..."}
+							</span>
 						</div>
 						<div className="text-[11px] text-slate-400 pl-8 space-y-1 font-mono">
-							<div>• Initializing secure container environment</div>
-							<div>• Mapping incoming traffic through edge load balancer</div>
-							<div>• Running zero-downtime health verification</div>
+							{isNixpacksOnly ? (
+								<>
+									<div>• Analyzing runtime and dependencies via Nixpacks</div>
+									<div>• Compiling Node.js HTTP service listening on port 3000</div>
+									<div>• Connecting edge load balancer with automated SSL</div>
+								</>
+							) : isStaticOnly ? (
+								<>
+									<div>• Initializing high-speed edge static container</div>
+									<div>• Injecting responsive landing page and Nginx configuration</div>
+									<div>• Verifying edge routing on port 80 with automated SSL</div>
+								</>
+							) : (
+								<>
+									<div>• Initializing secure container environment</div>
+									<div>• Mapping incoming traffic through edge load balancer</div>
+									<div>• Running zero-downtime health verification</div>
+								</>
+							)}
 						</div>
 					</div>
 				) : null}
@@ -324,11 +381,15 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 
 			{/* Deployment Options Grid */}
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-				{/* Option 1: Instant Cloud Web App (100% Guaranteed Success on ALL plans) */}
+				{/* Option 1: Intelligent Quickstart tailored to plan builder */}
 				<div className="flex flex-col justify-between rounded-2xl border-2 border-amber-500/50 bg-gradient-to-b from-amber-950/20 via-slate-900/60 to-slate-950 p-6 shadow-xl relative overflow-hidden">
 					<div className="absolute top-3 right-3">
 						<Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold uppercase">
-							100% Guaranteed • All Plans
+							{isNixpacksOnly
+								? "Universal Engine • Nixpacks"
+								: isStaticOnly
+									? "Static Engine • Zero Build"
+									: "Universal Cloud Engine"}
 						</Badge>
 					</div>
 
@@ -339,11 +400,19 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 
 						<div>
 							<h3 className="text-lg font-bold text-white flex items-center gap-2">
-								Instant Static Website
+								{isNixpacksOnly
+									? "Instant Dynamic Web App"
+									: isStaticOnly
+										? "Instant Static Website"
+										: "Instant Cloud Web App"}
 								<Sparkles className="size-4 text-amber-400" />
 							</h3>
 							<p className="text-xs text-slate-400 mt-1 leading-relaxed">
-								Pre-configured, high-speed static website running on the HatDot edge network. Deploys instantly with pre-packaged static codes and automated HTTPS.
+								{isNixpacksOnly
+									? "Pre-configured Node.js dynamic web application powered by the HatDot Universal Nixpacks Engine. Automatically detects runtime, dependencies, and provisions with zero configuration."
+									: isStaticOnly
+										? "Pre-configured, high-speed static website running on the HatDot edge network. Deploys instantly with pre-packaged static codes and automated HTTPS."
+										: "Pre-configured cloud application running on HatDot high-speed infrastructure. Deploys with automated edge routing, health checks, and global SSL."}
 							</p>
 						</div>
 
@@ -353,7 +422,11 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 								<span>Supported on your {planName}</span>
 							</div>
 							<div className="text-slate-400">
-								Zero build delay or quota errors. 100% pre-packaged static sample site.
+								{isNixpacksOnly
+									? "Native Nixpacks Builder • Port 3000 • Automated Edge SSL. Zero Docker daemon configuration required."
+									: isStaticOnly
+										? "Static Edge Engine • Port 80 • Automated Edge SSL. Zero build delay or quota errors."
+										: "Full Builder Access (Nixpacks & Docker) • Port 80/3000 • Automated Edge SSL."}
 							</div>
 						</div>
 					</div>
@@ -366,11 +439,19 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 						{starting === "nginx" ? (
 							<>
 								<Loader2 className="size-3.5 animate-spin" />
-								Deploying Website...
+								{isNixpacksOnly
+									? "Deploying Dynamic App..."
+									: isStaticOnly
+										? "Deploying Static Website..."
+										: "Deploying Cloud App..."}
 							</>
 						) : (
 							<>
-								Deploy Instant Website Now &rarr;
+								{isNixpacksOnly
+									? "Deploy Dynamic App Now →"
+									: isStaticOnly
+										? "Deploy Static Website Now →"
+										: "Deploy Instant App Now →"}
 							</>
 						)}
 					</Button>
@@ -408,10 +489,10 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 							<div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/20 space-y-2 text-xs">
 								<div className="flex items-start gap-2 text-amber-300 font-medium">
 									<Lock className="size-4 shrink-0 mt-0.5" />
-									<span>Multi-service stacks require 1 GB+ RAM</span>
+									<span>Multi-service stacks require Pro Plan &amp; 1 GB+ RAM</span>
 								</div>
 								<p className="text-[11px] text-slate-400 leading-relaxed">
-									Your current <strong>{planName}</strong> is designed for high-efficiency single services. Stacks like WordPress include an application + full MySQL database and require a Pro or Business plan.
+									Your current <strong>{planName}</strong> is optimized for single services ({isNixpacksOnly ? "Universal Nixpacks Engine" : isStaticOnly ? "Static Edge Engine" : "Container Engine"}). Stacks like WordPress include an application + full MySQL database and require a Pro or Business plan. Deploy the {isNixpacksOnly ? "Dynamic App" : isStaticOnly ? "Static Website" : "Instant App"} to get live immediately.
 								</p>
 							</div>
 						) : null}

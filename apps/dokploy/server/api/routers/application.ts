@@ -221,6 +221,7 @@ export const applicationRouter = createTRPCRouter({
 			z.object({
 				environmentId: z.string().min(1),
 				serverId: z.string().min(1).optional(),
+				buildType: z.enum(["nixpacks", "static", "dockerfile"]).optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -269,10 +270,207 @@ export const applicationRouter = createTRPCRouter({
 				});
 			}
 
-			const suffix = nanoid(6).toLowerCase();
-			const appName = `static-app-${suffix}`;
+			const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+			const builderEntitlements =
+				await PlanEntitlementService.getBuilderEntitlements(
+					ctx.session.activeOrganizationId,
+					isPlatformAdmin,
+				);
+			const allowed = builderEntitlements.allowedBuildTypes;
 
-			// Pre-packaged static sample website code (responsive HTML5 + CSS)
+			// Intelligent runtime builder selection based on active plan entitlements:
+			// 1. If user explicitly requested nixpacks and nixpacks is allowed -> Nixpacks
+			// 2. If user explicitly requested static and static is allowed -> Static
+			// 3. If plan supports nixpacks and NOT dockerfile -> Nixpacks (zero-config dynamic app)
+			// 4. If plan is static-only (e.g. Free plan) -> Static (zero-build pre-packaged website)
+			// 5. Default fallback -> Nixpacks if allowed, otherwise Static
+			let selectedBuildType: "nixpacks" | "static" = "static";
+			if (input.buildType === "nixpacks" && allowed.nixpacks) {
+				selectedBuildType = "nixpacks";
+			} else if (input.buildType === "static" && allowed.static) {
+				selectedBuildType = "static";
+			} else if (allowed.nixpacks && !allowed.dockerfile) {
+				selectedBuildType = "nixpacks";
+			} else if (!allowed.nixpacks && allowed.static) {
+				selectedBuildType = "static";
+			} else {
+				selectedBuildType = allowed.nixpacks ? "nixpacks" : "static";
+			}
+
+			const suffix = nanoid(6).toLowerCase();
+			const appName = `${selectedBuildType === "nixpacks" ? "dynamic-app" : "static-app"}-${suffix}`;
+			const appTitle =
+				selectedBuildType === "nixpacks"
+					? "Sample Dynamic App"
+					: "Sample Static Website";
+			const appDesc =
+				selectedBuildType === "nixpacks"
+					? "Pre-configured Node.js web application deployed with the Universal Nixpacks Engine"
+					: "Pre-configured static website deployed by onboarding wizard";
+			const targetPort = selectedBuildType === "nixpacks" ? 3000 : 80;
+
+			// Sample Node.js application for Nixpacks
+			const samplePackageJson = JSON.stringify(
+				{
+					name: "hatdot-quickstart-app",
+					version: "1.0.0",
+					description: "HatDot Dynamic Application",
+					main: "index.js",
+					scripts: {
+						start: "node index.js",
+					},
+					engines: {
+						node: ">=18",
+					},
+				},
+				null,
+				2,
+			);
+
+			const sampleNodeIndex = `const http = require("http");
+
+const port = process.env.PORT || 3000;
+const host = "0.0.0.0";
+
+const html = \`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to HatDot Cloud</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #111827;
+      --border: #1f2937;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --accent: #f59e0b;
+      --cyan: #06b6d4;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+      text-align: center;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      color: var(--cyan);
+      margin-bottom: 1.5rem;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan);
+    }
+    h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+    h1 span { color: var(--accent); }
+    p.sub {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 580px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.6;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      max-width: 760px;
+      width: 100%;
+      margin-bottom: 2.5rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      text-align: left;
+    }
+    .card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #fff;
+    }
+    .card p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    footer { font-size: 0.85rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="badge">
+    <span class="dot"></span>
+    Universal Dynamic Engine (Nixpacks) Active
+  </div>
+  <h1>Your Dynamic App is <span>Live</span></h1>
+  <p class="sub">
+    Provisioned using the HatDot Universal Nixpacks Engine. Automatically detected Node.js runtime and connected to global edge routing.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>🚀 Dynamic Runtime</h3>
+      <p>Powered by Node.js with automated lifecycle controls and health checks.</p>
+    </div>
+    <div class="card">
+      <h3>🔒 Edge SSL Active</h3>
+      <p>Enterprise SSL certificate automatically issued with zero configuration.</p>
+    </div>
+    <div class="card">
+      <h3>⚡ Code-to-Cloud</h3>
+      <p>Push from Git anytime — Nixpacks automatically detects dependencies and builds.</p>
+    </div>
+  </div>
+  <footer>Powered by HatDot Cloud</footer>
+</body>
+</html>\`;
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/health" || req.url === "/api/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ status: "healthy", uptime: process.uptime() }));
+  }
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
+});
+
+server.listen(port, host, () => {
+  console.log(\`[HatDot] Server listening on http://\${host}:\${port}\`);
+});
+
+process.on("SIGTERM", () => {
+  server.close(() => process.exit(0));
+});
+`;
+
+			// Sample Static Website code for Static plans
 			const sampleHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -427,9 +625,9 @@ COPY . .
 CMD ["nginx", "-g", "daemon off;"]`;
 
 			const newApplication = await createApplication({
-				name: "Sample Static Website",
+				name: appTitle,
 				appName,
-				description: "Pre-configured static website deployed by onboarding wizard",
+				description: appDesc,
 				environmentId: input.environmentId,
 				serverId: effectiveServerId,
 				sourceType: "drop",
@@ -439,28 +637,68 @@ CMD ["nginx", "-g", "daemon off;"]`;
 
 			await updateApplication(newApplication.applicationId, {
 				sourceType: "drop",
-				buildType: "static",
+				buildType: selectedBuildType,
 				applicationStatus: "idle",
 			});
 
-			// Write pre-configured static sample website codes into the application code directory
+			// Write pre-configured sample codes into the application code directory matching the builder
 			const { APPLICATIONS_PATH } = paths(!!effectiveServerId);
-			const codeDirectory = path.join(APPLICATIONS_PATH, newApplication.appName, "code");
+			const codeDirectory = path.join(
+				APPLICATIONS_PATH,
+				newApplication.appName,
+				"code",
+			);
 
-			if (effectiveServerId) {
-				const cmd = [
-					getCreateFileCommand(codeDirectory, "index.html", sampleHtml),
-					getCreateFileCommand(codeDirectory, "nginx.conf", sampleNginxConfig),
-					getCreateFileCommand(codeDirectory, "Dockerfile", sampleDockerfile),
-				].join("\n");
-				await execAsyncRemote(effectiveServerId, cmd);
+			if (selectedBuildType === "nixpacks") {
+				if (effectiveServerId) {
+					const cmd = [
+						getCreateFileCommand(codeDirectory, "package.json", samplePackageJson),
+						getCreateFileCommand(codeDirectory, "index.js", sampleNodeIndex),
+					].join("\n");
+					await execAsyncRemote(effectiveServerId, cmd);
+				} else {
+					await fsPromises.mkdir(codeDirectory, { recursive: true });
+					await Promise.all([
+						fsPromises.writeFile(
+							path.join(codeDirectory, "package.json"),
+							samplePackageJson,
+							"utf-8",
+						),
+						fsPromises.writeFile(
+							path.join(codeDirectory, "index.js"),
+							sampleNodeIndex,
+							"utf-8",
+						),
+					]);
+				}
 			} else {
-				await fsPromises.mkdir(codeDirectory, { recursive: true });
-				await Promise.all([
-					fsPromises.writeFile(path.join(codeDirectory, "index.html"), sampleHtml, "utf-8"),
-					fsPromises.writeFile(path.join(codeDirectory, "nginx.conf"), sampleNginxConfig, "utf-8"),
-					fsPromises.writeFile(path.join(codeDirectory, "Dockerfile"), sampleDockerfile, "utf-8"),
-				]);
+				if (effectiveServerId) {
+					const cmd = [
+						getCreateFileCommand(codeDirectory, "index.html", sampleHtml),
+						getCreateFileCommand(codeDirectory, "nginx.conf", sampleNginxConfig),
+						getCreateFileCommand(codeDirectory, "Dockerfile", sampleDockerfile),
+					].join("\n");
+					await execAsyncRemote(effectiveServerId, cmd);
+				} else {
+					await fsPromises.mkdir(codeDirectory, { recursive: true });
+					await Promise.all([
+						fsPromises.writeFile(
+							path.join(codeDirectory, "index.html"),
+							sampleHtml,
+							"utf-8",
+						),
+						fsPromises.writeFile(
+							path.join(codeDirectory, "nginx.conf"),
+							sampleNginxConfig,
+							"utf-8",
+						),
+						fsPromises.writeFile(
+							path.join(codeDirectory, "Dockerfile"),
+							sampleDockerfile,
+							"utf-8",
+						),
+					]);
+				}
 			}
 
 			const { host, supportsHttps } =
@@ -471,7 +709,7 @@ CMD ["nginx", "-g", "daemon off;"]`;
 
 			const domain = await createDomain({
 				host,
-				port: 80,
+				port: targetPort,
 				https: supportsHttps,
 				certificateType: supportsHttps ? "letsencrypt" : "none",
 				applicationId: newApplication.applicationId,
@@ -489,7 +727,10 @@ CMD ["nginx", "-g", "daemon off;"]`;
 				applicationId: newApplication.applicationId,
 				organizationId: ctx.session.activeOrganizationId,
 				projectId: (newApplication as any).environment?.projectId,
-				titleLog: "Onboarding static website quickstart",
+				titleLog:
+					selectedBuildType === "nixpacks"
+						? "Onboarding dynamic app deployment"
+						: "Onboarding static website deployment",
 				descriptionLog: "",
 				type: "deploy",
 				applicationType: "application",

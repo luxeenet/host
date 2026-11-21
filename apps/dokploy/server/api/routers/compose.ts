@@ -662,24 +662,28 @@ export const composeRouter = createTRPCRouter({
 			}
 
 			const webServerSettings = await getWebServerSettings();
+			const accessibleIds = await getAccessibleServerIds(ctx.session);
+			let effectiveServerId = input.serverId;
+
 			if (
 				(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
-				!input.serverId
+				!effectiveServerId
 			) {
-				throw new TRPCError({
-					code: "UNAUTHORIZED",
-					message: "You need to use a server to create a compose",
-				});
-			}
-
-			if (input.serverId) {
-				const accessibleIds = await getAccessibleServerIds(ctx.session);
-				if (!accessibleIds.has(input.serverId)) {
+				if (accessibleIds.size > 0) {
+					effectiveServerId = Array.from(accessibleIds)[0];
+				} else {
 					throw new TRPCError({
 						code: "UNAUTHORIZED",
-						message: "You are not authorized to access this server",
+						message: "No accessible servers available to deploy this stack",
 					});
 				}
+			}
+
+			if (effectiveServerId && !accessibleIds.has(effectiveServerId)) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this server",
+				});
 			}
 
 			const [template, templateLogo] = await Promise.all([
@@ -689,8 +693,8 @@ export const composeRouter = createTRPCRouter({
 
 			let serverIp = "127.0.0.1";
 
-			if (input.serverId) {
-				const server = await findServerById(input.serverId);
+			if (effectiveServerId) {
+				const server = await findServerById(effectiveServerId);
 				serverIp = server.ipAddress;
 			} else if (process.env.NODE_ENV === "development") {
 				serverIp = "127.0.0.1";
@@ -706,7 +710,7 @@ export const composeRouter = createTRPCRouter({
 			const { host: generatedDomain, supportsHttps } =
 				await resolveGeneratedApplicationDomain(
 					appName,
-					input.serverId ?? undefined,
+					effectiveServerId ?? undefined,
 				);
 
 			const config = {
@@ -725,6 +729,13 @@ export const composeRouter = createTRPCRouter({
 			const compose = await PlanEntitlementService.withAtomicQuotaLock(
 				ctx.session.activeOrganizationId,
 				async (tx) => {
+					// Plan entitlement — check active subscription
+					await assertEntitlement(
+						PlanEntitlementService.checkSubscriptionActive(
+							ctx.session.activeOrganizationId,
+							tx,
+						),
+					);
 					// Plan entitlement — template deployments count as application slots
 					await assertEntitlement(
 						PlanEntitlementService.checkCanCreateApplication(
@@ -752,7 +763,7 @@ export const composeRouter = createTRPCRouter({
 							...input,
 							composeFile: template.dockerCompose,
 							env: generate.envs?.join("\n"),
-							serverId: input.serverId,
+							serverId: effectiveServerId,
 							name: input.id,
 							sourceType: "raw",
 							appName: appName,

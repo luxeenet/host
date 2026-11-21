@@ -698,9 +698,10 @@ export const projectRouter = createTRPCRouter({
 
 		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
 		const hasActivePlan = Boolean(planSnapshot);
+		const hasBillingActive = Boolean(billingStatus?.hasActiveAccess);
 		const hasActiveAccess =
-			!IS_CLOUD || isPlatformAdmin || hasActivePlan || Boolean(billingStatus?.hasActiveAccess);
-		const needsPlanSelection = IS_CLOUD && !isPlatformAdmin && !hasActivePlan;
+			isPlatformAdmin || hasActivePlan || hasBillingActive;
+		const needsPlanSelection = !isPlatformAdmin && !hasActivePlan && !hasBillingActive;
 
 		const isOwner = ctx.user.role === "owner" || isPlatformAdmin;
 
@@ -720,6 +721,29 @@ export const projectRouter = createTRPCRouter({
 	}),
 
 	completeOnboarding: protectedProcedure.mutation(async ({ ctx }) => {
+		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+		let planSnapshot = null;
+		try {
+			planSnapshot = await PlanEntitlementService.getPlanSnapshot(
+				ctx.session.activeOrganizationId,
+			);
+		} catch (err) {
+			console.error("[project.completeOnboarding] Error checking plan:", err);
+		}
+		const billingStatus = await getBillingStatus(ctx.user.ownerId);
+		const hasAccess =
+			isPlatformAdmin ||
+			Boolean(planSnapshot) ||
+			Boolean(billingStatus?.hasActiveAccess);
+
+		if (!hasAccess) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message:
+					"An active subscription plan is required to complete onboarding and access the platform.",
+			});
+		}
+
 		await updateUser(ctx.user.id, { onboardingCompletedAt: new Date() });
 		return { ok: true };
 	}),

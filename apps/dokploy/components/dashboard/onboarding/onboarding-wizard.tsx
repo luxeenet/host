@@ -90,16 +90,20 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 	const [skipAllOpen, setSkipAllOpen] = useState(false);
 	const handleSkipAll = async () => {
 		if (onboardingStatus?.needsPlanSelection && !currentSubscription) {
-			toast.info("Please select a hosting plan to continue setup.");
+			toast.info("A cloud hosting plan is required before accessing the dashboard.");
 			router.push("/onboarding");
 			return;
 		}
-		await onClose();
-		router.push(
-			projectId && environmentId
-				? `/dashboard/project/${projectId}/environment/${environmentId}`
-				: "/dashboard/projects",
-		);
+		try {
+			await onClose();
+			router.push(
+				projectId && environmentId
+					? `/dashboard/project/${projectId}/environment/${environmentId}`
+					: "/dashboard/projects",
+			);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : "Unable to complete onboarding");
+		}
 	};
 
 	useEffect(() => {
@@ -140,7 +144,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 									{brand.APP_NAME}
 								</span>
 							</div>
-							{!isLastVisible && (
+							{!isLastVisible && !needsPlan && (
 								<button
 									type="button"
 									onClick={() => setSkipAllOpen(true)}
@@ -166,6 +170,12 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 								</div>
 							</div>
 						)}
+
+						{/* Enterprise Security Badge */}
+						<div className="mt-3 p-2.5 rounded-xl bg-zinc-900/40 border border-zinc-800/60 text-[10px] text-zinc-400 flex items-center gap-2">
+							<ShieldCheck className="size-3.5 text-emerald-400 shrink-0" />
+							<span>Dedicated Private Cloud • Encrypted Isolation</span>
+						</div>
 
 						<Scoped>
 							<ol className="hidden md:flex flex-col gap-0.5 mt-8">
@@ -223,7 +233,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 						</Scoped>
 
 						<div className="hidden md:flex flex-col gap-4 mt-auto pt-8 border-t border-zinc-800">
-							{!isLastVisible && (
+							{!isLastVisible && !needsPlan && (
 								<button
 									type="button"
 									onClick={() => setSkipAllOpen(true)}

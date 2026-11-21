@@ -4,12 +4,19 @@ import {
 	GitMergeIcon,
 	GlobeIcon,
 	UsersIcon,
+	CheckCircle2,
+	ArrowRight,
+	Sparkles,
+	ShieldCheck,
+	Lock,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import ConfettiExplosion from "react-confetti-explosion";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { brand } from "@paas/branding";
 import { displayFont } from "../font";
 
 interface Props {
@@ -20,24 +27,28 @@ interface Props {
 
 const features = [
 	{
+		number: "01",
 		icon: DatabaseIcon,
-		title: "Databases",
-		description: "Postgres, MySQL, MongoDB, Redis and more, one click away.",
+		title: "One-Click Managed Databases",
+		description: "Deploy PostgreSQL, MySQL, Redis, MongoDB & MariaDB with automated backups.",
 	},
 	{
+		number: "02",
 		icon: GlobeIcon,
-		title: "Custom domains",
-		description: "Attach your own domains and get automatic HTTPS.",
+		title: "Custom Domains & Free SSL",
+		description: "Attach your brand domains with instant Let's Encrypt certificates and edge DDoS defense.",
 	},
 	{
+		number: "03",
 		icon: GitMergeIcon,
-		title: "CI/CD",
-		description: "Auto-deploy on every push from GitHub, GitLab or Bitbucket.",
+		title: "Git-Powered CI/CD",
+		description: "Connect GitHub or GitLab for automatic build pipelines on every branch push.",
 	},
 	{
+		number: "04",
 		icon: UsersIcon,
-		title: "Team collaboration",
-		description: "Invite teammates with fine-grained permissions.",
+		title: "Team Access Control",
+		description: "Invite engineers and collaborators with fine-grained role permissions.",
 	},
 ];
 
@@ -62,60 +73,93 @@ export const CompleteStep = ({ projectId, environmentId, onFinish }: Props) => {
 	};
 
 	return (
-		<div className="flex flex-col gap-10">
+		<div className="flex flex-col gap-8 max-w-xl">
 			<div className="fixed inset-x-0 top-0 flex justify-center pointer-events-none">
 				{showConfetti && (
 					<ConfettiExplosion
-						duration={3000}
-						force={0.35}
-						particleCount={200}
-						width={1200}
-						zIndex={60}
+						duration={3200}
+						force={0.4}
+						particleCount={180}
+						width={1400}
+						zIndex={70}
 					/>
 				)}
 			</div>
 
-			<div className="flex flex-col gap-4">
-				<span className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-					Done
-				</span>
+			{/* Header */}
+			<div className="flex flex-col gap-3">
+				<div className="flex items-center gap-2">
+					<Badge
+						variant="outline"
+						className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[11px] font-medium px-2.5 py-0.5 tracking-wide flex items-center gap-1.5"
+					>
+						<CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+						Setup Complete • Environment Active
+					</Badge>
+				</div>
+
 				<h1
-					className={`${displayFont.className} text-4xl sm:text-5xl leading-[1.05] tracking-tight`}
+					className={`${displayFont.className} text-4xl sm:text-5xl leading-[1.08] tracking-tight text-foreground font-bold`}
 				>
-					You're all set.
+					You&apos;re live on {brand.APP_NAME}!
 				</h1>
-				<p className="text-muted-foreground text-lg max-w-md leading-relaxed">
-					This is just the beginning — here's some of what else you can do.
+
+				<p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
+					Your cloud workspace is initialized and ready. Here is what you can build and configure next:
 				</p>
 			</div>
 
-			<dl className="flex flex-col divide-y">
-				{features.map((feature, index) => (
-					<div key={feature.title} className="flex gap-6 py-5 first:pt-0">
-						<dt className="font-mono text-xs text-muted-foreground pt-1 shrink-0 w-6">
-							{String(index + 1).padStart(2, "0")}
-						</dt>
-						<dd className="flex flex-col gap-1">
-							<span className="font-medium flex items-center gap-2">
-								<feature.icon className="size-4 text-muted-foreground" />
-								{feature.title}
-							</span>
-							<span className="text-sm text-muted-foreground">
-								{feature.description}
-							</span>
-						</dd>
-					</div>
-				))}
-			</dl>
+			{/* Features Grid */}
+			<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+				{features.map((feature) => {
+					const IconComponent = feature.icon;
+					return (
+						<div
+							key={feature.title}
+							className="p-4 rounded-2xl border border-border/80 bg-card/60 hover:bg-card/90 transition-all flex flex-col justify-between"
+						>
+							<div>
+								<div className="flex items-center justify-between mb-2">
+									<div className="size-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+										<IconComponent className="size-4" />
+									</div>
+									<span className="font-mono text-[10px] text-muted-foreground font-semibold">
+										{feature.number}
+									</span>
+								</div>
+								<h3 className="text-xs font-semibold text-foreground mb-1">
+									{feature.title}
+								</h3>
+								<p className="text-[11px] text-muted-foreground leading-relaxed">
+									{feature.description}
+								</p>
+							</div>
+						</div>
+					);
+				})}
+			</div>
 
-			<div className="flex items-center gap-4">
+			{/* Enterprise Trust Confirmation */}
+			<div className="p-3.5 rounded-xl border border-border/60 bg-muted/30 text-[11px] text-muted-foreground flex items-center justify-between">
+				<div className="flex items-center gap-2">
+					<ShieldCheck className="size-4 text-emerald-400 shrink-0" />
+					<span>Dedicated Private Cloud • Encrypted at Rest &amp; Transit</span>
+				</div>
+				<span className="text-emerald-400 font-semibold font-mono text-[10px]">
+					99.99% SLA
+				</span>
+			</div>
+
+			{/* Primary CTA */}
+			<div className="flex items-center gap-3 pt-2">
 				<Button
 					size="lg"
-					className="w-fit px-8"
+					className="px-8 h-12 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs shadow-lg shadow-amber-600/20 group gap-2"
 					isLoading={isFinishing}
 					onClick={handleFinish}
 				>
-					Go to my project
+					<span>Open Dashboard Console</span>
+					<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" />
 				</Button>
 			</div>
 		</div>

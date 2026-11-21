@@ -225,7 +225,12 @@ export const applicationRouter = createTRPCRouter({
 
 			await checkServiceAccess(ctx, project.projectId, "create");
 
-			// Plan entitlement — quickstart also creates an application slot
+			// Plan entitlement — check active subscription and application quota
+			await assertEntitlement(
+				PlanEntitlementService.checkSubscriptionActive(
+					ctx.session.activeOrganizationId,
+				),
+			);
 			await assertEntitlement(
 				PlanEntitlementService.checkCanCreateApplication(
 					ctx.session.activeOrganizationId,
@@ -239,21 +244,25 @@ export const applicationRouter = createTRPCRouter({
 				});
 			}
 
-			if (IS_CLOUD && !input.serverId) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: "You need to use a server to create an application",
-				});
-			}
+			const accessibleIds = await getAccessibleServerIds(ctx.session);
+			let effectiveServerId = input.serverId;
 
-			if (input.serverId) {
-				const accessibleIds = await getAccessibleServerIds(ctx.session);
-				if (!accessibleIds.has(input.serverId)) {
+			if (IS_CLOUD && !effectiveServerId) {
+				if (accessibleIds.size > 0) {
+					effectiveServerId = Array.from(accessibleIds)[0];
+				} else {
 					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to access this server",
+						code: "BAD_REQUEST",
+						message: "No active server available to deploy the application",
 					});
 				}
+			}
+
+			if (effectiveServerId && !accessibleIds.has(effectiveServerId)) {
+				throw new TRPCError({
+					code: "UNAUTHORIZED",
+					message: "You are not authorized to access this server",
+				});
 			}
 
 			const suffix = nanoid(6).toLowerCase();
@@ -262,7 +271,7 @@ export const applicationRouter = createTRPCRouter({
 				appName: `hello-world-${suffix}`,
 				description: "Nginx demo app created by the onboarding wizard",
 				environmentId: input.environmentId,
-				serverId: input.serverId,
+				serverId: effectiveServerId,
 				sourceType: "docker",
 			});
 
@@ -445,7 +454,7 @@ export const applicationRouter = createTRPCRouter({
 			for (const previewDeployment of previewDeploymentsList) {
 				try {
 					await removePreviewDeployment(previewDeployment.previewDeploymentId);
-				} catch (_) {}
+				} catch (_) { }
 			}
 
 			const result = await db
@@ -476,7 +485,7 @@ export const applicationRouter = createTRPCRouter({
 			for (const operation of cleanupOperations) {
 				try {
 					await operation();
-				} catch (_) {}
+				} catch (_) { }
 			}
 
 			await audit(ctx, {
@@ -1286,7 +1295,7 @@ export const applicationRouter = createTRPCRouter({
 						const { stdout } = await execAsync(fallbackCmd);
 						containerId = stdout.trim();
 					}
-				} catch {}
+				} catch { }
 			}
 
 			if (!containerId || !/^[a-zA-Z0-9_-]+$/.test(containerId)) {

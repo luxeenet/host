@@ -73,7 +73,9 @@ export const ServerStep = ({ onNext, plainTitle }: Props) => {
 	const hasCreatedKey = useRef(false);
 
 	const cloudSSHKey = sshKeys?.find(
-		(sshKey) => sshKey.name === "dokploy-onboarding-ssh-key",
+		(sshKey) =>
+			sshKey.name === "hatdot-onboarding-ssh-key" ||
+			sshKey.name === "dokploy-onboarding-ssh-key",
 	);
 
 	useEffect(() => {
@@ -83,7 +85,7 @@ export const ServerStep = ({ onNext, plainTitle }: Props) => {
 			try {
 				const keys = await generateSSHKey.mutateAsync({ type: "rsa" });
 				await createSSHKey.mutateAsync({
-					name: "dokploy-onboarding-ssh-key",
+					name: "hatdot-onboarding-ssh-key",
 					description: "Used during onboarding",
 					privateKey: keys.privateKey,
 					publicKey: keys.publicKey,

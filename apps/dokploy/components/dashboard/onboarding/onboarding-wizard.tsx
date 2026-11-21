@@ -1,10 +1,10 @@
 import { defineStepper } from "@stepperize/react";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, Zap, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { GithubIcon } from "@/components/icons/data-tools-icons";
+import { brand } from "@paas/branding";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,23 +54,42 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 		persisted.environmentId,
 	);
 
-	const { data: isCloud = true } = api.settings.isCloud.useQuery();
-	const visibleStepIds = isCloud
-		? steps.map((step) => step.id)
-		: steps
-				.filter((step) => step.id !== "plan" && step.id !== "server")
-				.map((step) => step.id);
+	const { data: onboardingStatus } = api.project.onboardingStatus.useQuery();
+	const { data: currentSubscription } = api.subscription.getCurrent.useQuery();
+	const { data: resourceLimits } = api.subscription.getResourceLimits.useQuery();
+
+	const activePlan = currentSubscription?.plan;
+	const activePlanName = activePlan?.name || resourceLimits?.planName;
+	const activeRamMb =
+		resourceLimits?.maxRamMb ??
+		activePlan?.resources?.find((r) => r.resourceKey === "max_ram_mb")?.value ??
+		512;
+
+	const needsPlan = Boolean(
+		onboardingStatus?.needsPlanSelection && !currentSubscription,
+	);
+
+	// In HatDot PaaS, infrastructure is cloud-managed (server step excluded).
+	// Plan step is shown if customer needs to select a plan; otherwise skipped since they already have one.
+	const visibleStepIds = steps
+		.filter((step) => {
+			if (step.id === "server") return false;
+			if (step.id === "plan" && !needsPlan) return false;
+			return true;
+		})
+		.map((step) => step.id);
+
 	const visibleIndex = visibleStepIds.indexOf(stepper.current.id);
 	const isLastVisible = visibleIndex === visibleStepIds.length - 1;
+
 	const goToNextVisible = () => {
 		const nextId = visibleStepIds[visibleIndex + 1];
 		if (nextId) stepper.goTo(nextId);
 	};
 
-	const { data: onboardingStatus } = api.project.onboardingStatus.useQuery();
 	const [skipAllOpen, setSkipAllOpen] = useState(false);
 	const handleSkipAll = async () => {
-		if (onboardingStatus?.needsPlanSelection) {
+		if (onboardingStatus?.needsPlanSelection && !currentSubscription) {
 			toast.info("Please select a hosting plan to continue setup.");
 			router.push("/onboarding");
 			return;
@@ -111,14 +130,14 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 							backgroundSize: "28px 28px",
 						}}
 					/>
-					<div className="pointer-events-none absolute -top-24 -left-24 size-72 rounded-full bg-white/10 blur-[100px]" />
+					<div className="pointer-events-none absolute -top-24 -left-24 size-72 rounded-full bg-amber-500/10 blur-[100px]" />
 
 					<div className="relative flex md:h-full flex-col p-6 lg:p-8">
 						<div className="flex items-center justify-between md:block">
 							<div className="flex items-center gap-2.5 text-zinc-50 [&_path]:!fill-white [&_path]:!stroke-white">
 								<Logo className="size-7" />
 								<span className="text-lg font-semibold tracking-tight">
-									HatDot
+									{brand.APP_NAME}
 								</span>
 							</div>
 							{!isLastVisible && (
@@ -132,8 +151,24 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 							)}
 						</div>
 
+						{/* Active Plan Context in Sidebar */}
+						{activePlanName && (
+							<div className="mt-6 p-3 rounded-xl bg-zinc-900/80 border border-zinc-800/80 text-xs text-zinc-300">
+								<div className="flex items-center justify-between text-[11px] text-zinc-400">
+									<span>Selected Plan</span>
+									<span className="text-amber-400 font-semibold">{activePlanName}</span>
+								</div>
+								<div className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-400">
+									<Zap className="size-3 text-amber-400 shrink-0" />
+									<span>
+										{activeRamMb === -1 ? "Unlimited" : `${activeRamMb}MB`} RAM • Edge Routing
+									</span>
+								</div>
+							</div>
+						)}
+
 						<Scoped>
-							<ol className="hidden md:flex flex-col gap-0.5 mt-12">
+							<ol className="hidden md:flex flex-col gap-0.5 mt-8">
 								{visibleStepIds.map((id, index) => {
 									const step = steps.find((s) => s.id === id)!;
 									const isDone = index < visibleIndex;
@@ -144,14 +179,14 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 												<span
 													className={`flex items-center justify-center font-mono text-[11px] tabular-nums size-5 rounded-full ${
 														isCurrent
-															? "bg-white text-zinc-950 font-semibold"
+															? "bg-amber-500 text-zinc-950 font-bold"
 															: isDone
-																? "text-zinc-100"
-																: "text-zinc-400"
+																? "text-zinc-100 bg-zinc-800"
+																: "text-zinc-500 bg-zinc-900"
 													}`}
 												>
 													{isDone ? (
-														<CheckIcon className="size-3" />
+														<CheckIcon className="size-3 text-white" />
 													) : (
 														String(index + 1).padStart(2, "0")
 													)}
@@ -159,7 +194,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 												{index < visibleStepIds.length - 1 && (
 													<span
 														className={`w-px flex-1 min-h-7 my-1.5 ${
-															isDone ? "bg-zinc-400" : "bg-zinc-700"
+															isDone ? "bg-zinc-500" : "bg-zinc-800"
 														}`}
 													/>
 												)}
@@ -168,14 +203,14 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 												<button
 													type="button"
 													onClick={() => stepper.goTo(step.id)}
-													className="text-sm font-medium transition-colors pb-6 last:pb-0 text-zinc-100 hover:text-white text-left"
+													className="text-sm font-medium transition-colors pb-6 last:pb-0 text-zinc-200 hover:text-white text-left"
 												>
 													{step.title}
 												</button>
 											) : (
 												<p
 													className={`text-sm font-medium transition-colors pb-6 last:pb-0 ${
-														isCurrent ? "text-white" : "text-zinc-400"
+														isCurrent ? "text-white font-semibold" : "text-zinc-500"
 													}`}
 												>
 													{step.title}
@@ -239,21 +274,29 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 			</div>
 
 			<Dialog open={skipAllOpen} onOpenChange={setSkipAllOpen}>
-				<DialogContent>
+				<DialogContent className="bg-zinc-950 border-zinc-800 text-white">
 					<DialogHeader>
 						<DialogTitle>Skip onboarding?</DialogTitle>
-						<DialogDescription>
-							If this is your first time using HatDot, we recommend going
-							through these steps – it only takes a couple of minutes and gives
-							you a feel for how projects, servers, and deployments fit
-							together.
+						<DialogDescription className="text-zinc-400 text-xs">
+							If this is your first time using {brand.APP_NAME}, we recommend completing
+							these steps – it only takes a couple of minutes to set up your project
+							and deploy your first live application.
 						</DialogDescription>
 					</DialogHeader>
-					<DialogFooter>
-						<Button variant="outline" onClick={() => setSkipAllOpen(false)}>
+					<DialogFooter className="gap-2">
+						<Button
+							variant="outline"
+							onClick={() => setSkipAllOpen(false)}
+							className="border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs"
+						>
 							Continue setup
 						</Button>
-						<Button onClick={handleSkipAll}>Skip anyway</Button>
+						<Button
+							onClick={handleSkipAll}
+							className="bg-amber-600 hover:bg-amber-500 text-white text-xs"
+						>
+							Skip anyway
+						</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>

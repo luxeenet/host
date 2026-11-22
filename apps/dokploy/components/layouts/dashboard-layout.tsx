@@ -36,6 +36,7 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 
 	const isAllowedUnsubscribedPath =
 		router.pathname.startsWith("/onboarding") ||
+		router.pathname.startsWith("/checkout") ||
 		router.pathname.startsWith("/dashboard/billing") ||
 		router.pathname.startsWith("/dashboard/settings/profile") ||
 		router.pathname.startsWith("/dashboard/settings/sessions");
@@ -54,9 +55,9 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 		if (shouldRedirectToPayment) {
 			const pendingPlanId = (onboardingStatus as any)?.pendingPlanId;
 			const queryParam = pendingPlanId
-				? `?planId=${encodeURIComponent(pendingPlanId)}&pay=true`
-				: "?pay=true";
-			router.replace(`/dashboard/billing${queryParam}`);
+				? `?planId=${encodeURIComponent(pendingPlanId)}`
+				: "";
+			router.replace(`/checkout${queryParam}`);
 		} else if (shouldRedirectToPlanSelection) {
 			router.replace("/onboarding");
 		} else if (shouldRedirectToOnboarding) {

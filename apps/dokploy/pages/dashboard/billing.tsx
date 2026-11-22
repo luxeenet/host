@@ -298,9 +298,17 @@ export default function BillingPage() {
 										</p>
 									</div>
 								</div>
-								<Badge variant="destructive" className="shrink-0 text-xs">
-									Payment Pending
-								</Badge>
+								<div className="flex items-center gap-2 shrink-0">
+									<Link href={sub?.planId ? `/checkout?planId=${encodeURIComponent(sub.planId)}` : "/checkout"}>
+										<Button size="sm" className="h-8 text-xs font-semibold gap-1.5 shadow-sm">
+											<Sparkles className="size-3.5" />
+											Go to Checkout Page →
+										</Button>
+									</Link>
+									<Badge variant="destructive" className="text-xs">
+										Payment Pending
+									</Badge>
+								</div>
 							</div>
 						)}
 

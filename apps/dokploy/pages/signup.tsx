@@ -103,12 +103,14 @@ export default function SignupPage() {
 			const selectedPlan =
 				(router.query.plan ? String(router.query.plan) : null) ||
 				(typeof window !== "undefined"
-					? localStorage.getItem("hatdot_selected_plan")
+					? localStorage.getItem("hatdot_selected_plan") ||
+					  localStorage.getItem("hatdot_selected_plan_slug")
 					: null);
-			const planParam = selectedPlan
-				? `?plan=${encodeURIComponent(selectedPlan)}`
-				: "";
-			await router.push(`/onboarding${planParam}`);
+			if (selectedPlan) {
+				await router.push(`/checkout?planId=${encodeURIComponent(selectedPlan)}`);
+			} else {
+				await router.push("/onboarding");
+			}
 		} catch (err: any) {
 			const msg = err?.message ?? "Something went wrong. Please try again.";
 			setError(msg);

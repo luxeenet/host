@@ -110,10 +110,10 @@ export default function OnboardingPage() {
 			]);
 			if (result?.status === "pending_payment") {
 				toast.info(
-					"Payment required to activate your plan. Redirecting to billing...",
+					"Payment required to activate your plan. Proceeding to checkout...",
 				);
 				await router.push(
-					`/dashboard/billing?planId=${result.planId}&pay=true`,
+					`/checkout?planId=${result.planId}`,
 				);
 			} else {
 				toast.success("Subscription activated! Welcome aboard 🎉");
@@ -131,6 +131,13 @@ export default function OnboardingPage() {
 			toast.error("Please select a plan to continue.");
 			return;
 		}
+
+		// If plan requires payment with 0 trial days, route directly to checkout page
+		if (selectedPlan && Number(selectedPlan.price) > 0 && selectedPlan.trialDays === 0) {
+			router.push(`/checkout?planId=${encodeURIComponent(selectedPlan.id)}`);
+			return;
+		}
+
 		setSubscribing(true);
 		subscribeMutation.mutate({ planId: selectedPlanId });
 	};

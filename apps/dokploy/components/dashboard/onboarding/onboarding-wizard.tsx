@@ -91,7 +91,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 	const handleSkipAll = async () => {
 		if ((onboardingStatus as any)?.needsPayment) {
 			toast.info("Payment is required to activate your plan before accessing the dashboard.");
-			router.push("/dashboard/billing?pay=true");
+			router.push("/checkout");
 			return;
 		}
 		if (onboardingStatus?.needsPlanSelection && !currentSubscription) {

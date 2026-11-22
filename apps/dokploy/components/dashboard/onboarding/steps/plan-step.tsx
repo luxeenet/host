@@ -37,8 +37,8 @@ export const PlanStep = ({ onNext }: Props) => {
 				utils.subscription.getCurrent.invalidate(),
 			]);
 			if (result?.status === "pending_payment") {
-				toast.info("Payment required to activate this plan. Redirecting to billing...");
-				router.push(`/dashboard/billing?planId=${result.planId}&pay=true`);
+				toast.info("Payment required to activate this plan. Proceeding to checkout...");
+				router.push(`/checkout?planId=${result.planId}`);
 			} else {
 				toast.success("Plan activated! Welcome aboard 🎉");
 				onNext();
@@ -51,6 +51,12 @@ export const PlanStep = ({ onNext }: Props) => {
 	});
 
 	const handleSubscribe = async (planId: string) => {
+		const targetPlan = plans?.find((p) => p.id === planId);
+		if (targetPlan && Number(targetPlan.price) > 0 && targetPlan.trialDays === 0) {
+			router.push(`/checkout?planId=${encodeURIComponent(targetPlan.id)}`);
+			return;
+		}
+
 		setSelectedPlanId(planId);
 		setSubscribing(true);
 		subscribeMutation.mutate({ planId });

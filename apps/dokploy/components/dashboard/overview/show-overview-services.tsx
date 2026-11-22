@@ -401,11 +401,17 @@ export const ShowOverviewServices = () => {
 							<TableBody>
 								{pagedServices.map((service) => {
 									const href = `/dashboard/project/${service.projectId}/environment/${service.environmentId}/services/${service.type}/${service.id}`;
+									const asHref =
+										service.type === "application"
+											? `/dashboard/app/${service.id}`
+											: service.type === "compose"
+												? `/dashboard/compose/${service.id}`
+												: `/dashboard/database/${service.id}`;
 									const hasActions = service.type in actionsByType;
 									return (
 										<TableRow key={service.id}>
 											<TableCell>
-												<Link href={href} className="flex items-center gap-2">
+												<Link href={href} as={asHref} className="flex items-center gap-2">
 													{renderIcon(service)}
 													<div className="flex flex-col min-w-0">
 														<span className="font-medium truncate">

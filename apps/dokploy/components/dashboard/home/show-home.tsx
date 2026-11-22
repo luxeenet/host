@@ -30,6 +30,7 @@ function getServiceInfo(d: any) {
 			projectName: app.environment.project.name as string,
 			serverName,
 			href: `/dashboard/project/${app.environment.project.projectId}/environment/${app.environment.environmentId}/services/application/${app.applicationId}`,
+			asHref: `/dashboard/app/${app.applicationId}`,
 		};
 	}
 	if (comp?.environment?.project && comp.environment) {
@@ -39,6 +40,7 @@ function getServiceInfo(d: any) {
 			projectName: comp.environment.project.name as string,
 			serverName,
 			href: `/dashboard/project/${comp.environment.project.projectId}/environment/${comp.environment.environmentId}/services/compose/${comp.composeId}`,
+			asHref: `/dashboard/compose/${comp.composeId}`,
 		};
 	}
 	return null;
@@ -406,6 +408,7 @@ export const ShowHome = () => {
 										<li key={d.deploymentId}>
 											<Link
 												href={info.href}
+												as={info.asHref}
 												className="flex items-center gap-4 px-5 py-4 hover:bg-muted/40 transition-colors"
 											>
 												<span

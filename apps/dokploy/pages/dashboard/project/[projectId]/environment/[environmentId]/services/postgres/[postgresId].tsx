@@ -10,7 +10,7 @@ import type {
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 import superjson from "superjson";
 import { ShowEnvironment } from "@/components/dashboard/application/environment/show-environment";
@@ -67,7 +67,20 @@ const Postgresql = (
 	const { data: permissions } = api.user.getPermissions.useQuery();
 
 	const { data: isCloud } = api.settings.isCloud.useQuery();
-	const { data: serverIp } = api.settings.getIp.useQuery();
+	const { data: serverIp } = api.settings.getIp.useQuery(undefined, {
+		enabled: isPlatformAdmin,
+	});
+
+	// Conceal backend routing endpoints from non-admin customers
+	useEffect(() => {
+		if (typeof window !== "undefined" && !isPlatformAdmin && postgresId) {
+			const queryParams = router.query.tab ? `?tab=${router.query.tab}` : "";
+			const cleanUrl = `/dashboard/database/${postgresId}${queryParams}`;
+			if (window.location.pathname !== cleanUrl) {
+				window.history.replaceState(null, "", cleanUrl);
+			}
+		}
+	}, [isPlatformAdmin, postgresId, router.query.tab]);
 	const { data: environments } = api.environment.byProjectId.useQuery({
 		projectId: data?.environment?.projectId || "",
 	});

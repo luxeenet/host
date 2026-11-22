@@ -235,10 +235,16 @@ export const ShowOverviewDomains = () => {
 							<TableBody>
 								{pagedDomains.map((domain) => {
 									const href = `/dashboard/project/${domain.projectId}/environment/${domain.environmentId}/services/${domain.serviceOwnerType}/${domain.serviceOwnerId}`;
+									const asHref =
+										domain.serviceOwnerType === "application"
+											? `/dashboard/app/${domain.serviceOwnerId}`
+											: domain.serviceOwnerType === "compose"
+												? `/dashboard/compose/${domain.serviceOwnerId}`
+												: `/dashboard/database/${domain.serviceOwnerId}`;
 									return (
 										<TableRow key={domain.domainId}>
 											<TableCell>
-												<Link href={href} className="flex flex-col min-w-0">
+												<Link href={href} as={asHref} className="flex flex-col min-w-0">
 													<span className="font-medium truncate">
 														{domain.serviceName}
 													</span>

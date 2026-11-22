@@ -18,6 +18,7 @@ import {
 	Star,
 	Cloud,
 	MoreVertical,
+	Server,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { brand } from "@paas/branding";
@@ -595,24 +596,26 @@ export default function CustomDomainsPage() {
 														</Badge>
 													</div>
 
-													<p className="text-xs text-muted-foreground">
-														Routed to{" "}
+													<p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+														<span>Routed to</span>
 														{dom.applicationId &&
 														dom.projectId &&
 														dom.environmentId ? (
 															<Link
 																href={`/dashboard/project/${dom.projectId}/environment/${dom.environmentId}/services/application/${dom.applicationId}`}
-																className="text-foreground font-mono font-medium hover:underline"
+																as={`/dashboard/app/${dom.applicationId}`}
+																className="text-foreground font-mono font-medium hover:underline inline-flex items-center gap-1"
 															>
+																<Server className="size-3 text-muted-foreground" />
 																{dom.appName || dom.serviceName}
 															</Link>
 														) : (
-															<code className="text-foreground font-mono">
+															<span className="text-foreground font-mono inline-flex items-center gap-1">
+																<Server className="size-3 text-muted-foreground" />
 																{dom.appName || dom.serviceName}
-															</code>
-														)}{" "}
-														• Port {dom.port || 3000} • Created{" "}
-														{new Date(dom.createdAt).toLocaleDateString()}
+															</span>
+														)}
+														<span>• Created {new Date(dom.createdAt).toLocaleDateString()}</span>
 													</p>
 												</div>
 

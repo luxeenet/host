@@ -26,6 +26,7 @@ import {
 	findPostgresById,
 	findProjectById,
 	findRedisById,
+	findServiceById,
 	findUserById,
 	IS_CLOUD,
 	updateProjectById,
@@ -1459,6 +1460,24 @@ export const projectRouter = createTRPCRouter({
 					cause: error,
 				});
 			}
+		}),
+	resolveService: protectedProcedure
+		.input(z.object({ serviceId: z.string().min(1) }))
+		.query(async ({ input, ctx }) => {
+			const service = await findServiceById(input.serviceId);
+			if (!service) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Service not found",
+				});
+			}
+			if (service.organizationId !== ctx.session.activeOrganizationId) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Access denied",
+				});
+			}
+			return service;
 		}),
 });
 

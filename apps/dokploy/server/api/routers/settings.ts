@@ -626,8 +626,8 @@ export const settingsRouter = createTRPCRouter({
 
 			return readConfigInPath(input.path, input.serverId);
 		}),
-	getIp: platformAdminProcedure.query(async () => {
-		if (IS_CLOUD) {
+	getIp: protectedProcedure.query(async ({ ctx }) => {
+		if (IS_CLOUD || !(ctx.user as any)?.isPlatformAdmin) {
 			return "";
 		}
 		const settings = await getWebServerSettings();

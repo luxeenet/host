@@ -105,6 +105,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 				projectId && environmentId
 					? `/dashboard/project/${projectId}/environment/${environmentId}`
 					: "/dashboard/projects",
+				environmentId ? `/dashboard/env/${environmentId}` : "/dashboard/projects",
 			);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : "Unable to complete onboarding");

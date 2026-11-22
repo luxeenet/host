@@ -113,7 +113,20 @@ const Service = (
 	);
 	const { data: permissions } = api.user.getPermissions.useQuery();
 	const { data: isCloud } = api.settings.isCloud.useQuery();
-	const { data: serverIp } = api.settings.getIp.useQuery();
+	const { data: serverIp } = api.settings.getIp.useQuery(undefined, {
+		enabled: isPlatformAdmin,
+	});
+
+	// Conceal backend routing endpoints from non-admin customers
+	useEffect(() => {
+		if (typeof window !== "undefined" && !isPlatformAdmin && composeId) {
+			const queryParams = router.query.tab ? `?tab=${router.query.tab}` : "";
+			const cleanUrl = `/dashboard/compose/${composeId}${queryParams}`;
+			if (window.location.pathname !== cleanUrl) {
+				window.history.replaceState(null, "", cleanUrl);
+			}
+		}
+	}, [isPlatformAdmin, composeId, router.query.tab]);
 	const { data: environments } = api.environment.byProjectId.useQuery({
 		projectId: data?.environment?.projectId || "",
 	});

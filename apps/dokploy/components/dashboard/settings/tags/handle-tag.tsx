@@ -202,7 +202,11 @@ export const HandleTag = ({ tagId, onCreated }: HandleTagProps) => {
 													ref={colorInputRef}
 													type="color"
 													className="absolute opacity-0 pointer-events-none w-12 h-12 top-0 left-0"
-													value={field.value || "#3b82f6"}
+													value={
+														field.value && /^#[0-9A-Fa-f]{6}$/.test(field.value)
+															? field.value
+															: "#3b82f6"
+													}
 													onChange={field.onChange}
 												/>
 											</FormLabel>

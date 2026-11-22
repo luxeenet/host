@@ -322,6 +322,16 @@ const EnvironmentPage = (
 		return "lastDeploy-desc";
 	});
 
+	// Conceal backend routing endpoints from non-admin customers
+	useEffect(() => {
+		if (typeof window !== "undefined" && !isPlatformAdmin && environmentId) {
+			const cleanUrl = `/dashboard/env/${environmentId}`;
+			if (window.location.pathname !== cleanUrl) {
+				window.history.replaceState(null, "", cleanUrl);
+			}
+		}
+	}, [isPlatformAdmin, environmentId]);
+
 	useEffect(() => {
 		localStorage.setItem("servicesSort", sortBy);
 	}, [sortBy]);
@@ -1633,6 +1643,7 @@ const EnvironmentPage = (
 														<ContextMenuTrigger asChild>
 															<Link
 																href={`/dashboard/project/${projectId}/environment/${environmentId}/services/${service.type}/${service.id}`}
+																as={service.type === "application" ? `/dashboard/app/${service.id}` : service.type === "compose" ? `/dashboard/compose/${service.id}` : `/dashboard/database/${service.id}`}
 																className="block h-full"
 															>
 																<Card className="flex flex-col h-full group relative cursor-pointer bg-transparent transition-colors hover:bg-border">

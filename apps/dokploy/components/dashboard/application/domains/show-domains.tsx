@@ -124,7 +124,9 @@ export const ShowDomains = ({ id, type }: Props) => {
 	const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 	const [rowSelection, setRowSelection] = useState({});
-	const { data: ip } = api.settings.getIp.useQuery();
+	const { data: user } = api.user.get.useQuery();
+	const isPlatformAdmin = Boolean((user as any)?.user?.isPlatformAdmin || (user as any)?.isPlatformAdmin);
+	const { data: ip } = api.settings.getIp.useQuery(undefined, { enabled: isPlatformAdmin });
 	const { data: routingTargetData } = api.domain.getRoutingTarget.useQuery(
 		{
 			applicationId: type === "application" ? id : null,

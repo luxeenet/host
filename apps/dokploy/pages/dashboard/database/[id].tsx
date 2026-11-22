@@ -64,3 +64,4 @@ export default function DatabaseResolverPage() {
 DatabaseResolverPage.getLayout = (page: ReactElement) => {
 	return <DashboardLayout>{page}</DashboardLayout>;
 };
+

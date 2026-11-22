@@ -64,3 +64,4 @@ export default function EnvResolverPage() {
 EnvResolverPage.getLayout = (page: ReactElement) => {
 	return <DashboardLayout>{page}</DashboardLayout>;
 };
+

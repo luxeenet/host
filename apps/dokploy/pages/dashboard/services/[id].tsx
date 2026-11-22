@@ -70,3 +70,4 @@ export default function UniversalServiceResolverPage() {
 UniversalServiceResolverPage.getLayout = (page: ReactElement) => {
 	return <DashboardLayout>{page}</DashboardLayout>;
 };
+

@@ -64,3 +64,4 @@ export default function ComposeResolverPage() {
 ComposeResolverPage.getLayout = (page: ReactElement) => {
 	return <DashboardLayout>{page}</DashboardLayout>;
 };
+

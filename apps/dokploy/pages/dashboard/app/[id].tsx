@@ -64,3 +64,4 @@ export default function AppResolverPage() {
 AppResolverPage.getLayout = (page: ReactElement) => {
 	return <DashboardLayout>{page}</DashboardLayout>;
 };
+

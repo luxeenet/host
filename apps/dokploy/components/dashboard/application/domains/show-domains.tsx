@@ -321,7 +321,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 								{canCreateDomain && (
 									<>
 										<AddDomain id={id} type={type} initialMode="custom">
-											<Button className="bg-amber-600 hover:bg-amber-500 text-white font-medium shadow-sm">
+											<Button>
 												<GlobeIcon className="size-4 mr-1.5" /> Connect Custom Domain
 											</Button>
 										</AddDomain>
@@ -344,21 +344,21 @@ export const ShowDomains = ({ id, type }: Props) => {
 				<CardContent className="flex w-full flex-col gap-4">
 					{/* Upfront DNS Target Quick-Reference */}
 					{canCreateDomain && data && data.length > 0 && (
-						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-800 bg-slate-900/60 text-xs">
+						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border bg-muted/30 text-xs">
 							<div className="flex items-center gap-3">
-								<div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
-									<GlobeIcon className="size-4" />
+								<div className="size-8 rounded-lg bg-background border flex items-center justify-center shrink-0">
+									<GlobeIcon className="size-4 text-foreground" />
 								</div>
 								<div className="space-y-0.5">
-									<div className="text-xs font-semibold text-slate-200 flex items-center gap-2">
+									<div className="text-xs font-semibold text-foreground flex items-center gap-2">
 										Custom Domain Routing Target
-										<Badge variant="outline" className="text-[10px] bg-slate-800 text-slate-300 border-slate-700 py-0 font-mono">
+										<Badge variant="outline" className="text-[10px] font-mono">
 											CNAME
 										</Badge>
 									</div>
-									<div className="text-[11px] text-slate-400">
+									<div className="text-[11px] text-muted-foreground">
 										Point your custom domain DNS CNAME record to:{" "}
-										<span className="font-mono text-amber-400 font-semibold selection:bg-amber-500/30">
+										<span className="font-mono text-foreground font-semibold">
 											{routingTargetData?.target || "cname.hatdot.cloud"}
 										</span>
 									</div>
@@ -368,14 +368,14 @@ export const ShowDomains = ({ id, type }: Props) => {
 								type="button"
 								variant="outline"
 								size="sm"
-								className="h-8 text-xs gap-1.5 border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 shrink-0"
+								className="h-8 text-xs gap-1.5 shrink-0"
 								onClick={() => {
 									const target = routingTargetData?.target || "cname.hatdot.cloud";
 									navigator.clipboard.writeText(target);
 									toast.success(`Copied "${target}" to clipboard`);
 								}}
 							>
-								<Copy className="size-3.5 text-amber-400" />
+								<Copy className="size-3.5" />
 								Copy DNS Target
 							</Button>
 						</div>
@@ -400,9 +400,9 @@ export const ShowDomains = ({ id, type }: Props) => {
 							</span>
 						</div>
 					) : data?.length === 0 ? (
-						<div className="flex w-full flex-col items-center justify-center py-10 px-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center">
-							<div className="p-3.5 rounded-full bg-slate-900 border border-slate-800 text-amber-400 mb-3 shadow-sm">
-								<GlobeIcon className="size-7" />
+						<div className="flex w-full flex-col items-center justify-center py-10 px-4 rounded-xl border border-dashed text-center">
+							<div className="size-12 rounded-full bg-muted flex items-center justify-center mb-3">
+								<GlobeIcon className="size-6 text-foreground" />
 							</div>
 							<h3 className="text-lg font-bold text-foreground">Connect a Domain to Go Live</h3>
 							<p className="text-xs text-muted-foreground max-w-md mt-1 mb-6">
@@ -411,41 +411,41 @@ export const ShowDomains = ({ id, type }: Props) => {
 							{canCreateDomain && (
 								<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl w-full text-left">
 									<AddDomain id={id} type={type} initialMode="custom">
-										<div className="group cursor-pointer p-4 rounded-xl border border-slate-800 bg-slate-900/60 hover:border-amber-500/50 hover:bg-slate-900 transition-all flex flex-col justify-between h-full">
+										<div className="group cursor-pointer p-4 rounded-xl border bg-card hover:bg-muted/50 hover:border-border transition-all flex flex-col justify-between h-full">
 											<div>
 												<div className="flex items-center justify-between mb-2">
-													<div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
-														<GlobeIcon className="size-4" />
+													<div className="size-8 rounded-lg bg-muted flex items-center justify-center">
+														<GlobeIcon className="size-4 text-foreground" />
 													</div>
-													<Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+													<Badge variant="outline" className="text-[10px]">
 														Production
 													</Badge>
 												</div>
-												<h4 className="text-sm font-semibold text-foreground group-hover:text-amber-400 transition-colors">
+												<h4 className="text-sm font-semibold text-foreground group-hover:underline transition-colors">
 													Connect Custom Domain
 												</h4>
 												<p className="text-xs text-muted-foreground mt-1">
 													Use your own domain name (e.g. yourcompany.com) with automatic SSL certificates and edge DDoS protection.
 												</p>
 											</div>
-											<Button className="mt-4 w-full bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs h-8">
+											<Button className="mt-4 w-full text-xs h-8">
 												Connect Custom Domain →
 											</Button>
 										</div>
 									</AddDomain>
 
 									<AddDomain id={id} type={type} initialMode="platform">
-										<div className="group cursor-pointer p-4 rounded-xl border border-slate-800 bg-slate-900/60 hover:border-primary/50 hover:bg-slate-900 transition-all flex flex-col justify-between h-full">
+										<div className="group cursor-pointer p-4 rounded-xl border bg-card hover:bg-muted/50 hover:border-border transition-all flex flex-col justify-between h-full">
 											<div>
 												<div className="flex items-center justify-between mb-2">
-													<div className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/20">
+													<div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
 														<Cloud className="size-4" />
 													</div>
-													<Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+													<Badge variant="secondary" className="text-[10px]">
 														Instant
 													</Badge>
 												</div>
-												<h4 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+												<h4 className="text-sm font-semibold text-foreground group-hover:underline transition-colors">
 													Free Platform Subdomain
 												</h4>
 												<p className="text-xs text-muted-foreground mt-1">

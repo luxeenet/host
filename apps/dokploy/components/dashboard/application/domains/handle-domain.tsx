@@ -445,11 +445,7 @@ export const AddDomain = ({
 			<DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2 text-xl">
-						{mode === "custom" || domainId ? (
-							<Globe className="size-5 text-amber-500" />
-						) : (
-							<Cloud className="size-5 text-primary" />
-						)}
+						<Globe className="size-5 text-primary" />
 						{domainId
 							? "Edit Domain"
 							: mode === "custom"
@@ -482,11 +478,11 @@ export const AddDomain = ({
 									className={cn(
 										"flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-lg transition-all",
 										mode === "custom"
-											? "bg-background text-foreground shadow-sm border border-border/50 text-amber-500 font-bold"
+											? "bg-background text-foreground shadow-sm border border-border/50 font-bold"
 											: "text-muted-foreground hover:text-foreground",
 									)}
 								>
-									<Globe className="size-4 text-amber-500" />
+									<Globe className="size-4 text-primary" />
 									Connect Custom Domain
 								</button>
 								<button
@@ -495,7 +491,7 @@ export const AddDomain = ({
 									className={cn(
 										"flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-lg transition-all",
 										mode === "platform"
-											? "bg-background text-foreground shadow-sm border border-border/50 text-primary font-bold"
+											? "bg-background text-foreground shadow-sm border border-border/50 font-bold"
 											: "text-muted-foreground hover:text-foreground",
 									)}
 								>
@@ -508,17 +504,17 @@ export const AddDomain = ({
 						{/* Custom Domain Mode */}
 						{!domainId && mode === "custom" ? (
 							<div className="space-y-4">
-								<div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 flex flex-col gap-3">
+								<div className="p-4 rounded-xl border bg-muted/30 flex flex-col gap-3">
 									<div className="flex items-center justify-between">
 										<div className="flex items-center gap-2">
-											<div className="p-1 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
-												<Globe className="size-3.5" />
+											<div className="size-7 rounded-md bg-background border flex items-center justify-center">
+												<Globe className="size-3.5 text-foreground" />
 											</div>
 											<span className="font-semibold text-xs text-foreground">
 												Step 1: Point Your DNS Record
 											</span>
 										</div>
-										<Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+										<Badge variant="outline" className="text-[10px]">
 											Edge Routing
 										</Badge>
 									</div>
@@ -572,7 +568,7 @@ export const AddDomain = ({
 											<FormLabel className="text-sm font-semibold flex items-center justify-between">
 												<span>Step 2: Enter Your Custom Domain</span>
 												<span className="text-xs text-muted-foreground font-normal">
-													e.g. <span className="font-mono text-amber-500/90">app.yourcompany.com</span>
+													e.g. <span className="font-mono text-foreground font-medium">app.yourcompany.com</span>
 												</span>
 											</FormLabel>
 											<FormControl>
@@ -1272,11 +1268,6 @@ export const AddDomain = ({
 								isLoading={isPending}
 								form="hook-form"
 								type="submit"
-								className={
-									!domainId && mode === "custom"
-										? "bg-amber-600 hover:bg-amber-500 text-white font-medium shadow-sm"
-										: undefined
-								}
 							>
 								{domainId
 									? "Update Domain"

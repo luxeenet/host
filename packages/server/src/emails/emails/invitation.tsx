@@ -29,9 +29,9 @@ export const InvitationEmail = ({
 	const previewText = `You've been invited to join ${organizationName} on ${brand.APP_NAME}`;
 	return (
 		<Html>
-			<Head />
-			<Preview>{previewText}</Preview>
 			<Tailwind config={emailTailwindConfig}>
+				<Head />
+				<Preview>{previewText}</Preview>
 				<Body className="bg-[#f4f4f5] my-auto mx-auto font-sans">
 					<Container className="my-[40px] mx-auto max-w-[520px]">
 						{/* Header */}
@@ -60,7 +60,7 @@ export const InvitationEmail = ({
 							<Section className="text-center mb-[24px]">
 								<Button
 									href={inviteLink}
-									className="bg-[#0284c7] hover:bg-[#0369a1] rounded-lg text-white text-[14px] font-semibold no-underline text-center px-[28px] py-[13px] shadow-sm"
+									className="bg-[#0284c7] rounded-lg text-white text-[14px] font-semibold no-underline text-center px-[28px] py-[13px] shadow-sm"
 								>
 									Accept Invitation
 								</Button>

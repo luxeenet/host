@@ -30,6 +30,8 @@ export default function AdminNotificationsPage() {
 
 	const updateSettingsMutation = api.admin.updateSmtpSettings.useMutation();
 	const testConnectionMutation = api.admin.testSmtpConnection.useMutation();
+	const sendSampleMutation = api.admin.sendSampleEmailNotification.useMutation();
+	const [sampleLoadingId, setSampleLoadingId] = useState<string | null>(null);
 
 	// Form states
 	const [host, setHost] = useState("");
@@ -124,8 +126,29 @@ export default function AdminNotificationsPage() {
 		}
 	};
 
+	const handleSendSampleNotification = async (templateId: string, templateTitle: string) => {
+		if (!targetEmail.trim()) {
+			toast.error("Please specify a recipient email address in the test section above");
+			return;
+		}
+
+		setSampleLoadingId(templateId);
+		try {
+			const res = await sendSampleMutation.mutateAsync({
+				templateId,
+				targetEmail: targetEmail.trim(),
+			});
+			toast.success(res.message);
+		} catch (err: any) {
+			toast.error(err?.message || `Failed to send sample for ${templateTitle}`);
+		} finally {
+			setSampleLoadingId(null);
+		}
+	};
+
 	const NOTIFICATION_CATALOG = [
 		{
+			id: "verify-email",
 			title: "Account Email Verification",
 			trigger: "New customer signs up or updates primary email address",
 			template: "verify-email.tsx",
@@ -133,13 +156,15 @@ export default function AdminNotificationsPage() {
 			category: "Onboarding",
 		},
 		{
+			id: "password-reset",
 			title: "Password Reset Requests",
 			trigger: "User requests a secure password reset link",
-			template: "auth.ts (HTML Engine)",
+			template: "auth.ts (Security)",
 			status: "Active",
 			category: "Security",
 		},
 		{
+			id: "invitation",
 			title: "Organization Team Invitations",
 			trigger: "Workspace administrator invites a collaborator or developer",
 			template: "invitation.tsx",
@@ -147,6 +172,7 @@ export default function AdminNotificationsPage() {
 			category: "Collaboration",
 		},
 		{
+			id: "invoice-notification",
 			title: "Subscription Invoices & Receipts",
 			trigger: "Payment successfully settled via SonicPesa or card billing cycle",
 			template: "invoice-notification.tsx",
@@ -154,6 +180,7 @@ export default function AdminNotificationsPage() {
 			category: "Billing",
 		},
 		{
+			id: "payment-failed",
 			title: "Payment Failure Alerts",
 			trigger: "Recurring billing charge or mobile checkout attempt fails",
 			template: "payment-failed.tsx",
@@ -161,6 +188,7 @@ export default function AdminNotificationsPage() {
 			category: "Billing Risk",
 		},
 		{
+			id: "trial-expiring",
 			title: "Trial Period Expiration Warnings",
 			trigger: "Dispatched 3 days and 1 day before trial period expires",
 			template: "trial-expiring.tsx",
@@ -168,23 +196,26 @@ export default function AdminNotificationsPage() {
 			category: "Lifecycle",
 		},
 		{
-			title: "Billing Cycle & Suspension Notices",
-			trigger: "Grace period, service pause, final termination notice, reactivation",
-			template: "billing-cycle.ts",
-			status: "Active",
-			category: "Lifecycle",
-		},
-		{
-			title: "Build & Deployment Alerts",
-			trigger: "Application compilation finishes or encounters a build issue",
-			template: "build-success.tsx / build-failed.tsx",
+			id: "build-failed",
+			title: "Build & Deployment Alerts (Error)",
+			trigger: "Application compilation encounters an issue or quota failure",
+			template: "build-failed.tsx",
 			status: "Active",
 			category: "Operations",
 		},
 		{
+			id: "build-success",
+			title: "Build & Deployment Alerts (Success)",
+			trigger: "Application build passes verification and starts successfully",
+			template: "build-success.tsx",
+			status: "Active",
+			category: "Operations",
+		},
+		{
+			id: "database-backup",
 			title: "Automated Backup Reports",
 			trigger: "Scheduled database or persistent volume backup completes",
-			template: "database-backup.tsx / volume-backup.tsx",
+			template: "database-backup.tsx",
 			status: "Active",
 			category: "Data Integrity",
 		},
@@ -559,6 +590,28 @@ export default function AdminNotificationsPage() {
 								<div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 font-mono">
 									<span>{item.template}</span>
 									<span className="text-slate-400 font-sans text-[10px]">HTML & PlainText</span>
+								</div>
+								<div className="pt-1">
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onClick={() => handleSendSampleNotification(item.id, item.title)}
+										disabled={sampleLoadingId === item.id || !targetEmail}
+										className="w-full h-8 text-xs bg-slate-950/70 hover:bg-slate-800 border-slate-800 text-slate-200 hover:text-white flex items-center justify-center gap-1.5 transition-colors"
+									>
+										{sampleLoadingId === item.id ? (
+											<>
+												<RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
+												<span>Sending Test...</span>
+											</>
+										) : (
+											<>
+												<Send className="w-3 h-3 text-slate-400" />
+												<span>Send Test {item.category} Email</span>
+											</>
+										)}
+									</Button>
 								</div>
 							</div>
 						))}

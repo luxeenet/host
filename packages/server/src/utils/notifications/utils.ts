@@ -30,14 +30,42 @@ export const sendEmailNotification = async (
 			fromAddress,
 			toAddresses,
 		} = connection;
+
+		let host = smtpServer?.trim();
+		let port = smtpPort || 587;
+		let auth = username ? { user: username, pass: password || "" } : undefined;
+		let from = fromAddress?.trim();
+
+		// Fallback to centralized platform SMTP if per-connection SMTP is not specified
+		if (!host) {
+			const { getSmtpResolvedCredentials, formatFromHeader } = await import(
+				"../../services/smtp-settings"
+			);
+			const creds = await getSmtpResolvedCredentials();
+			if (creds.configured) {
+				host = creds.host;
+				port = creds.port;
+				auth = creds.user ? { user: creds.user, pass: creds.pass } : undefined;
+				from = from ? formatFromHeader(from, creds.fromName) : formatFromHeader(creds.from, creds.fromName);
+			}
+		}
+
+		if (!host) {
+			throw new Error("SMTP server is not configured in notification channel or platform settings");
+		}
+
 		const transporter = nodemailer.createTransport({
-			host: smtpServer,
-			port: smtpPort,
-			auth: { user: username, pass: password },
+			host,
+			port,
+			secure: port === 465,
+			auth,
+			tls: {
+				rejectUnauthorized: false,
+			},
 		});
 
 		await transporter.sendMail({
-			from: fromAddress,
+			from: from || `HatDot <notifications@hatdot.cloud>`,
 			to: toAddresses.join(", "),
 			subject,
 			html: htmlContent,

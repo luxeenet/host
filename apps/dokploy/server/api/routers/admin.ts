@@ -286,4 +286,20 @@ export const adminRouter = createTRPCRouter({
 			const { testSmtpConnection } = await import("@dokploy/server");
 			return await testSmtpConnection(input?.targetEmail);
 		}),
+
+	/** Platform Admin: Dispatch a sample/test notification email for any catalog template */
+	sendSampleEmailNotification: platformAdminProcedure
+		.input(
+			z.object({
+				templateId: z.string().min(1),
+				targetEmail: z.string().email(),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const { sendSampleEmailNotification } = await import("@dokploy/server");
+			return await sendSampleEmailNotification(
+				input.templateId,
+				input.targetEmail,
+			);
+		}),
 });

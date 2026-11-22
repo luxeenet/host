@@ -26,9 +26,9 @@ export const VerifyEmailTemplate = ({
 	const previewText = `Verify your email address to get started with ${brand.APP_NAME}`;
 	return (
 		<Html>
-			<Head />
-			<Preview>{previewText}</Preview>
 			<Tailwind config={emailTailwindConfig}>
+				<Head />
+				<Preview>{previewText}</Preview>
 				<Body className="bg-[#f4f4f5] my-auto mx-auto font-sans">
 					<Container className="my-[40px] mx-auto max-w-[520px]">
 						{/* Header */}
@@ -55,7 +55,7 @@ export const VerifyEmailTemplate = ({
 							<Section className="text-center mb-[24px]">
 								<Button
 									href={verificationUrl}
-									className="bg-[#d97706] hover:bg-[#b45309] rounded-lg text-white text-[14px] font-semibold no-underline text-center px-[32px] py-[14px] shadow-md"
+									className="bg-[#d97706] rounded-lg text-white text-[14px] font-semibold no-underline text-center px-[32px] py-[14px] shadow-md"
 								>
 									Verify Email Address
 								</Button>

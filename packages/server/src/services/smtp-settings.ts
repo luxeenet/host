@@ -65,6 +65,29 @@ const maskString = (val?: string | null): string => {
 };
 
 /**
+ * Formats a clean, standard RFC 5322 From: header safely handling brackets and quotes.
+ */
+export function formatFromHeader(from: string, fromName?: string): string {
+	const trimmed = (from || "").trim();
+	if (!trimmed) {
+		const defaultName = (fromName || brand.APP_NAME).replace(/"/g, "").trim();
+		return `"${defaultName}" <${brand.EMAIL_FROM || "notifications@hatdot.cloud"}>`;
+	}
+
+	const match = trimmed.match(/^(?:["']?([^"']+)["']?\s*)?<([^>]+)>$/);
+	if (match) {
+		const rawExtracted = match[1];
+		const extractedName = (fromName || rawExtracted || brand.APP_NAME).replace(/"/g, "").trim();
+		const extractedEmail = (match[2] || "").trim();
+		return `"${extractedName}" <${extractedEmail}>`;
+	}
+
+	const cleanEmail = trimmed.replace(/[<>"]/g, "").trim();
+	const displayName = (fromName || brand.APP_NAME).replace(/"/g, "").trim();
+	return `"${displayName}" <${cleanEmail}>`;
+}
+
+/**
  * Resolves live SMTP credentials with DB platformSettings precedence over process.env.
  */
 export async function getSmtpResolvedCredentials(): Promise<ResolvedSmtpCredentials> {
@@ -73,6 +96,8 @@ export async function getSmtpResolvedCredentials(): Promise<ResolvedSmtpCredenti
 	const dbUser = await getPlatformSettingValue(PLATFORM_SETTING_KEYS.SMTP_USER, null);
 	const dbPass = await getPlatformSettingValue(PLATFORM_SETTING_KEYS.SMTP_PASS, null);
 	const dbFrom = await getPlatformSettingValue(PLATFORM_SETTING_KEYS.SMTP_FROM, null);
+	const dbFromName = await getPlatformSettingValue(PLATFORM_SETTING_KEYS.SMTP_FROM_NAME, null);
+	const dbSecure = await getPlatformSettingValue(PLATFORM_SETTING_KEYS.SMTP_SECURE, null);
 
 	const host = dbHost?.trim() || process.env.SMTP_SERVER?.trim() || process.env.SMTP_HOST?.trim() || "";
 	const rawPort = dbPort?.trim() || process.env.SMTP_PORT?.trim() || "587";
@@ -80,8 +105,8 @@ export async function getSmtpResolvedCredentials(): Promise<ResolvedSmtpCredenti
 	const user = dbUser?.trim() || process.env.SMTP_USERNAME?.trim() || process.env.SMTP_USER?.trim() || "";
 	const pass = dbPass?.trim() || process.env.SMTP_PASSWORD?.trim() || process.env.SMTP_PASS?.trim() || "";
 	const from = dbFrom?.trim() || process.env.SMTP_FROM_ADDRESS?.trim() || process.env.SMTP_FROM?.trim() || brand.EMAIL_FROM;
-	const fromName = brand.APP_NAME;
-	const secure = port === 465;
+	const fromName = dbFromName?.trim() || process.env.SMTP_FROM_NAME?.trim() || brand.APP_NAME;
+	const secure = dbSecure !== null ? dbSecure === "true" : port === 465;
 
 	const configured = Boolean(host && from);
 
@@ -169,6 +194,22 @@ export async function updateSmtpSettings(input: UpdateSmtpInput): Promise<SmtpSe
 		);
 	}
 
+	if (input.fromName !== undefined) {
+		await setPlatformSettingValue(
+			PLATFORM_SETTING_KEYS.SMTP_FROM_NAME,
+			input.fromName?.trim() || null,
+			"Sender display name for outgoing system emails",
+		);
+	}
+
+	if (input.secure !== undefined) {
+		await setPlatformSettingValue(
+			PLATFORM_SETTING_KEYS.SMTP_SECURE,
+			input.secure ? "true" : "false",
+			"Whether to use SSL directly (port 465) or STARTTLS",
+		);
+	}
+
 	return await getSmtpSanitizedSettings();
 }
 
@@ -205,7 +246,7 @@ export async function sendPlatformMail(options: SendMailOptions): Promise<boolea
 	}
 
 	const to = Array.isArray(options.to) ? options.to.join(", ") : options.to;
-	const fromFormatted = `"${creds.fromName}" <${creds.from}>`;
+	const fromFormatted = formatFromHeader(creds.from, creds.fromName);
 
 	try {
 		await transporter.sendMail({
@@ -313,6 +354,247 @@ export async function testSmtpConnection(targetEmail?: string): Promise<TestSmtp
 			message: `SMTP connection failed: ${err?.message || "Unknown error"}`,
 			latencyMs,
 		};
+	}
+}
+
+/**
+ * Platform Admin: Sends a live sample email for any notification template in the platform catalog.
+ */
+export async function sendSampleEmailNotification(
+	templateId: string,
+	targetEmail: string,
+): Promise<{ success: boolean; message: string; template: string }> {
+	if (!targetEmail || !targetEmail.includes("@")) {
+		throw new Error("Invalid recipient email address.");
+	}
+
+	const creds = await getSmtpResolvedCredentials();
+	if (!creds.configured) {
+		throw new Error("SMTP is not configured yet. Please configure SMTP host and credentials first.");
+	}
+
+	const appBaseUrl = `https://${creds.host || brand.PLATFORM_SUBDOMAIN_BASE || "panel.hatdot.cloud"}`;
+
+	switch (templateId) {
+		case "verify-email": {
+			const { sendVerificationEmail } = await import("../verification/send-verification-email");
+			await sendVerificationEmail({
+				userName: "Administrator",
+				email: targetEmail,
+				verificationUrl: `${appBaseUrl}/verify-email?token=sample_diagnostic_token`,
+			});
+			return {
+				success: true,
+				message: `Account Email Verification sample sent to ${targetEmail}`,
+				template: "verify-email.tsx",
+			};
+		}
+
+		case "invitation": {
+			const { sendInvitationEmail } = await import("../verification/send-verification-email");
+			await sendInvitationEmail({
+				email: targetEmail,
+				inviteLink: `${appBaseUrl}/invitation/sample_token_invitation`,
+				organizationName: "Production Engineering Team",
+			});
+			return {
+				success: true,
+				message: `Team Invitation sample sent to ${targetEmail}`,
+				template: "invitation.tsx",
+			};
+		}
+
+		case "password-reset": {
+			const resetHtml = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 520px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e4e4e7;">
+    <div style="background-color: #09090b; padding: 32px 40px; text-align: center;">
+      <h1 style="color: #ffffff; font-size: 24px; font-weight: 800; margin: 0;">${brand.APP_NAME}</h1>
+      <p style="color: #a1a1aa; font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 4px 0 0 0;">Security Service</p>
+    </div>
+    <div style="padding: 40px 40px 32px;">
+      <h2 style="color: #09090b; font-size: 22px; font-weight: 600; margin: 0 0 12px;">Reset Your Password</h2>
+      <p style="color: #71717a; font-size: 14px; line-height: 24px; margin: 0 0 28px;">
+        Hello Administrator, this is a sample password reset notification to verify your email template delivery.
+      </p>
+      <div style="text-align: center; margin-bottom: 24px;">
+        <a href="${appBaseUrl}/reset-password?token=sample_token" style="display: inline-block; background-color: #d97706; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; padding: 14px 32px; border-radius: 8px;">Reset Password</a>
+      </div>
+      <p style="color: #d97706; font-size: 12px; text-align: center; font-weight: 500;">
+        ⏱️ For security, password reset links expire in 1 hour.
+      </p>
+    </div>
+    <div style="background-color: #fafafa; padding: 20px 40px; text-align: center; border-top: 1px solid #e4e4e7;">
+      <p style="color: #a1a1aa; font-size: 12px; margin: 0;">${brand.COPYRIGHT}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+			await sendPlatformMail({
+				to: targetEmail,
+				subject: `Reset your ${brand.APP_NAME} password (Sample)`,
+				html: resetHtml,
+				text: `Reset your password at: ${appBaseUrl}/reset-password?token=sample_token`,
+			});
+			return {
+				success: true,
+				message: `Password Reset sample sent to ${targetEmail}`,
+				template: "auth.ts (Security)",
+			};
+		}
+
+		case "invoice-notification": {
+			const { render } = await import("@react-email/components");
+			const InvoiceNotificationEmail = (await import("../emails/emails/invoice-notification")).default;
+			const html = await render(
+				InvoiceNotificationEmail({
+					userName: "Administrator",
+					invoiceNumber: "INV-2026-0842",
+					amountPaid: "$49.00",
+					currency: "USD",
+					date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+					hostedInvoiceUrl: `${appBaseUrl}/dashboard/settings/billing`,
+				}),
+			);
+			await sendPlatformMail({
+				to: targetEmail,
+				subject: `Invoice & Receipt #INV-2026-0842 — ${brand.APP_NAME}`,
+				html,
+			});
+			return {
+				success: true,
+				message: `Invoice & Receipt sample sent to ${targetEmail}`,
+				template: "invoice-notification.tsx",
+			};
+		}
+
+		case "payment-failed": {
+			const { render } = await import("@react-email/components");
+			const PaymentFailedEmail = (await import("../emails/emails/payment-failed")).default;
+			const html = await render(
+				PaymentFailedEmail({
+					userName: "Administrator",
+					invoiceNumber: "INV-2026-0842",
+					amountDue: "$49.00",
+					currency: "USD",
+					date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+					hostedInvoiceUrl: `${appBaseUrl}/dashboard/settings/billing`,
+				}),
+			);
+			await sendPlatformMail({
+				to: targetEmail,
+				subject: `Payment failed for invoice #INV-2026-0842 — Action required`,
+				html,
+			});
+			return {
+				success: true,
+				message: `Payment Failure Alert sample sent to ${targetEmail}`,
+				template: "payment-failed.tsx",
+			};
+		}
+
+		case "trial-expiring": {
+			const { render } = await import("@react-email/components");
+			const TrialExpiringEmail = (await import("../emails/emails/trial-expiring")).default;
+			const html = await render(
+				TrialExpiringEmail({
+					userName: "Administrator",
+					planName: "Pro Tier",
+					daysRemaining: 3,
+					endsOn: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+					billingUrl: `${appBaseUrl}/dashboard/settings/billing`,
+				}),
+			);
+			await sendPlatformMail({
+				to: targetEmail,
+				subject: `Your ${brand.APP_NAME} trial ends in 3 days`,
+				html,
+			});
+			return {
+				success: true,
+				message: `Trial Expiration Warning sample sent to ${targetEmail}`,
+				template: "trial-expiring.tsx",
+			};
+		}
+
+		case "build-failed": {
+			const { render } = await import("@react-email/components");
+			const BuildFailedEmail = (await import("../emails/emails/build-failed")).default;
+			const html = await render(
+				BuildFailedEmail({
+					projectName: "production-core",
+					applicationName: "api-gateway",
+					applicationType: "application",
+					errorMessage: "Process exited with code 1: Memory quota exceeded during bundle compilation.",
+					buildLink: `${appBaseUrl}/dashboard`,
+					date: new Date().toLocaleString(),
+				}),
+			);
+			await sendPlatformMail({
+				to: targetEmail,
+				subject: `Build failed for api-gateway on ${brand.APP_NAME}`,
+				html,
+			});
+			return {
+				success: true,
+				message: `Build Failure Notification sample sent to ${targetEmail}`,
+				template: "build-failed.tsx",
+			};
+		}
+
+		case "build-success": {
+			const { render } = await import("@react-email/components");
+			const BuildSuccessEmail = (await import("../emails/emails/build-success")).default;
+			const html = await render(
+				BuildSuccessEmail({
+					projectName: "production-core",
+					applicationName: "web-frontend",
+					applicationType: "application",
+					environmentName: "production",
+					buildLink: `${appBaseUrl}/dashboard`,
+					date: new Date().toLocaleString(),
+				}),
+			);
+			await sendPlatformMail({
+				to: targetEmail,
+				subject: `Build successful for web-frontend on ${brand.APP_NAME}`,
+				html,
+			});
+			return {
+				success: true,
+				message: `Build Success Notification sample sent to ${targetEmail}`,
+				template: "build-success.tsx",
+			};
+		}
+
+		case "database-backup": {
+			const { render } = await import("@react-email/components");
+			const DatabaseBackupEmail = (await import("../emails/emails/database-backup")).default;
+			const html = await render(
+				DatabaseBackupEmail({
+					applicationName: "postgres-primary",
+					databaseType: "postgres",
+					projectName: "production-core",
+					type: "success",
+					date: new Date().toLocaleString(),
+				}),
+			);
+			await sendPlatformMail({
+				to: targetEmail,
+				subject: `Database backup completed for postgres-primary`,
+				html,
+			});
+			return {
+				success: true,
+				message: `Database Backup sample sent to ${targetEmail}`,
+				template: "database-backup.tsx",
+			};
+		}
+
+		default:
+			throw new Error(`Unknown notification template: '${templateId}'`);
 	}
 }
 

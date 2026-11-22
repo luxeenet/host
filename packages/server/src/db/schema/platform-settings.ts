@@ -39,6 +39,8 @@ export const PLATFORM_SETTING_KEYS = {
 	SMTP_USER: "smtp_user",
 	SMTP_PASS: "smtp_pass",
 	SMTP_FROM: "smtp_from",
+	SMTP_FROM_NAME: "smtp_from_name",
+	SMTP_SECURE: "smtp_secure",
 	DEPLOYMENT_NOTIFICATIONS_ENABLED: "deployment_notifications_enabled",
 	BILLING_NOTIFICATIONS_ENABLED: "billing_notifications_enabled",
 	GRACE_PERIOD_DAYS: "grace_period_days",

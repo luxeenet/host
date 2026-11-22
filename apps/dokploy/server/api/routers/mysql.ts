@@ -676,12 +676,7 @@ export const mysqlRouter = createTRPCRouter({
 					"detachDokployNetwork",
 				];
 				for (const key of forbiddenInfraKeys) {
-					if ((rest as any)[key] !== undefined) {
-						throw new TRPCError({
-							code: "FORBIDDEN",
-							message: `Infrastructure setting "${key}" requires platform administrator privileges.`,
-						});
-					}
+					delete (rest as any)[key];
 				}
 			}
 

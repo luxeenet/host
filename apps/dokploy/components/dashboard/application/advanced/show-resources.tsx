@@ -5,6 +5,7 @@ import { useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AlertBlock } from "@/components/shared/alert-block";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -141,6 +142,32 @@ export const ShowResources = ({ id, type }: Props) => {
 	);
 	const { data: resourceLimits } = api.subscription.getResourceLimits.useQuery();
 
+	const maxRamValue =
+		resourceLimits && resourceLimits.maxRamMb !== -1
+			? resourceLimits.maxRamMb
+			: undefined;
+	const maxCpuValue =
+		resourceLimits && resourceLimits.maxCpuMillicores !== -1
+			? resourceLimits.maxCpuMillicores / 1000
+			: undefined;
+
+	const memoryPresets = [
+		{ label: "128 MB", value: 128 },
+		{ label: "256 MB", value: 256 },
+		{ label: "512 MB", value: 512 },
+		{ label: "1 GB", value: 1024 },
+		{ label: "2 GB", value: 2048 },
+		{ label: "4 GB", value: 4096 },
+	];
+
+	const cpuPresets = [
+		{ label: "0.25 CPU", value: 0.25 },
+		{ label: "0.50 CPU", value: 0.5 },
+		{ label: "1.00 CPU", value: 1.0 },
+		{ label: "2.00 CPU", value: 2.0 },
+		{ label: "4.00 CPU", value: 4.0 },
+	];
+
 	const form = useForm({
 		defaultValues: {
 			cpuLimit: "",
@@ -217,7 +244,7 @@ export const ShowResources = ({ id, type }: Props) => {
 			}
 		}
 
-		await mutateAsync({
+		const payload: any = {
 			applicationId: id || "",
 			libsqlId: id || "",
 			mariadbId: id || "",
@@ -229,11 +256,16 @@ export const ShowResources = ({ id, type }: Props) => {
 			cpuReservation: formData.cpuReservation || null,
 			memoryLimit: formData.memoryLimit || null,
 			memoryReservation: formData.memoryReservation || null,
-			ulimitsSwarm:
-				isPlatformAdmin && formData.ulimitsSwarm && formData.ulimitsSwarm.length > 0
-					? formData.ulimitsSwarm
-					: null,
-		})
+		};
+		if (
+			isPlatformAdmin &&
+			formData.ulimitsSwarm &&
+			formData.ulimitsSwarm.length > 0
+		) {
+			payload.ulimitsSwarm = formData.ulimitsSwarm;
+		}
+
+		await mutateAsync(payload)
 			.then(async () => {
 				toast.success("Resources Updated");
 				await refetch();
@@ -248,26 +280,30 @@ export const ShowResources = ({ id, type }: Props) => {
 			<CardHeader>
 				<CardTitle className="text-xl">Resources</CardTitle>
 				<CardDescription>
-					If you want to decrease or increase the resources to a specific.
-					application or database
+					Configure compute resources (CPU and Memory) allocated to this service.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="flex flex-col gap-4">
 				{resourceLimits && (
-					<div className="flex flex-col gap-1 p-3 rounded-lg border bg-muted/40 text-sm">
-						<span className="font-medium text-foreground">
-							Subscription Plan Entitlement: {resourceLimits.planName}
-						</span>
-						<span className="text-muted-foreground text-xs">
-							Allocatable limits:{" "}
-							{resourceLimits.maxRamMb === -1
-								? "Unlimited RAM"
-								: `Up to ${resourceLimits.maxRamMb} MB RAM`}
-							{" • "}
-							{resourceLimits.maxCpuMillicores === -1
-								? "Unlimited CPU"
-								: `Up to ${(resourceLimits.maxCpuMillicores / 1000).toFixed(2)} CPU`}
-						</span>
+					<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3.5 rounded-lg border bg-muted/40 text-sm">
+						<div className="flex flex-col gap-0.5">
+							<span className="font-medium text-foreground">
+								Subscription Plan: {resourceLimits.planName}
+							</span>
+							<span className="text-muted-foreground text-xs">
+								Allocatable limits:{" "}
+								{resourceLimits.maxRamMb === -1
+									? "Unlimited RAM"
+									: `Up to ${resourceLimits.maxRamMb >= 1024 ? `${(resourceLimits.maxRamMb / 1024).toFixed(resourceLimits.maxRamMb % 1024 === 0 ? 0 : 1)} GB` : `${resourceLimits.maxRamMb} MB`} RAM`}
+								{" • "}
+								{resourceLimits.maxCpuMillicores === -1
+									? "Unlimited CPU"
+									: `Up to ${(resourceLimits.maxCpuMillicores / 1000).toFixed(2)} CPU Cores`}
+							</span>
+						</div>
+						<Badge variant="outline" className="w-fit text-xs font-normal">
+							Active Quota
+						</Badge>
 					</div>
 				)}
 				<AlertBlock type="info">
@@ -290,7 +326,7 @@ export const ShowResources = ({ id, type }: Props) => {
 												className="flex items-center gap-2"
 												onClick={(e) => e.preventDefault()}
 											>
-												<FormLabel>Memory Limit</FormLabel>
+												<FormLabel>Memory Limit (Hard Max)</FormLabel>
 												<TooltipProvider>
 													<Tooltip delayDuration={0}>
 														<TooltipTrigger type="button">
@@ -298,9 +334,9 @@ export const ShowResources = ({ id, type }: Props) => {
 														</TooltipTrigger>
 														<TooltipContent>
 															<p>
-																Memory hard limit in bytes. Example: 1GB =
-																1073741824 bytes. Use +/- buttons to adjust by
-																256 MB.
+																Maximum memory (RAM) allocated to this container.
+																If your application exceeds this threshold, the
+																system safely restarts the container.
 															</p>
 														</TooltipContent>
 													</Tooltip>
@@ -310,9 +346,11 @@ export const ShowResources = ({ id, type }: Props) => {
 												<NumberInputWithSteps
 													value={field.value}
 													onChange={field.onChange}
-													placeholder="1073741824 (1GB in bytes)"
+													placeholder="e.g. 512 MB"
 													step={MEMORY_STEP_MB}
 													converter={memoryConverter}
+													presets={memoryPresets}
+													maxUnitValue={maxRamValue}
 												/>
 											</FormControl>
 											<FormMessage />
@@ -329,7 +367,7 @@ export const ShowResources = ({ id, type }: Props) => {
 											className="flex items-center gap-2"
 											onClick={(e) => e.preventDefault()}
 										>
-											<FormLabel>Memory Reservation</FormLabel>
+											<FormLabel>Memory Reservation (Soft Guarantee)</FormLabel>
 											<TooltipProvider>
 												<Tooltip delayDuration={0}>
 													<TooltipTrigger type="button">
@@ -337,9 +375,8 @@ export const ShowResources = ({ id, type }: Props) => {
 													</TooltipTrigger>
 													<TooltipContent>
 														<p>
-															Memory soft limit in bytes. Example: 256MB =
-															268435456 bytes. Use +/- buttons to adjust by 256
-															MB.
+															Guaranteed minimum memory allocated to your container
+															upon startup.
 														</p>
 													</TooltipContent>
 												</Tooltip>
@@ -349,9 +386,11 @@ export const ShowResources = ({ id, type }: Props) => {
 											<NumberInputWithSteps
 												value={field.value}
 												onChange={field.onChange}
-												placeholder="268435456 (256MB in bytes)"
+												placeholder="e.g. 256 MB"
 												step={MEMORY_STEP_MB}
 												converter={memoryConverter}
+												presets={memoryPresets}
+												maxUnitValue={maxRamValue}
 											/>
 										</FormControl>
 										<FormMessage />
@@ -369,7 +408,7 @@ export const ShowResources = ({ id, type }: Props) => {
 												className="flex items-center gap-2"
 												onClick={(e) => e.preventDefault()}
 											>
-												<FormLabel>CPU Limit</FormLabel>
+												<FormLabel>CPU Limit (Hard Max)</FormLabel>
 												<TooltipProvider>
 													<Tooltip delayDuration={0}>
 														<TooltipTrigger type="button">
@@ -377,9 +416,8 @@ export const ShowResources = ({ id, type }: Props) => {
 														</TooltipTrigger>
 														<TooltipContent>
 															<p>
-																CPU quota in units of 10^-9 CPUs. Example: 2
-																CPUs = 2000000000. Use +/- buttons to adjust by
-																0.25 CPU.
+																Maximum compute allocation (in CPU cores) dedicated
+																to this service.
 															</p>
 														</TooltipContent>
 													</Tooltip>
@@ -389,9 +427,11 @@ export const ShowResources = ({ id, type }: Props) => {
 												<NumberInputWithSteps
 													value={field.value}
 													onChange={field.onChange}
-													placeholder="2000000000 (2 CPUs)"
+													placeholder="e.g. 1.00 CPU"
 													step={CPU_STEP}
 													converter={cpuConverter}
+													presets={cpuPresets}
+													maxUnitValue={maxCpuValue}
 												/>
 											</FormControl>
 											<FormMessage />
@@ -409,7 +449,7 @@ export const ShowResources = ({ id, type }: Props) => {
 												className="flex items-center gap-2"
 												onClick={(e) => e.preventDefault()}
 											>
-												<FormLabel>CPU Reservation</FormLabel>
+												<FormLabel>CPU Reservation (Soft Guarantee)</FormLabel>
 												<TooltipProvider>
 													<Tooltip delayDuration={0}>
 														<TooltipTrigger type="button">
@@ -417,9 +457,8 @@ export const ShowResources = ({ id, type }: Props) => {
 														</TooltipTrigger>
 														<TooltipContent>
 															<p>
-																CPU shares (relative weight). Example: 1 CPU =
-																1000000000. Use +/- buttons to adjust by 0.25
-																CPU.
+																Guaranteed minimum compute allocation dedicated
+																to this service.
 															</p>
 														</TooltipContent>
 													</Tooltip>
@@ -429,9 +468,11 @@ export const ShowResources = ({ id, type }: Props) => {
 												<NumberInputWithSteps
 													value={field.value}
 													onChange={field.onChange}
-													placeholder="1000000000 (1 CPU)"
+													placeholder="e.g. 0.50 CPU"
 													step={CPU_STEP}
 													converter={cpuConverter}
+													presets={cpuPresets}
+													maxUnitValue={maxCpuValue}
 												/>
 											</FormControl>
 											<FormMessage />

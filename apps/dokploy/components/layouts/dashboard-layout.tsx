@@ -40,20 +40,41 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 		router.pathname.startsWith("/dashboard/settings/profile") ||
 		router.pathname.startsWith("/dashboard/settings/sessions");
 
+	const shouldRedirectToPayment =
+		haveRootAccess !== true &&
+		(onboardingStatus as any)?.needsPayment === true &&
+		!isAllowedUnsubscribedPath;
+
 	const shouldRedirectToPlanSelection =
 		haveRootAccess !== true &&
 		onboardingStatus?.needsPlanSelection === true &&
 		!isAllowedUnsubscribedPath;
 
 	useEffect(() => {
-		if (shouldRedirectToPlanSelection) {
+		if (shouldRedirectToPayment) {
+			const pendingPlanId = (onboardingStatus as any)?.pendingPlanId;
+			const queryParam = pendingPlanId
+				? `?planId=${encodeURIComponent(pendingPlanId)}&pay=true`
+				: "?pay=true";
+			router.replace(`/dashboard/billing${queryParam}`);
+		} else if (shouldRedirectToPlanSelection) {
 			router.replace("/onboarding");
 		} else if (shouldRedirectToOnboarding) {
 			router.replace("/dashboard/home");
 		}
-	}, [shouldRedirectToPlanSelection, shouldRedirectToOnboarding, router]);
+	}, [
+		shouldRedirectToPlanSelection,
+		shouldRedirectToPayment,
+		shouldRedirectToOnboarding,
+		router,
+		onboardingStatus,
+	]);
 
-	if (shouldRedirectToPlanSelection || shouldRedirectToOnboarding) {
+	if (
+		shouldRedirectToPlanSelection ||
+		shouldRedirectToPayment ||
+		shouldRedirectToOnboarding
+	) {
 		return null;
 	}
 

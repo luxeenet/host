@@ -89,6 +89,11 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 
 	const [skipAllOpen, setSkipAllOpen] = useState(false);
 	const handleSkipAll = async () => {
+		if ((onboardingStatus as any)?.needsPayment) {
+			toast.info("Payment is required to activate your plan before accessing the dashboard.");
+			router.push("/dashboard/billing?pay=true");
+			return;
+		}
 		if (onboardingStatus?.needsPlanSelection && !currentSubscription) {
 			toast.info("A cloud hosting plan is required before accessing the dashboard.");
 			router.push("/onboarding");

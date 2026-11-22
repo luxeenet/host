@@ -40,7 +40,8 @@ import {
 } from "lucide-react";
 import type { GetServerSidePropsContext } from "next";
 import { validateRequest } from "@dokploy/server/lib/auth";
-import { brand } from "@paas/branding";
+import { brand, formatCurrency } from "@paas/branding";
+import { api } from "@/utils/api";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +59,27 @@ export default function LandingPage() {
 	const [activeTab, setActiveTab] = useState<string>("apps-db");
 	const [copied, setCopied] = useState(false);
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+	const { data: dbPlans } = api.plan.list.useQuery();
+
+	const handleChoosePlan = (plan: { id: string; slug: string }) => {
+		if (typeof window !== "undefined") {
+			localStorage.setItem("hatdot_selected_plan", plan.id);
+			localStorage.setItem("hatdot_selected_plan_slug", plan.slug);
+		}
+	};
+
+	const getResourceValue = (
+		resources:
+			| { resourceKey: string; value: number; unit?: string | null }[]
+			| undefined,
+		key: string,
+	) => {
+		if (!resources) return null;
+		const r = resources.find((item) => item.resourceKey === key);
+		if (!r) return null;
+		return r.value === -1 ? "Unlimited" : `${r.value}${r.unit ? ` ${r.unit}` : ""}`;
+	};
 
 	const installCmd = "curl -sSL https://get.hatdot.cloud/install.sh | sh";
 
@@ -1105,162 +1127,288 @@ export default function LandingPage() {
 						</div>
 
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
-							{/* Starter */}
-							<div className="rounded-2xl border border-border bg-card p-6 flex flex-col justify-between shadow-sm">
-								<div className="space-y-4">
-									<div className="flex items-center justify-between">
-										<h3 className="font-bold text-lg text-foreground">Starter</h3>
-										<Badge variant="outline" className="text-xs">Free</Badge>
-									</div>
-									<div className="text-3xl font-extrabold text-foreground">
-										Free <span className="text-xs text-muted-foreground font-normal">forever</span>
-									</div>
-									<p className="text-xs text-muted-foreground">
-										For testing and deploying your first small web service.
-									</p>
-									<Separator />
-									<ul className="space-y-2 text-xs text-muted-foreground">
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>1 Active Application</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>1 Custom Domain</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>512 MB RAM limit</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>Automatic Edge SSL</span>
-										</li>
-									</ul>
-								</div>
-								<Button variant="outline" asChild className="w-full mt-6">
-									<Link href="/signup">Get Started</Link>
-								</Button>
-							</div>
+							{dbPlans && dbPlans.length > 0 ? (
+								dbPlans.map((plan) => {
+									const isFeatured = plan.isFeatured;
+									const isFree = Number(plan.price) === 0;
+									const hasTrial = plan.trialDays > 0;
+									const appsQuota =
+										getResourceValue(plan.resources, "max_applications") ??
+										"Unlimited";
+									const dbQuota =
+										getResourceValue(plan.resources, "max_databases") ??
+										"Unlimited";
+									const domainQuota =
+										getResourceValue(plan.resources, "max_domains") ??
+										"Unlimited";
+									const ramQuota =
+										getResourceValue(plan.resources, "max_ram_mb") ??
+										"512 MB";
 
-							{/* Basic */}
-							<div className="rounded-2xl border border-border bg-card p-6 flex flex-col justify-between shadow-sm">
-								<div className="space-y-4">
-									<div className="flex items-center justify-between">
-										<h3 className="font-bold text-lg text-foreground">Basic</h3>
-										<span className="text-xs text-emerald-500 font-semibold">14-Day Trial</span>
-									</div>
-									<div className="text-3xl font-extrabold text-foreground">
-										$10 <span className="text-xs text-muted-foreground font-normal">/ month</span>
-									</div>
-									<p className="text-xs text-muted-foreground">
-										Ideal for personal projects and growing web apps.
-									</p>
-									<Separator />
-									<ul className="space-y-2 text-xs text-muted-foreground">
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>3 Active Applications</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>1 Managed Database</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>1024 MB RAM limit</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>Daily Backups</span>
-										</li>
-									</ul>
-								</div>
-								<Button variant="outline" asChild className="w-full mt-6">
-									<Link href="/signup">Start Free Trial</Link>
-								</Button>
-							</div>
+									return (
+										<div
+											key={plan.id}
+											className={cn(
+												"rounded-2xl border bg-card p-6 flex flex-col justify-between shadow-sm relative transition-all duration-200",
+												isFeatured
+													? "border-2 border-primary shadow-xl scale-[1.02]"
+													: "border-border hover:border-primary/40",
+											)}
+										>
+											{isFeatured && (
+												<div className="absolute -top-3 left-1/2 -translate-x-1/2">
+													<Badge className="bg-primary text-primary-foreground text-[10px] font-bold px-3 py-0.5">
+														MOST POPULAR
+													</Badge>
+												</div>
+											)}
 
-							{/* Developer (Featured) */}
-							<div className="rounded-2xl border-2 border-primary bg-card p-6 flex flex-col justify-between shadow-xl relative scale-[1.02]">
-								<div className="absolute -top-3 left-1/2 -translate-x-1/2">
-									<Badge className="bg-primary text-primary-foreground text-[10px] font-bold px-3 py-0.5">
-										MOST POPULAR
-									</Badge>
-								</div>
-								<div className="space-y-4">
-									<div className="flex items-center justify-between mt-1">
-										<h3 className="font-bold text-lg text-foreground">Developer</h3>
-										<span className="text-xs text-emerald-500 font-semibold">14-Day Trial</span>
-									</div>
-									<div className="text-3xl font-extrabold text-foreground">
-										$25 <span className="text-xs text-muted-foreground font-normal">/ month</span>
-									</div>
-									<p className="text-xs text-muted-foreground">
-										For production applications requiring power and scale.
-									</p>
-									<Separator />
-									<ul className="space-y-2 text-xs text-muted-foreground">
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>10 Active Applications</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>5 Managed Databases</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>4096 MB RAM limit</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>Hourly Backups & S3 Export</span>
-										</li>
-									</ul>
-								</div>
-								<Button asChild className="w-full mt-6 font-semibold shadow-md">
-									<Link href="/signup">Start 14-Day Free Trial →</Link>
-								</Button>
-							</div>
+											<div className="space-y-4">
+												<div className="flex items-center justify-between">
+													<h3 className="font-bold text-lg text-foreground">
+														{plan.name}
+													</h3>
+													{hasTrial ? (
+														<span className="text-xs text-emerald-500 font-semibold">
+															{plan.trialDays}-Day Free Trial
+														</span>
+													) : isFree ? (
+														<Badge variant="outline" className="text-xs">
+															Free
+														</Badge>
+													) : (
+														<Badge variant="secondary" className="text-xs">
+															Pay to Activate
+														</Badge>
+													)}
+												</div>
 
-							{/* Business */}
-							<div className="rounded-2xl border border-border bg-card p-6 flex flex-col justify-between shadow-sm">
-								<div className="space-y-4">
-									<div className="flex items-center justify-between">
-										<h3 className="font-bold text-lg text-foreground">Business</h3>
-										<span className="text-xs text-emerald-500 font-semibold">14-Day Trial</span>
+												<div className="text-3xl font-extrabold text-foreground">
+													{isFree ? (
+														<>
+															Free{" "}
+															<span className="text-xs text-muted-foreground font-normal">
+																forever
+															</span>
+														</>
+													) : (
+														<>
+															{formatCurrency(Number(plan.price), plan.currency)}{" "}
+															<span className="text-xs text-muted-foreground font-normal">
+																/{plan.billingCycle === "yearly" ? "year" : "month"}
+															</span>
+														</>
+													)}
+												</div>
+
+												<p className="text-xs text-muted-foreground min-h-[36px]">
+													{plan.description ||
+														"Deploy and scale on HatDot private cloud infrastructure."}
+												</p>
+
+												<Separator />
+
+												<ul className="space-y-2 text-xs text-muted-foreground">
+													<li className="flex items-center gap-2">
+														<Check className="size-3.5 text-emerald-500 shrink-0" />
+														<span>{appsQuota} Active Applications</span>
+													</li>
+													<li className="flex items-center gap-2">
+														<Check className="size-3.5 text-emerald-500 shrink-0" />
+														<span>{dbQuota} Managed Databases</span>
+													</li>
+													<li className="flex items-center gap-2">
+														<Check className="size-3.5 text-emerald-500 shrink-0" />
+														<span>{domainQuota} Custom Domains</span>
+													</li>
+													<li className="flex items-center gap-2">
+														<Check className="size-3.5 text-emerald-500 shrink-0" />
+														<span>{ramQuota} RAM Limit</span>
+													</li>
+													<li className="flex items-center gap-2">
+														<Check className="size-3.5 text-emerald-500 shrink-0" />
+														<span>Automatic Edge SSL & DDoS Protection</span>
+													</li>
+												</ul>
+											</div>
+
+											<Button
+												variant={isFeatured ? "default" : "outline"}
+												asChild
+												className={cn("w-full mt-6 font-semibold", isFeatured && "shadow-md")}
+												onClick={() => handleChoosePlan(plan)}
+											>
+												<Link href={`/signup?plan=${encodeURIComponent(plan.id)}`}>
+													{hasTrial
+														? `Start ${plan.trialDays}-Day Free Trial →`
+														: isFree
+															? "Get Started Free"
+															: `Select ${plan.name} →`}
+												</Link>
+											</Button>
+										</div>
+									);
+								})
+							) : (
+								<>
+									{/* Starter */}
+									<div className="rounded-2xl border border-border bg-card p-6 flex flex-col justify-between shadow-sm">
+										<div className="space-y-4">
+											<div className="flex items-center justify-between">
+												<h3 className="font-bold text-lg text-foreground">Starter</h3>
+												<Badge variant="outline" className="text-xs">Free</Badge>
+											</div>
+											<div className="text-3xl font-extrabold text-foreground">
+												Free <span className="text-xs text-muted-foreground font-normal">forever</span>
+											</div>
+											<p className="text-xs text-muted-foreground">
+												For testing and deploying your first small web service.
+											</p>
+											<Separator />
+											<ul className="space-y-2 text-xs text-muted-foreground">
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>1 Active Application</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>1 Custom Domain</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>512 MB RAM limit</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>Automatic Edge SSL</span>
+												</li>
+											</ul>
+										</div>
+										<Button variant="outline" asChild className="w-full mt-6">
+											<Link href="/signup">Get Started Free</Link>
+										</Button>
 									</div>
-									<div className="text-3xl font-extrabold text-foreground">
-										$60 <span className="text-xs text-muted-foreground font-normal">/ month</span>
+
+									{/* Basic */}
+									<div className="rounded-2xl border border-border bg-card p-6 flex flex-col justify-between shadow-sm">
+										<div className="space-y-4">
+											<div className="flex items-center justify-between">
+												<h3 className="font-bold text-lg text-foreground">Basic</h3>
+												<span className="text-xs text-emerald-500 font-semibold">14-Day Trial</span>
+											</div>
+											<div className="text-3xl font-extrabold text-foreground">
+												$10 <span className="text-xs text-muted-foreground font-normal">/ month</span>
+											</div>
+											<p className="text-xs text-muted-foreground">
+												Ideal for personal projects and growing web apps.
+											</p>
+											<Separator />
+											<ul className="space-y-2 text-xs text-muted-foreground">
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>3 Active Applications</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>1 Managed Database</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>1024 MB RAM limit</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>Daily Backups</span>
+												</li>
+											</ul>
+										</div>
+										<Button variant="outline" asChild className="w-full mt-6">
+											<Link href="/signup">Start Free Trial</Link>
+										</Button>
 									</div>
-									<p className="text-xs text-muted-foreground">
-										For growing companies, teams, and high-traffic APIs.
-									</p>
-									<Separator />
-									<ul className="space-y-2 text-xs text-muted-foreground">
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>Unlimited Applications</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>Unlimited Databases</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>16 GB RAM Limit</span>
-										</li>
-										<li className="flex items-center gap-2">
-											<Check className="size-3.5 text-emerald-500 shrink-0" />
-											<span>Priority 24/7 SLA Support</span>
-										</li>
-									</ul>
-								</div>
-								<Button variant="outline" asChild className="w-full mt-6">
-									<Link href="/signup">Start Free Trial</Link>
-								</Button>
-							</div>
+
+									{/* Developer (Featured) */}
+									<div className="rounded-2xl border-2 border-primary bg-card p-6 flex flex-col justify-between shadow-xl relative scale-[1.02]">
+										<div className="absolute -top-3 left-1/2 -translate-x-1/2">
+											<Badge className="bg-primary text-primary-foreground text-[10px] font-bold px-3 py-0.5">
+												MOST POPULAR
+											</Badge>
+										</div>
+										<div className="space-y-4">
+											<div className="flex items-center justify-between mt-1">
+												<h3 className="font-bold text-lg text-foreground">Developer</h3>
+												<span className="text-xs text-emerald-500 font-semibold">14-Day Trial</span>
+											</div>
+											<div className="text-3xl font-extrabold text-foreground">
+												$25 <span className="text-xs text-muted-foreground font-normal">/ month</span>
+											</div>
+											<p className="text-xs text-muted-foreground">
+												For production applications requiring power and scale.
+											</p>
+											<Separator />
+											<ul className="space-y-2 text-xs text-muted-foreground">
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>10 Active Applications</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>5 Managed Databases</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>4096 MB RAM limit</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>Hourly Backups & S3 Export</span>
+												</li>
+											</ul>
+										</div>
+										<Button asChild className="w-full mt-6 font-semibold shadow-md">
+											<Link href="/signup">Start 14-Day Free Trial →</Link>
+										</Button>
+									</div>
+
+									{/* Business */}
+									<div className="rounded-2xl border border-border bg-card p-6 flex flex-col justify-between shadow-sm">
+										<div className="space-y-4">
+											<div className="flex items-center justify-between">
+												<h3 className="font-bold text-lg text-foreground">Business</h3>
+												<span className="text-xs text-emerald-500 font-semibold">14-Day Trial</span>
+											</div>
+											<div className="text-3xl font-extrabold text-foreground">
+												$60 <span className="text-xs text-muted-foreground font-normal">/ month</span>
+											</div>
+											<p className="text-xs text-muted-foreground">
+												For growing companies, teams, and high-traffic APIs.
+											</p>
+											<Separator />
+											<ul className="space-y-2 text-xs text-muted-foreground">
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>Unlimited Applications</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>Unlimited Databases</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>16 GB RAM Limit</span>
+												</li>
+												<li className="flex items-center gap-2">
+													<Check className="size-3.5 text-emerald-500 shrink-0" />
+													<span>Priority 24/7 SLA Support</span>
+												</li>
+											</ul>
+										</div>
+										<Button variant="outline" asChild className="w-full mt-6">
+											<Link href="/signup">Start Free Trial</Link>
+										</Button>
+									</div>
+								</>
+							)}
 						</div>
 					</div>
 				</section>

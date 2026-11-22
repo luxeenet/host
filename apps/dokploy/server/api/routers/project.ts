@@ -696,12 +696,31 @@ export const projectRouter = createTRPCRouter({
 			console.error("[project.onboardingStatus] Error getting plan snapshot:", err);
 		}
 
+		let latestSubscription: any = null;
+		try {
+			latestSubscription = await db.query.subscriptions.findFirst({
+				where: (s: any, { eq }: any) =>
+					eq(s.organizationId, ctx.session.activeOrganizationId),
+				with: { plan: true },
+				orderBy: (s: any, { desc }: any) => [desc(s.createdAt)],
+			});
+		} catch (err) {
+			console.error("[project.onboardingStatus] Error getting latest subscription:", err);
+		}
+
 		const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
 		const hasActivePlan = Boolean(planSnapshot);
 		const hasBillingActive = Boolean(billingStatus?.hasActiveAccess);
 		const hasActiveAccess =
 			isPlatformAdmin || hasActivePlan || hasBillingActive;
-		const needsPlanSelection = !isPlatformAdmin && !hasActivePlan && !hasBillingActive;
+
+		const isPendingPayment =
+			!isPlatformAdmin &&
+			!hasActiveAccess &&
+			latestSubscription?.status === "pending_payment";
+		const needsPayment = isPendingPayment;
+		const needsPlanSelection =
+			!isPlatformAdmin && !hasActivePlan && !hasBillingActive && !needsPayment;
 
 		const isOwner = ctx.user.role === "owner" || isPlatformAdmin;
 
@@ -709,7 +728,10 @@ export const projectRouter = createTRPCRouter({
 			...billingStatus,
 			hasActivePlan,
 			hasActiveAccess,
+			needsPayment,
 			needsPlanSelection,
+			pendingPlanId: isPendingPayment ? latestSubscription?.planId ?? null : null,
+			pendingPlanName: isPendingPayment ? latestSubscription?.plan?.name ?? null : null,
 			shouldShowOnboarding:
 				isOwner &&
 				!currentUser.onboardingCompletedAt &&

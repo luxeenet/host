@@ -1,7 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
@@ -63,6 +63,13 @@ export default function SignupPage() {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	// Persist chosen plan from landing page
+	useEffect(() => {
+		if (router.query.plan && typeof window !== "undefined") {
+			localStorage.setItem("hatdot_selected_plan", String(router.query.plan));
+		}
+	}, [router.query.plan]);
+
 	const form = useForm<SignupForm>({
 		resolver: zodResolver(signupSchema),
 		defaultValues: {
@@ -93,7 +100,15 @@ export default function SignupPage() {
 			}
 
 			toast.success("Account created successfully! Welcome aboard 🎉");
-			await router.push("/onboarding");
+			const selectedPlan =
+				(router.query.plan ? String(router.query.plan) : null) ||
+				(typeof window !== "undefined"
+					? localStorage.getItem("hatdot_selected_plan")
+					: null);
+			const planParam = selectedPlan
+				? `?plan=${encodeURIComponent(selectedPlan)}`
+				: "";
+			await router.push(`/onboarding${planParam}`);
 		} catch (err: any) {
 			const msg = err?.message ?? "Something went wrong. Please try again.";
 			setError(msg);

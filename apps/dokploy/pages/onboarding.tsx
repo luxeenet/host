@@ -1,7 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
 	CheckCircle,
@@ -69,26 +69,56 @@ export default function OnboardingPage() {
 		return rawPlans;
 	}, [rawPlans, billingCycle]);
 
-	// Auto-select featured or first plan if none selected
-	useMemo(() => {
-		if (!selectedPlanId && plans.length > 0) {
-			const featured = plans.find((p) => p.isFeatured) ?? plans[0];
+	// Auto-select tracked plan from landing page (via query or localStorage) or featured plan
+	useEffect(() => {
+		if (rawPlans && rawPlans.length > 0 && !selectedPlanId) {
+			const trackedPlanId =
+				(router.query.plan ? String(router.query.plan) : null) ||
+				(typeof window !== "undefined"
+					? localStorage.getItem("hatdot_selected_plan") ||
+					  localStorage.getItem("hatdot_selected_plan_slug")
+					: null);
+
+			if (trackedPlanId) {
+				const matched = rawPlans.find(
+					(p) => p.id === trackedPlanId || p.slug === trackedPlanId,
+				);
+				if (matched) {
+					setSelectedPlanId(matched.id);
+					if (matched.billingCycle) {
+						setBillingCycle(matched.billingCycle as any);
+					}
+					return;
+				}
+			}
+
+			// Fallback: select featured or first plan
+			const featured = rawPlans.find((p) => p.isFeatured) ?? rawPlans[0];
 			if (featured) setSelectedPlanId(featured.id);
 		}
-	}, [plans, selectedPlanId]);
+	}, [rawPlans, router.query.plan, selectedPlanId]);
 
 	const selectedPlan = useMemo(() => {
 		return plans.find((p) => p.id === selectedPlanId) ?? plans[0] ?? null;
 	}, [plans, selectedPlanId]);
 
 	const subscribeMutation = api.subscription.create.useMutation({
-		onSuccess: async () => {
-			toast.success("Subscription activated! Welcome aboard 🎉");
+		onSuccess: async (result: any) => {
 			await Promise.all([
 				utils.subscription.getCurrent.invalidate(),
 				utils.project.onboardingStatus.invalidate(),
 			]);
-			await router.push("/dashboard/home");
+			if (result?.status === "pending_payment") {
+				toast.info(
+					"Payment required to activate your plan. Redirecting to billing...",
+				);
+				await router.push(
+					`/dashboard/billing?planId=${result.planId}&pay=true`,
+				);
+			} else {
+				toast.success("Subscription activated! Welcome aboard 🎉");
+				await router.push("/dashboard/home");
+			}
 		},
 		onError: (err) => {
 			toast.error(err.message || "Failed to activate plan. Please try again.");
@@ -447,7 +477,11 @@ export default function OnboardingPage() {
 									</span>
 								)}
 								<p className="text-xs text-muted-foreground">
-									No setup fees • Instant cloud workspace provisioning • Cancel anytime
+									{selectedPlan?.trialDays && selectedPlan.trialDays > 0
+										? `${selectedPlan.trialDays}-day free trial included • No setup fees • Cancel anytime`
+										: Number(selectedPlan?.price) === 0
+											? "Free forever tier • Instant cloud workspace provisioning"
+											: "0-day trial • Payment required to activate and open your cloud workspace"}
 								</p>
 							</div>
 						</div>
@@ -464,7 +498,7 @@ export default function OnboardingPage() {
 									? `Start ${selectedPlan.trialDays}-Day Free Trial →`
 									: Number(selectedPlan?.price) === 0
 										? "Activate Free Starter Plan →"
-										: "Continue to Workspace →"}
+										: `Pay & Activate ${selectedPlan?.name || "Plan"} →`}
 							</Button>
 						</div>
 					</div>
@@ -493,6 +527,23 @@ export async function getServerSideProps(ctx: GetServerSidePropsContext) {
 			if (planSnapshot) {
 				return {
 					redirect: { destination: "/dashboard/home", permanent: false },
+				};
+			}
+
+			// If user has a pending_payment subscription, send them directly to billing to pay!
+			const { db } = await import("@dokploy/server/db");
+			const { subscriptions } = await import("@dokploy/server/db/schema");
+			const { eq, desc } = await import("drizzle-orm");
+			const sub = await db.query.subscriptions.findFirst({
+				where: eq(subscriptions.organizationId, orgId),
+				orderBy: [desc(subscriptions.createdAt)],
+			});
+			if (sub?.status === "pending_payment") {
+				return {
+					redirect: {
+						destination: `/dashboard/billing?planId=${sub.planId}&pay=true`,
+						permanent: false,
+					},
 				};
 			}
 		}

@@ -103,6 +103,12 @@ const Register = ({ isCloud }: Props) => {
 		form.reset();
 	}, [form, form.reset, form.formState.isSubmitSuccessful]);
 
+	useEffect(() => {
+		if (router.query.plan && typeof window !== "undefined") {
+			localStorage.setItem("hatdot_selected_plan", String(router.query.plan));
+		}
+	}, [router.query.plan]);
+
 	const onSubmit = async (values: Register) => {
 		const { data, error } = await authClient.signUp.email({
 			email: values.email,

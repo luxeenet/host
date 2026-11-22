@@ -1,5 +1,6 @@
 import Head from "next/head";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -26,6 +27,7 @@ import {
 	Database,
 	Layers,
 	ShieldCheck,
+	Lock,
 } from "lucide-react";
 import type { GetServerSidePropsContext } from "next";
 import { validateRequest } from "@dokploy/server/lib/auth";
@@ -80,6 +82,7 @@ const OPERATORS = [
 ] as const;
 
 export default function BillingPage() {
+	const router = useRouter();
 	const utils = api.useUtils();
 	const { data: user } = api.user.get.useQuery();
 	const { data: sub, isLoading: subLoading, refetch: refetchSub } = api.subscription.getCurrent.useQuery();
@@ -104,15 +107,26 @@ export default function BillingPage() {
 	const initiatePaymentMutation = api.subscription.initiateSonicPesaPayment.useMutation();
 	const checkStatusMutation = api.subscription.checkSonicPesaStatus.useMutation();
 
-	// Select initial plan once loaded
+	// Select initial plan once loaded (or planId from query)
 	useEffect(() => {
-		if (plans && plans.length > 0 && !selectedPlanId) {
-			const activePlan = plans.find((p) => p.id === sub?.planId) || plans.find((p) => Number(p.price) > 0) || plans[0];
-			if (activePlan) {
-				setSelectedPlanId(activePlan.id);
+		if (plans && plans.length > 0) {
+			const queryPlanId = router.query.planId ? String(router.query.planId) : null;
+			const targetPlan = queryPlanId
+				? plans.find((p) => p.id === queryPlanId || p.slug === queryPlanId)
+				: null;
+			if (targetPlan) {
+				setSelectedPlanId(targetPlan.id);
+			} else if (!selectedPlanId) {
+				const activePlan =
+					plans.find((p) => p.id === sub?.planId) ||
+					plans.find((p) => Number(p.price) > 0) ||
+					plans[0];
+				if (activePlan) {
+					setSelectedPlanId(activePlan.id);
+				}
 			}
 		}
-	}, [plans, sub, selectedPlanId]);
+	}, [plans, sub, selectedPlanId, router.query.planId]);
 
 	// Polling effect when authorization is pending
 	useEffect(() => {
@@ -126,9 +140,15 @@ export default function BillingPage() {
 					if (res.isPaid || res.status === "SUCCESS") {
 						setPollingStatus("SUCCESS");
 						toast.success("Payment confirmed! Your subscription is now active.");
-						utils.subscription.getCurrent.invalidate();
-						utils.subscription.getInvoices.invalidate();
+						await Promise.all([
+							utils.subscription.getCurrent.invalidate(),
+							utils.subscription.getInvoices.invalidate(),
+							utils.project.onboardingStatus.invalidate(),
+						]);
 						if (interval) clearInterval(interval);
+						setTimeout(() => {
+							router.push("/dashboard/home");
+						}, 1200);
 					} else if (["CANCELLED", "USERCANCELLED", "REJECTED", "FAILED"].includes(res.status)) {
 						setPollingStatus("FAILED");
 						toast.error(`Payment ${res.status.toLowerCase()}. Please try again.`);
@@ -261,6 +281,28 @@ export default function BillingPage() {
 								</Button>
 							</div>
 						</div>
+
+						{/* Payment Required Gate Notice */}
+						{(sub?.status === "pending_payment" || router.query.pay === "true") && (
+							<div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-destructive">
+								<div className="flex items-center gap-3">
+									<div className="size-9 rounded-lg bg-destructive/20 flex items-center justify-center shrink-0">
+										<Lock className="size-4 text-destructive" />
+									</div>
+									<div>
+										<h4 className="text-sm font-bold text-destructive">
+											Payment Required to Access Cloud Dashboard
+										</h4>
+										<p className="text-xs text-muted-foreground">
+											Your selected plan has a 0-day free trial. Please complete payment below via Mobile Money or Card to activate your subscription and access your cloud workspace.
+										</p>
+									</div>
+								</div>
+								<Badge variant="destructive" className="shrink-0 text-xs">
+									Payment Pending
+								</Badge>
+							</div>
+						)}
 
 						{/* High-Level Overview Stat Cards */}
 						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

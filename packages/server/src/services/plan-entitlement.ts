@@ -242,7 +242,12 @@ export class PlanEntitlementService {
 			}
 		}
 
-		if (!subscription) return null;
+		if (
+			!subscription ||
+			!["trial", "active", "grace_period"].includes(subscription.status)
+		) {
+			return null;
+		}
 
 		const resources: Record<string, number> = {};
 		for (const r of subscription.plan.resources) {

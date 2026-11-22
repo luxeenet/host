@@ -1,4 +1,5 @@
 import { ArrowRightIcon, CheckIcon, Zap, Server, Code, Building, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export const PlanStep = ({ onNext }: Props) => {
+	const router = useRouter();
 	const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 	const [subscribing, setSubscribing] = useState(false);
 
@@ -29,13 +31,18 @@ export const PlanStep = ({ onNext }: Props) => {
 	const utils = api.useUtils();
 
 	const subscribeMutation = api.subscription.create.useMutation({
-		onSuccess: async () => {
-			toast.success("Plan activated! Welcome aboard 🎉");
+		onSuccess: async (result: any) => {
 			await Promise.all([
 				utils.project.onboardingStatus.invalidate(),
 				utils.subscription.getCurrent.invalidate(),
 			]);
-			onNext();
+			if (result?.status === "pending_payment") {
+				toast.info("Payment required to activate this plan. Redirecting to billing...");
+				router.push(`/dashboard/billing?planId=${result.planId}&pay=true`);
+			} else {
+				toast.success("Plan activated! Welcome aboard 🎉");
+				onNext();
+			}
 		},
 		onError: (err) => {
 			toast.error(err.message || "Failed to activate plan");
@@ -178,7 +185,7 @@ export const PlanStep = ({ onNext }: Props) => {
 									) : Number(plan.price) === 0 ? (
 										"Activate Free Plan"
 									) : (
-										"Select Plan"
+										"Pay & Activate Plan"
 									)}
 								</Button>
 							</div>

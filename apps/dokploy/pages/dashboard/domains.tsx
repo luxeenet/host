@@ -603,7 +603,6 @@ export default function CustomDomainsPage() {
 														dom.environmentId ? (
 															<Link
 																href={`/dashboard/project/${dom.projectId}/environment/${dom.environmentId}/services/application/${dom.applicationId}`}
-																as={`/dashboard/app/${dom.applicationId}`}
 																className="text-foreground font-mono font-medium hover:underline inline-flex items-center gap-1"
 															>
 																<Server className="size-3 text-muted-foreground" />

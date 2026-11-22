@@ -338,7 +338,6 @@ export const ShowProjects = () => {
 																? "#"
 																: `/dashboard/project/${project.projectId}/environment/${accessibleEnvironment?.environmentId}`
 														}
-														as={accessibleEnvironment?.environmentId ? `/dashboard/env/${accessibleEnvironment.environmentId}` : undefined}
 														onClick={(e) => {
 															if (hasNoEnvironments) {
 																e.preventDefault();

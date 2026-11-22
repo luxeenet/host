@@ -68,16 +68,7 @@ const Libsql = (
 		enabled: isPlatformAdmin,
 	});
 
-	// Conceal backend routing endpoints from non-admin customers
-	useEffect(() => {
-		if (typeof window !== "undefined" && !isPlatformAdmin && libsqlId) {
-			const queryParams = router.query.tab ? `?tab=${router.query.tab}` : "";
-			const cleanUrl = `/dashboard/database/${libsqlId}${queryParams}`;
-			if (window.location.pathname !== cleanUrl) {
-				window.history.replaceState(null, "", cleanUrl);
-			}
-		}
-	}, [isPlatformAdmin, libsqlId, router.query.tab]);
+
 
 	return (
 		<div className="pb-10">

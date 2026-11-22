@@ -65,12 +65,11 @@ export const CompleteStep = ({ projectId, environmentId, onFinish }: Props) => {
 		projectId && environmentId
 			? `/dashboard/project/${projectId}/environment/${environmentId}`
 			: "/dashboard/projects";
-	const cleanHref = environmentId ? `/dashboard/env/${environmentId}` : "/dashboard/projects";
 
 	const handleFinish = async () => {
 		setIsFinishing(true);
 		await onFinish();
-		router.push(projectHref, cleanHref);
+		router.push(projectHref);
 	};
 
 	return (

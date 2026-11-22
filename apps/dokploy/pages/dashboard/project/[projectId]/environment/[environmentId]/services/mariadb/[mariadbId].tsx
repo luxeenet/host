@@ -70,16 +70,7 @@ const Mariadb = (
 		enabled: isPlatformAdmin,
 	});
 
-	// Conceal backend routing endpoints from non-admin customers
-	useEffect(() => {
-		if (typeof window !== "undefined" && !isPlatformAdmin && mariadbId) {
-			const queryParams = router.query.tab ? `?tab=${router.query.tab}` : "";
-			const cleanUrl = `/dashboard/database/${mariadbId}${queryParams}`;
-			if (window.location.pathname !== cleanUrl) {
-				window.history.replaceState(null, "", cleanUrl);
-			}
-		}
-	}, [isPlatformAdmin, mariadbId, router.query.tab]);
+
 
 	const { data: environments } = api.environment.byProjectId.useQuery({
 		projectId: data?.environment?.projectId || "",

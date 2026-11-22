@@ -107,7 +107,6 @@ export const SearchCommand = () => {
 										onSelect={() => {
 											router.push(
 												`/dashboard/project/${project.projectId}/environment/${defaultEnvironment.environmentId}`,
-												`/dashboard/env/${defaultEnvironment.environmentId}`,
 											);
 											setOpen(false);
 										}}
@@ -129,15 +128,8 @@ export const SearchCommand = () => {
 									<CommandItem
 										key={application.id}
 										onSelect={() => {
-											const asCategory =
-												application.type === "application"
-													? "app"
-													: application.type === "compose"
-														? "compose"
-														: "database";
 											router.push(
 												`/dashboard/project/${project.projectId}/environment/${application.environmentId}/services/${application.type}/${application.id}`,
-												`/dashboard/${asCategory}/${application.id}`,
 											);
 											setOpen(false);
 										}}

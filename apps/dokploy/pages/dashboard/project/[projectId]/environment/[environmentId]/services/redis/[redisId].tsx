@@ -69,16 +69,7 @@ const Redis = (
 		enabled: isPlatformAdmin,
 	});
 
-	// Conceal backend routing endpoints from non-admin customers
-	useEffect(() => {
-		if (typeof window !== "undefined" && !isPlatformAdmin && redisId) {
-			const queryParams = router.query.tab ? `?tab=${router.query.tab}` : "";
-			const cleanUrl = `/dashboard/database/${redisId}${queryParams}`;
-			if (window.location.pathname !== cleanUrl) {
-				window.history.replaceState(null, "", cleanUrl);
-			}
-		}
-	}, [isPlatformAdmin, redisId, router.query.tab]);
+
 	const { data: environments } = api.environment.byProjectId.useQuery({
 		projectId: data?.environment?.projectId || "",
 	});

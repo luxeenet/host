@@ -79,7 +79,6 @@ function getServiceInfo(d: DeploymentRow) {
 			environmentName: app.environment.name,
 			serviceId: app.applicationId,
 			href: `/dashboard/project/${app.environment.project.projectId}/environment/${app.environment.environmentId}/services/application/${app.applicationId}?tab=deployments`,
-			asHref: `/dashboard/app/${app.applicationId}?tab=deployments`,
 		};
 	}
 	if (comp?.environment?.project && comp.environment) {
@@ -93,7 +92,6 @@ function getServiceInfo(d: DeploymentRow) {
 			environmentName: comp.environment.name,
 			serviceId: comp.composeId,
 			href: `/dashboard/project/${comp.environment.project.projectId}/environment/${comp.environment.environmentId}/services/compose/${comp.composeId}?tab=deployments`,
-			asHref: `/dashboard/compose/${comp.composeId}?tab=deployments`,
 		};
 	}
 	return null;
@@ -431,7 +429,7 @@ export function ShowDeploymentsTable() {
 					if (!info) return null;
 					return (
 						<Button variant="ghost" size="sm" asChild>
-							<Link href={info.href} as={info.asHref} className="gap-1">
+							<Link href={info.href} className="gap-1">
 								<ExternalLink className="size-4" />
 								Open
 							</Link>

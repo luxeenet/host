@@ -144,7 +144,7 @@ export default async function handler(
 				.update(schema.payments)
 				.set({
 					status: "failed",
-					failureReason: `SonicPesa status: ${paymentStatus}`,
+					failureReason: `Gateway status: ${paymentStatus}`,
 					updatedAt: new Date(),
 					providerMetadata: body as unknown as Record<string, unknown>,
 				})

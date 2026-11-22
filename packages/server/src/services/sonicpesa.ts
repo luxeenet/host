@@ -97,7 +97,7 @@ export class SonicPesaService {
 			if (!creds.apiKey) {
 				return {
 					status: "error",
-					message: "SonicPesa API Key is not configured. Please add credentials in Admin Settings.",
+					message: "Payment gateway is currently being configured. Please contact support or try again later.",
 				};
 			}
 
@@ -120,7 +120,7 @@ export class SonicPesaService {
 			if (!res.ok || json.status === "error") {
 				return {
 					status: "error",
-					message: json.message || "Failed to create SonicPesa payment order",
+					message: json.message || "Failed to create payment order",
 					raw: json,
 				};
 			}
@@ -140,7 +140,7 @@ export class SonicPesaService {
 			console.error("[SonicPesaService.createOrder] Request failed:", error);
 			return {
 				status: "error",
-				message: error.message || "Network error connecting to SonicPesa",
+				message: error.message || "Network error connecting to payment gateway",
 			};
 		}
 	}
@@ -154,7 +154,7 @@ export class SonicPesaService {
 			if (!creds.apiKey) {
 				return {
 					status: "error",
-					message: "SonicPesa API Key is not configured.",
+					message: "Payment gateway is not configured.",
 					paymentStatus: "UNKNOWN",
 				};
 			}
@@ -215,7 +215,7 @@ export class SonicPesaService {
 			console.error("[SonicPesaService.checkOrderStatus] Request failed:", error);
 			return {
 				status: "error",
-				message: error.message || "Network error checking SonicPesa status",
+				message: error.message || "Network error checking payment status",
 				paymentStatus: "UNKNOWN",
 			};
 		}

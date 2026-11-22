@@ -408,7 +408,7 @@ export default function CheckoutPage() {
 														Visa, Mastercard, UnionPay
 													</p>
 													<span className="text-[11px] text-muted-foreground font-medium block mt-1">
-														Secured by SonicPesa
+														Secured Direct Payment
 													</span>
 												</div>
 											</div>
@@ -937,3 +937,4 @@ export async function getServerSideProps(ctx: GetServerSidePropsContext) {
 
 	return { props: {} };
 }
+

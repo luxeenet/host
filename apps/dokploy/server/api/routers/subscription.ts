@@ -455,7 +455,7 @@ export const subscriptionRouter = createTRPCRouter({
 					code: "BAD_REQUEST",
 					message:
 						orderRes.message ||
-						"Failed to trigger USSD payment prompt with SonicPesa.",
+						"Failed to trigger USSD payment prompt. Please verify your phone number and try again.",
 				});
 			}
 

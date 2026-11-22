@@ -174,7 +174,7 @@ export default function AdminNotificationsPage() {
 		{
 			id: "invoice-notification",
 			title: "Subscription Invoices & Receipts",
-			trigger: "Payment successfully settled via SonicPesa or card billing cycle",
+			trigger: "Payment successfully settled via Mobile Money or card billing cycle",
 			template: "invoice-notification.tsx",
 			status: "Active",
 			category: "Billing",

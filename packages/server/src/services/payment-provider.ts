@@ -235,10 +235,10 @@ class SonicPesaProvider implements PaymentProvider {
 		try {
 			const creds = await getSonicPesaResolvedCredentials();
 			if (!creds.apiKey) {
-				throw new Error("SonicPesa API Key is missing. Please configure SonicPesa in the Admin Dashboard.");
+				throw new Error("Payment gateway is temporarily unavailable. Please contact support.");
 			}
 			if (!creds.enabled) {
-				throw new Error("SonicPesa gateway is currently disabled in Platform Settings.");
+				throw new Error("Payment gateway is currently disabled in Platform Settings.");
 			}
 
 			// Format phone number to 255XXXXXXXXX format
@@ -284,7 +284,7 @@ class SonicPesaProvider implements PaymentProvider {
 			if (!res.ok || data.status !== "success" || !data.data?.order_id) {
 				throw new Error(
 					data.message ||
-						`SonicPesa payment creation failed with status ${res.status}`,
+						`Mobile payment request failed with status ${res.status}`,
 				);
 			}
 
@@ -296,7 +296,7 @@ class SonicPesaProvider implements PaymentProvider {
 			};
 		} catch (err) {
 			throw new Error(
-				`SonicPesa initiate error: ${err instanceof Error ? err.message : String(err)}`,
+				`Payment initiate error: ${err instanceof Error ? err.message : String(err)}`,
 			);
 		}
 	}
@@ -305,7 +305,7 @@ class SonicPesaProvider implements PaymentProvider {
 		try {
 			const creds = await getSonicPesaResolvedCredentials();
 			if (!creds.apiKey) {
-				throw new Error("SonicPesa API Key is missing. Please configure SonicPesa in the Admin Dashboard.");
+				throw new Error("Payment gateway is temporarily unavailable. Please contact support.");
 			}
 
 			const headers: Record<string, string> = {

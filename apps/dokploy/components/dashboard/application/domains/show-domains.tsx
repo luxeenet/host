@@ -13,6 +13,7 @@ import {
 	CheckCircle2,
 	ChevronDown,
 	Cloud,
+	Copy,
 	ExternalLink,
 	GlobeIcon,
 	InfoIcon,
@@ -124,6 +125,13 @@ export const ShowDomains = ({ id, type }: Props) => {
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 	const [rowSelection, setRowSelection] = useState({});
 	const { data: ip } = api.settings.getIp.useQuery();
+	const { data: routingTargetData } = api.domain.getRoutingTarget.useQuery(
+		{
+			applicationId: type === "application" ? id : null,
+			composeId: type === "compose" ? id : null,
+		},
+		{ enabled: !!id, refetchOnWindowFocus: false },
+	);
 	const serviceStatus = type === "application" ? (application as any)?.applicationStatus : (application as any)?.composeStatus;
 	const isDeploying = serviceStatus === "running";
 
@@ -292,7 +300,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 						</CardDescription>
 					</div>
 
-					<div className="flex flex-row gap-2 flex-wrap">
+					<div className="flex flex-row gap-2 flex-wrap items-center">
 						{data && data?.length > 0 && (
 							<>
 								<Button
@@ -311,11 +319,18 @@ export const ShowDomains = ({ id, type }: Props) => {
 									)}
 								</Button>
 								{canCreateDomain && (
-									<AddDomain id={id} type={type}>
-										<Button>
-											<GlobeIcon className="size-4" /> Add Domain
-										</Button>
-									</AddDomain>
+									<>
+										<AddDomain id={id} type={type} initialMode="custom">
+											<Button className="bg-amber-600 hover:bg-amber-500 text-white font-medium shadow-sm">
+												<GlobeIcon className="size-4 mr-1.5" /> Connect Custom Domain
+											</Button>
+										</AddDomain>
+										<AddDomain id={id} type={type} initialMode="platform">
+											<Button variant="outline">
+												<Cloud className="size-4 mr-1.5 text-primary" /> Free Subdomain
+											</Button>
+										</AddDomain>
+									</>
 								)}
 							</>
 						)}
@@ -327,6 +342,45 @@ export const ShowDomains = ({ id, type }: Props) => {
 					</div>
 				)}
 				<CardContent className="flex w-full flex-col gap-4">
+					{/* Upfront DNS Target Quick-Reference */}
+					{canCreateDomain && data && data.length > 0 && (
+						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-800 bg-slate-900/60 text-xs">
+							<div className="flex items-center gap-3">
+								<div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
+									<GlobeIcon className="size-4" />
+								</div>
+								<div className="space-y-0.5">
+									<div className="text-xs font-semibold text-slate-200 flex items-center gap-2">
+										Custom Domain Routing Target
+										<Badge variant="outline" className="text-[10px] bg-slate-800 text-slate-300 border-slate-700 py-0 font-mono">
+											CNAME
+										</Badge>
+									</div>
+									<div className="text-[11px] text-slate-400">
+										Point your custom domain DNS CNAME record to:{" "}
+										<span className="font-mono text-amber-400 font-semibold selection:bg-amber-500/30">
+											{routingTargetData?.target || "cname.hatdot.cloud"}
+										</span>
+									</div>
+								</div>
+							</div>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="h-8 text-xs gap-1.5 border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 shrink-0"
+								onClick={() => {
+									const target = routingTargetData?.target || "cname.hatdot.cloud";
+									navigator.clipboard.writeText(target);
+									toast.success(`Copied "${target}" to clipboard`);
+								}}
+							>
+								<Copy className="size-3.5 text-amber-400" />
+								Copy DNS Target
+							</Button>
+						</div>
+					)}
+
 					{isDeploying && (
 						<div className="flex items-start gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-4 text-cyan-400">
 							<Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-cyan-400" />
@@ -346,18 +400,62 @@ export const ShowDomains = ({ id, type }: Props) => {
 							</span>
 						</div>
 					) : data?.length === 0 ? (
-						<div className="flex w-full flex-col items-center justify-center gap-3 min-h-[40vh]">
-							<GlobeIcon className="size-8 text-muted-foreground" />
-							<span className="text-base text-muted-foreground">
-								To access the application it is required to set at least 1
-								domain
-							</span>
+						<div className="flex w-full flex-col items-center justify-center py-10 px-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center">
+							<div className="p-3.5 rounded-full bg-slate-900 border border-slate-800 text-amber-400 mb-3 shadow-sm">
+								<GlobeIcon className="size-7" />
+							</div>
+							<h3 className="text-lg font-bold text-foreground">Connect a Domain to Go Live</h3>
+							<p className="text-xs text-muted-foreground max-w-md mt-1 mb-6">
+								To make your application accessible to the world, connect your branded custom domain with automated Edge SSL or generate an instant platform subdomain.
+							</p>
 							{canCreateDomain && (
-								<div className="flex flex-row gap-4 flex-wrap">
-									<AddDomain id={id} type={type}>
-										<Button>
-											<GlobeIcon className="size-4" /> Add Domain
-										</Button>
+								<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl w-full text-left">
+									<AddDomain id={id} type={type} initialMode="custom">
+										<div className="group cursor-pointer p-4 rounded-xl border border-slate-800 bg-slate-900/60 hover:border-amber-500/50 hover:bg-slate-900 transition-all flex flex-col justify-between h-full">
+											<div>
+												<div className="flex items-center justify-between mb-2">
+													<div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+														<GlobeIcon className="size-4" />
+													</div>
+													<Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+														Production
+													</Badge>
+												</div>
+												<h4 className="text-sm font-semibold text-foreground group-hover:text-amber-400 transition-colors">
+													Connect Custom Domain
+												</h4>
+												<p className="text-xs text-muted-foreground mt-1">
+													Use your own domain name (e.g. yourcompany.com) with automatic SSL certificates and edge DDoS protection.
+												</p>
+											</div>
+											<Button className="mt-4 w-full bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs h-8">
+												Connect Custom Domain →
+											</Button>
+										</div>
+									</AddDomain>
+
+									<AddDomain id={id} type={type} initialMode="platform">
+										<div className="group cursor-pointer p-4 rounded-xl border border-slate-800 bg-slate-900/60 hover:border-primary/50 hover:bg-slate-900 transition-all flex flex-col justify-between h-full">
+											<div>
+												<div className="flex items-center justify-between mb-2">
+													<div className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/20">
+														<Cloud className="size-4" />
+													</div>
+													<Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+														Instant
+													</Badge>
+												</div>
+												<h4 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+													Free Platform Subdomain
+												</h4>
+												<p className="text-xs text-muted-foreground mt-1">
+													Generate a free test subdomain instantly with zero DNS setup required. Perfect for testing and staging.
+												</p>
+											</div>
+											<Button variant="outline" className="mt-4 w-full text-xs h-8">
+												Generate Subdomain →
+											</Button>
+										</div>
 									</AddDomain>
 								</div>
 							)}

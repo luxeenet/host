@@ -26,6 +26,7 @@ import z from "zod";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
 	Dialog,
 	DialogContent,
@@ -157,13 +158,27 @@ interface Props {
 	type: "application" | "compose";
 	domainId?: string;
 	children: React.ReactNode;
+	initialMode?: "custom" | "platform";
 }
 
-export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
+export const AddDomain = ({
+	id,
+	type,
+	domainId = "",
+	children,
+	initialMode = "custom",
+}: Props) => {
 	const [isOpen, setIsOpen] = useState(false);
+	const [mode, setMode] = useState<"custom" | "platform">(initialMode);
 	const [showAdvanced, setShowAdvanced] = useState(false);
 	const [cacheType, setCacheType] = useState<CacheType>("cache");
 	const [isManualInput, setIsManualInput] = useState(false);
+
+	useEffect(() => {
+		if (isOpen && !domainId) {
+			setMode(initialMode);
+		}
+	}, [isOpen, domainId, initialMode]);
 
 	const utils = api.useUtils();
 	const { data, refetch } = api.domain.one.useQuery(
@@ -430,10 +445,24 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 			<DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2 text-xl">
-						<Globe className="size-5 text-primary" />
-						{domainId ? "Edit Domain" : "Add Domain"}
+						{mode === "custom" || domainId ? (
+							<Globe className="size-5 text-amber-500" />
+						) : (
+							<Cloud className="size-5 text-primary" />
+						)}
+						{domainId
+							? "Edit Domain"
+							: mode === "custom"
+								? "Connect Custom Domain"
+								: "Add Platform Subdomain"}
 					</DialogTitle>
-					<DialogDescription>{dictionary.dialogDescription}</DialogDescription>
+					<DialogDescription>
+						{domainId
+							? "Modify the domain settings for this application."
+							: mode === "custom"
+								? "Connect your branded domain with automated Edge SSL & DDoS protection."
+								: "Generate an instant platform subdomain with zero DNS setup required."}
+					</DialogDescription>
 				</DialogHeader>
 
 				{isError && <AlertBlock type="error">{error?.message}</AlertBlock>}
@@ -445,68 +474,260 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 						onSubmit={form.handleSubmit(onSubmit)}
 						className="grid w-full gap-5"
 					>
-						{/* Host Field */}
-						<FormField
-							control={form.control}
-							name="host"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel className="text-sm font-semibold">
-										Domain Name
-									</FormLabel>
-									<div className="flex gap-2">
-										<FormControl>
-											<Input
-												placeholder="app.yourdomain.com or mywebsite.com"
-												{...field}
-												className="font-mono text-sm"
-											/>
-										</FormControl>
-										<TooltipProvider delayDuration={0}>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														variant="secondary"
-														type="button"
-														isLoading={isLoadingGenerate}
-														onClick={() => {
-															generateDomain({
-																appName: application?.appName || "",
-																serverId: application?.serverId || "",
-															})
-																.then((genDomain) => {
-																	field.onChange(genDomain);
-																	const isPlatform =
-																		!genDomain.includes("sslip.io") &&
-																		!genDomain.includes("traefik.me");
-																	form.setValue("https", isPlatform);
-																	form.setValue(
-																		"certificateType",
-																		isPlatform ? "letsencrypt" : "none",
-																	);
-																})
-																.catch((err) => {
-																	toast.error(err.message);
-																});
-														}}
-													>
-														<Globe className="size-4 mr-1 text-muted-foreground" />
-														<span className="text-xs">Generate Subdomain</span>
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent side="left" className="max-w-56">
-													<p>
-														Generate a stable platform subdomain or development
-														hostname for instant routing.
-													</p>
-												</TooltipContent>
-											</Tooltip>
-										</TooltipProvider>
+						{!domainId && (
+							<div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border border-border">
+								<button
+									type="button"
+									onClick={() => setMode("custom")}
+									className={cn(
+										"flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-lg transition-all",
+										mode === "custom"
+											? "bg-background text-foreground shadow-sm border border-border/50 text-amber-500 font-bold"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+								>
+									<Globe className="size-4 text-amber-500" />
+									Connect Custom Domain
+								</button>
+								<button
+									type="button"
+									onClick={() => setMode("platform")}
+									className={cn(
+										"flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-lg transition-all",
+										mode === "platform"
+											? "bg-background text-foreground shadow-sm border border-border/50 text-primary font-bold"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+								>
+									<Cloud className="size-4 text-primary" />
+									Free Platform Subdomain
+								</button>
+							</div>
+						)}
+
+						{/* Custom Domain Mode */}
+						{!domainId && mode === "custom" ? (
+							<div className="space-y-4">
+								<div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 flex flex-col gap-3">
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-2">
+											<div className="p-1 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
+												<Globe className="size-3.5" />
+											</div>
+											<span className="font-semibold text-xs text-foreground">
+												Step 1: Point Your DNS Record
+											</span>
+										</div>
+										<Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+											Edge Routing
+										</Badge>
 									</div>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
+
+									<p className="text-xs text-muted-foreground leading-relaxed">
+										Add this CNAME record at your DNS provider (e.g., Cloudflare, GoDaddy, Namecheap, Route 53):
+									</p>
+
+									<div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 rounded-lg bg-background/80 border text-xs font-mono">
+										<div className="p-2 rounded bg-muted/40">
+											<span className="text-[10px] uppercase font-sans text-muted-foreground block">
+												Record Type
+											</span>
+											<span className="font-bold text-foreground">CNAME</span>
+										</div>
+										<div className="p-2 rounded bg-muted/40">
+											<span className="text-[10px] uppercase font-sans text-muted-foreground block">
+												Host / Name
+											</span>
+											<span className="font-bold text-foreground">@ or subdomain</span>
+										</div>
+										<div className="flex items-center justify-between p-2 rounded bg-muted/40">
+											<div className="overflow-hidden pr-1">
+												<span className="text-[10px] uppercase font-sans text-muted-foreground block">
+													Target / Value
+												</span>
+												<span className="font-bold text-foreground truncate block">
+													{routingTargetData?.target || "cname.hatdot.cloud"}
+												</span>
+											</div>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon"
+												className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
+												onClick={() =>
+													copyToClipboard(routingTargetData?.target || "cname.hatdot.cloud")
+												}
+											>
+												<Copy className="size-3" />
+											</Button>
+										</div>
+									</div>
+								</div>
+
+								<FormField
+									control={form.control}
+									name="host"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel className="text-sm font-semibold flex items-center justify-between">
+												<span>Step 2: Enter Your Custom Domain</span>
+												<span className="text-xs text-muted-foreground font-normal">
+													e.g. <span className="font-mono text-amber-500/90">app.yourcompany.com</span>
+												</span>
+											</FormLabel>
+											<FormControl>
+												<div className="relative">
+													<Globe className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+													<Input
+														placeholder="app.yourdomain.com or yourbrand.com"
+														{...field}
+														className="pl-9 font-mono text-sm"
+													/>
+												</div>
+											</FormControl>
+											<FormDescription className="text-xs">
+												Enter the fully qualified custom domain you want to connect to this deployment.
+											</FormDescription>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+						) : !domainId && mode === "platform" ? (
+							<div className="space-y-4">
+								<div className="p-4 rounded-xl border border-primary/20 bg-primary/5 flex flex-col gap-3">
+									<div className="flex items-center gap-2">
+										<div className="p-1 rounded-md bg-primary/10 text-primary border border-primary/20">
+											<Cloud className="size-3.5" />
+										</div>
+										<span className="font-semibold text-xs text-foreground">
+											Instant Platform Subdomain
+										</span>
+									</div>
+									<p className="text-xs text-muted-foreground leading-relaxed">
+										HatDot automatically generates a live edge routing subdomain for this deployment. No manual DNS configuration is required.
+									</p>
+								</div>
+
+								<FormField
+									control={form.control}
+									name="host"
+									render={({ field }) => (
+										<FormItem>
+											<FormLabel className="text-sm font-semibold">
+												Platform Subdomain
+											</FormLabel>
+											<div className="flex gap-2">
+												<FormControl>
+													<Input
+														placeholder="Click 'Generate Subdomain' or enter hostname"
+														{...field}
+														className="font-mono text-sm"
+													/>
+												</FormControl>
+												<Button
+													variant="secondary"
+													type="button"
+													isLoading={isLoadingGenerate}
+													onClick={() => {
+														generateDomain({
+															appName: application?.appName || "",
+															serverId: application?.serverId || "",
+														})
+															.then((genDomain) => {
+																field.onChange(genDomain);
+																const isPlatform =
+																	!genDomain.includes("sslip.io") &&
+																	!genDomain.includes("traefik.me");
+																form.setValue("https", isPlatform);
+																form.setValue(
+																	"certificateType",
+																	isPlatform ? "letsencrypt" : "none",
+																);
+																toast.success(`Generated: ${genDomain}`);
+															})
+															.catch((err) => {
+																toast.error(err.message);
+															});
+													}}
+													className="shrink-0"
+												>
+													<Dices className="size-4 mr-1.5 text-primary" />
+													<span className="text-xs">Generate Subdomain</span>
+												</Button>
+											</div>
+											<FormDescription className="text-xs">
+												Development and testing subdomain provided automatically by the edge network.
+											</FormDescription>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+						) : (
+							/* Edit Existing Domain Mode */
+							<FormField
+								control={form.control}
+								name="host"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel className="text-sm font-semibold">
+											Domain Name
+										</FormLabel>
+										<div className="flex gap-2">
+											<FormControl>
+												<Input
+													placeholder="app.yourdomain.com or mywebsite.com"
+													{...field}
+													className="font-mono text-sm"
+												/>
+											</FormControl>
+											<TooltipProvider delayDuration={0}>
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Button
+															variant="secondary"
+															type="button"
+															isLoading={isLoadingGenerate}
+															onClick={() => {
+																generateDomain({
+																	appName: application?.appName || "",
+																	serverId: application?.serverId || "",
+																})
+																	.then((genDomain) => {
+																		field.onChange(genDomain);
+																		const isPlatform =
+																			!genDomain.includes("sslip.io") &&
+																			!genDomain.includes("traefik.me");
+																		form.setValue("https", isPlatform);
+																		form.setValue(
+																			"certificateType",
+																			isPlatform ? "letsencrypt" : "none",
+																		);
+																	})
+																	.catch((err) => {
+																		toast.error(err.message);
+																	});
+															}}
+														>
+															<Globe className="size-4 mr-1 text-muted-foreground" />
+															<span className="text-xs">Generate Subdomain</span>
+														</Button>
+													</TooltipTrigger>
+													<TooltipContent side="left" className="max-w-56">
+														<p>
+															Generate a stable platform subdomain or development
+															hostname for instant routing.
+														</p>
+													</TooltipContent>
+												</Tooltip>
+											</TooltipProvider>
+										</div>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+						)}
 
 						{/* DNS Setup Guide Card for Custom Domains */}
 						{isCustomDomain && dnsInfo && (
@@ -1047,8 +1268,21 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 						</div>
 
 						<DialogFooter className="pt-2">
-							<Button isLoading={isPending} form="hook-form" type="submit">
-								{dictionary.submit}
+							<Button
+								isLoading={isPending}
+								form="hook-form"
+								type="submit"
+								className={
+									!domainId && mode === "custom"
+										? "bg-amber-600 hover:bg-amber-500 text-white font-medium shadow-sm"
+										: undefined
+								}
+							>
+								{domainId
+									? "Update Domain"
+									: mode === "custom"
+										? "Connect Custom Domain"
+										: "Add Subdomain"}
 							</Button>
 						</DialogFooter>
 					</form>

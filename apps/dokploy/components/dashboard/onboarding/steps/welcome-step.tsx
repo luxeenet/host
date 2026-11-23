@@ -25,7 +25,6 @@ const points = [
 		title: "Instant Code-to-Cloud Deployments",
 		description:
 			"Push from GitHub or GitLab with automatic runtime detection, container builds, and zero-downtime rollouts.",
-		accent: "from-amber-500/10 to-amber-500/5 text-amber-400 border-amber-500/20",
 	},
 	{
 		number: "02",
@@ -33,7 +32,6 @@ const points = [
 		title: "One-Click Managed Databases & Stacks",
 		description:
 			"Deploy PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and open-source applications pre-configured with persistent storage.",
-		accent: "from-indigo-500/10 to-indigo-500/5 text-indigo-400 border-indigo-500/20",
 	},
 	{
 		number: "03",
@@ -41,7 +39,6 @@ const points = [
 		title: "High-Performance Cloud & Edge Security",
 		description:
 			"Dedicated private cloud environments, enterprise DDoS protection, and automatic SSL on our global edge network.",
-		accent: "from-emerald-500/10 to-emerald-500/5 text-emerald-400 border-emerald-500/20",
 	},
 ];
 
@@ -53,22 +50,22 @@ export const WelcomeStep = ({ onNext }: Props) => {
 				<div className="flex items-center gap-2">
 					<Badge
 						variant="outline"
-						className="border-amber-500/30 bg-amber-500/10 text-amber-300 text-[11px] font-medium px-2.5 py-0.5 tracking-wide flex items-center gap-1.5"
+						className="border-border bg-muted/50 text-foreground text-xs font-medium px-2.5 py-0.5 tracking-wide flex items-center gap-1.5"
 					>
-						<Sparkles className="size-3 text-amber-400 shrink-0" />
+						<Sparkles className="size-3 text-primary shrink-0" />
 						Welcome to {brand.APP_NAME} Cloud
 					</Badge>
-					<span className="text-[11px] text-muted-foreground flex items-center gap-1">
+					<span className="text-xs text-muted-foreground flex items-center gap-1.5">
 						<span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-						Platform Live
+						Platform Ready
 					</span>
 				</div>
 
 				<h1
-					className={`${displayFont.className} text-4xl sm:text-5xl leading-[1.08] tracking-tight text-foreground font-bold`}
+					className={`${displayFont.className} text-3xl sm:text-4xl leading-tight tracking-tight text-foreground font-bold`}
 				>
 					Let&apos;s get your first app{" "}
-					<span className="text-amber-400 font-extrabold underline decoration-amber-500/30 underline-offset-8">
+					<span className="text-primary font-bold">
 						live
 					</span>
 					.
@@ -81,16 +78,16 @@ export const WelcomeStep = ({ onNext }: Props) => {
 			</div>
 
 			{/* Feature Cards Grid */}
-			<div className="flex flex-col gap-3.5">
+			<div className="flex flex-col gap-3">
 				{points.map((point) => {
 					const IconComponent = point.icon;
 					return (
 						<div
 							key={point.number}
-							className="group relative flex items-start gap-4 p-4 sm:p-5 rounded-2xl border border-border/80 bg-card/60 hover:bg-card/90 hover:border-amber-500/30 transition-all duration-200 shadow-sm"
+							className="group relative flex items-start gap-4 p-4 sm:p-5 rounded-xl border border-border bg-card hover:border-primary/40 transition-all duration-200 shadow-sm text-card-foreground"
 						>
 							<div
-								className={`size-10 sm:size-11 rounded-xl flex items-center justify-center shrink-0 border bg-gradient-to-br ${point.accent}`}
+								className="size-10 sm:size-11 rounded-lg flex items-center justify-center shrink-0 border border-border bg-muted text-foreground"
 							>
 								<IconComponent className="size-5" />
 							</div>
@@ -114,17 +111,17 @@ export const WelcomeStep = ({ onNext }: Props) => {
 			</div>
 
 			{/* Security Trust Seals */}
-			<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl border border-border/60 bg-muted/30 text-[11px] text-muted-foreground">
+			<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground">
 				<div className="flex items-center gap-2">
-					<CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+					<CheckCircle2 className="size-3.5 text-primary shrink-0" />
 					<span>Dedicated Tenant Isolation</span>
 				</div>
 				<div className="flex items-center gap-2">
-					<Lock className="size-3.5 text-amber-400 shrink-0" />
+					<Lock className="size-3.5 text-primary shrink-0" />
 					<span>Automated Edge SSL &amp; HTTPS</span>
 				</div>
 				<div className="flex items-center gap-2">
-					<Zap className="size-3.5 text-indigo-400 shrink-0" />
+					<Zap className="size-3.5 text-primary shrink-0" />
 					<span>99.99% Global Edge SLA</span>
 				</div>
 			</div>
@@ -134,7 +131,7 @@ export const WelcomeStep = ({ onNext }: Props) => {
 				<Button
 					size="lg"
 					onClick={onNext}
-					className="px-8 h-12 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm shadow-lg shadow-amber-600/20 group gap-2"
+					className="px-8 h-11 text-xs font-semibold gap-2"
 				>
 					<span>Get started</span>
 					<ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />

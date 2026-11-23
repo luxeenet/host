@@ -130,20 +130,10 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 	return (
 		<>
 			<div className="fixed inset-0 z-50 flex flex-col md:flex-row bg-background text-foreground">
-				<aside className="relative shrink-0 md:w-[300px] lg:w-[340px] overflow-hidden bg-zinc-950 text-zinc-400">
-					<div
-						className="pointer-events-none absolute inset-0 opacity-[0.07]"
-						style={{
-							backgroundImage:
-								"linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
-							backgroundSize: "28px 28px",
-						}}
-					/>
-					<div className="pointer-events-none absolute -top-24 -left-24 size-72 rounded-full bg-amber-500/10 blur-[100px]" />
-
+				<aside className="relative shrink-0 md:w-[300px] lg:w-[340px] overflow-hidden bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
 					<div className="relative flex md:h-full flex-col p-6 lg:p-8">
 						<div className="flex items-center justify-between md:block">
-							<div className="flex items-center gap-2.5 text-zinc-50 [&_path]:!fill-white [&_path]:!stroke-white">
+							<div className="flex items-center gap-2.5 text-sidebar-foreground">
 								<Logo className="size-7" />
 								<span className="text-lg font-semibold tracking-tight">
 									{brand.APP_NAME}
@@ -153,7 +143,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 								<button
 									type="button"
 									onClick={() => setSkipAllOpen(true)}
-									className="font-mono text-[11px] uppercase tracking-wider text-zinc-400 hover:text-zinc-100 transition-colors md:hidden"
+									className="text-xs text-muted-foreground hover:text-foreground transition-colors md:hidden"
 								>
 									Skip all
 								</button>
@@ -162,13 +152,13 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 
 						{/* Active Plan Context in Sidebar */}
 						{activePlanName && (
-							<div className="mt-6 p-3 rounded-xl bg-zinc-900/80 border border-zinc-800/80 text-xs text-zinc-300">
-								<div className="flex items-center justify-between text-[11px] text-zinc-400">
+							<div className="mt-6 p-3 rounded-xl bg-card border border-border text-xs text-card-foreground">
+								<div className="flex items-center justify-between text-[11px] text-muted-foreground">
 									<span>Selected Plan</span>
-									<span className="text-amber-400 font-semibold">{activePlanName}</span>
+									<span className="text-foreground font-semibold">{activePlanName}</span>
 								</div>
-								<div className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-400">
-									<Zap className="size-3 text-amber-400 shrink-0" />
+								<div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+									<Zap className="size-3 text-primary shrink-0" />
 									<span>
 										{activeRamMb === -1 ? "Unlimited" : `${activeRamMb}MB`} RAM • Edge Routing
 									</span>
@@ -177,8 +167,8 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 						)}
 
 						{/* Enterprise Security Badge */}
-						<div className="mt-3 p-2.5 rounded-xl bg-zinc-900/40 border border-zinc-800/60 text-[10px] text-zinc-400 flex items-center gap-2">
-							<ShieldCheck className="size-3.5 text-emerald-400 shrink-0" />
+						<div className="mt-3 p-2.5 rounded-xl bg-muted/40 border border-border text-[10px] text-muted-foreground flex items-center gap-2">
+							<ShieldCheck className="size-3.5 text-primary shrink-0" />
 							<span>Dedicated Private Cloud • Encrypted Isolation</span>
 						</div>
 
@@ -194,14 +184,14 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 												<span
 													className={`flex items-center justify-center font-mono text-[11px] tabular-nums size-5 rounded-full ${
 														isCurrent
-															? "bg-amber-500 text-zinc-950 font-bold"
+															? "bg-primary text-primary-foreground font-semibold"
 															: isDone
-																? "text-zinc-100 bg-zinc-800"
-																: "text-zinc-500 bg-zinc-900"
+																? "bg-primary/15 text-primary border border-primary/30 font-medium"
+																: "text-muted-foreground bg-muted"
 													}`}
 												>
 													{isDone ? (
-														<CheckIcon className="size-3 text-white" />
+														<CheckIcon className="size-3 text-primary" />
 													) : (
 														String(index + 1).padStart(2, "0")
 													)}
@@ -209,7 +199,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 												{index < visibleStepIds.length - 1 && (
 													<span
 														className={`w-px flex-1 min-h-7 my-1.5 ${
-															isDone ? "bg-zinc-500" : "bg-zinc-800"
+															isDone ? "bg-primary/40" : "bg-border"
 														}`}
 													/>
 												)}
@@ -218,14 +208,14 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 												<button
 													type="button"
 													onClick={() => stepper.goTo(step.id)}
-													className="text-sm font-medium transition-colors pb-6 last:pb-0 text-zinc-200 hover:text-white text-left"
+													className="text-sm font-medium transition-colors pb-6 last:pb-0 text-foreground/80 hover:text-foreground text-left"
 												>
 													{step.title}
 												</button>
 											) : (
 												<p
 													className={`text-sm font-medium transition-colors pb-6 last:pb-0 ${
-														isCurrent ? "text-white font-semibold" : "text-zinc-500"
+														isCurrent ? "text-foreground font-semibold" : "text-muted-foreground"
 													}`}
 												>
 													{step.title}
@@ -237,12 +227,12 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 							</ol>
 						</Scoped>
 
-						<div className="hidden md:flex flex-col gap-4 mt-auto pt-8 border-t border-zinc-800">
+						<div className="hidden md:flex flex-col gap-4 mt-auto pt-8 border-t border-border">
 							{!isLastVisible && !needsPlan && (
 								<button
 									type="button"
 									onClick={() => setSkipAllOpen(true)}
-									className="w-fit font-mono text-[11px] uppercase tracking-wider text-zinc-400 hover:text-zinc-100 transition-colors"
+									className="w-fit text-xs text-muted-foreground hover:text-foreground transition-colors"
 								>
 									Skip all →
 								</button>
@@ -289,10 +279,10 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 			</div>
 
 			<Dialog open={skipAllOpen} onOpenChange={setSkipAllOpen}>
-				<DialogContent className="bg-zinc-950 border-zinc-800 text-white">
+				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
 						<DialogTitle>Skip onboarding?</DialogTitle>
-						<DialogDescription className="text-zinc-400 text-xs">
+						<DialogDescription className="text-xs">
 							If this is your first time using {brand.APP_NAME}, we recommend completing
 							these steps – it only takes a couple of minutes to set up your project
 							and deploy your first live application.
@@ -301,14 +291,14 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 					<DialogFooter className="gap-2">
 						<Button
 							variant="outline"
+							size="sm"
 							onClick={() => setSkipAllOpen(false)}
-							className="border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs"
 						>
 							Continue setup
 						</Button>
 						<Button
+							size="sm"
 							onClick={handleSkipAll}
-							className="bg-amber-600 hover:bg-amber-500 text-white text-xs"
 						>
 							Skip anyway
 						</Button>

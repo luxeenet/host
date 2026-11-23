@@ -91,16 +91,14 @@ export const CompleteStep = ({ projectId, environmentId, onFinish }: Props) => {
 				<div className="flex items-center gap-2">
 					<Badge
 						variant="outline"
-						className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[11px] font-medium px-2.5 py-0.5 tracking-wide flex items-center gap-1.5"
+						className="border-border bg-muted/50 text-foreground text-xs font-medium px-2.5 py-0.5 tracking-wide flex items-center gap-1.5"
 					>
-						<CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+						<CheckCircle2 className="size-3 text-primary shrink-0" />
 						Setup Complete • Environment Active
 					</Badge>
 				</div>
 
-				<h1
-					className={`${displayFont.className} text-4xl sm:text-5xl leading-[1.08] tracking-tight text-foreground font-bold`}
-				>
+				<h1 className={`${displayFont.className} text-3xl sm:text-4xl text-foreground font-bold tracking-tight`}>
 					You&apos;re live on {brand.APP_NAME}!
 				</h1>
 
@@ -116,11 +114,11 @@ export const CompleteStep = ({ projectId, environmentId, onFinish }: Props) => {
 					return (
 						<div
 							key={feature.title}
-							className="p-4 rounded-2xl border border-border/80 bg-card/60 hover:bg-card/90 transition-all flex flex-col justify-between"
+							className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-all flex flex-col justify-between text-card-foreground shadow-sm"
 						>
 							<div>
 								<div className="flex items-center justify-between mb-2">
-									<div className="size-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+									<div className="size-8 rounded-lg bg-muted border border-border text-foreground flex items-center justify-center">
 										<IconComponent className="size-4" />
 									</div>
 									<span className="font-mono text-[10px] text-muted-foreground font-semibold">
@@ -140,12 +138,12 @@ export const CompleteStep = ({ projectId, environmentId, onFinish }: Props) => {
 			</div>
 
 			{/* Enterprise Trust Confirmation */}
-			<div className="p-3.5 rounded-xl border border-border/60 bg-muted/30 text-[11px] text-muted-foreground flex items-center justify-between">
+			<div className="p-3.5 rounded-xl border border-border bg-muted/40 text-xs text-muted-foreground flex items-center justify-between">
 				<div className="flex items-center gap-2">
-					<ShieldCheck className="size-4 text-emerald-400 shrink-0" />
+					<ShieldCheck className="size-4 text-primary shrink-0" />
 					<span>Dedicated Private Cloud • Encrypted at Rest &amp; Transit</span>
 				</div>
-				<span className="text-emerald-400 font-semibold font-mono text-[10px]">
+				<span className="text-primary font-semibold font-mono text-[11px]">
 					99.99% SLA
 				</span>
 			</div>
@@ -154,7 +152,7 @@ export const CompleteStep = ({ projectId, environmentId, onFinish }: Props) => {
 			<div className="flex items-center gap-3 pt-2">
 				<Button
 					size="lg"
-					className="px-8 h-12 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs shadow-lg shadow-amber-600/20 group gap-2"
+					className="w-fit px-8 h-10 text-xs font-semibold gap-2"
 					isLoading={isFinishing}
 					onClick={handleFinish}
 				>

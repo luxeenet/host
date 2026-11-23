@@ -147,62 +147,60 @@ export default function ResetPasswordPage({ tokenResetPassword }: Props) {
 								whitelabeling?.loginLogoUrl || whitelabeling?.logoUrl || undefined
 							}
 						/>
-						<span className="font-bold text-lg text-white tracking-tight">
+						<span className="font-bold text-lg text-foreground tracking-tight">
 							{appName}
 						</span>
 					</Link>
 
-					<div className="w-full rounded-2xl bg-slate-900/70 border border-slate-800 shadow-xl p-6 sm:p-8 backdrop-blur-sm">
+					<div className="w-full rounded-xl bg-card border border-border shadow-sm p-6 sm:p-8 text-card-foreground">
 						{isSuccess ? (
 							/* Success State */
 							<div className="flex flex-col items-center text-center space-y-4">
-								<div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-									<CheckCircle2 className="w-7 h-7" />
+								<div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+									<CheckCircle2 className="w-6 h-6" />
 								</div>
 								<div className="space-y-1.5">
-									<CardTitle className="text-xl font-bold text-white">
+									<CardTitle className="text-xl font-bold text-foreground">
 										Password Reset Complete
 									</CardTitle>
-									<CardDescription className="text-slate-400 text-xs">
+									<CardDescription className="text-muted-foreground text-xs">
 										Your credentials have been securely updated. You are being redirected to the sign-in screen.
 									</CardDescription>
 								</div>
-								<Link
-									href="/login"
-									className="w-full inline-flex items-center justify-center bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs h-10 rounded-lg gap-2 mt-2 shadow-lg shadow-amber-600/20"
-								>
-									Continue to Login <ArrowRight className="w-4 h-4" />
-								</Link>
+								<Button asChild className="w-full mt-2">
+									<Link href="/login">
+										Continue to Login <ArrowRight className="w-4 h-4 ml-1" />
+									</Link>
+								</Button>
 							</div>
 						) : !token ? (
 							/* Invalid/Missing Token State */
 							<div className="flex flex-col items-center text-center space-y-4">
-								<div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-									<AlertTriangle className="w-7 h-7" />
+								<div className="w-12 h-12 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center text-destructive">
+									<AlertTriangle className="w-6 h-6" />
 								</div>
 								<div className="space-y-1.5">
-									<CardTitle className="text-xl font-bold text-white">
+									<CardTitle className="text-xl font-bold text-foreground">
 										Invalid or Expired Link
 									</CardTitle>
-									<CardDescription className="text-slate-400 text-xs">
+									<CardDescription className="text-muted-foreground text-xs">
 										This password reset link is invalid, incomplete, or has already expired. Password reset links remain active for 1 hour from issuance.
 									</CardDescription>
 								</div>
-								<Link
-									href="/send-reset-password"
-									className="w-full inline-flex items-center justify-center bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs h-10 rounded-lg gap-2 shadow-lg shadow-amber-600/20"
-								>
-									Request New Reset Link
-								</Link>
+								<Button asChild variant="outline" className="w-full">
+									<Link href="/send-reset-password">
+										Request New Reset Link
+									</Link>
+								</Button>
 							</div>
 						) : (
 							/* Set New Password Form */
 							<div className="space-y-5">
 								<div className="space-y-1.5 text-center sm:text-left">
-									<CardTitle className="text-xl font-bold text-white tracking-tight">
+									<CardTitle className="text-xl font-bold text-foreground tracking-tight">
 										Set New Password
 									</CardTitle>
-									<CardDescription className="text-slate-400 text-xs">
+									<CardDescription className="text-muted-foreground text-xs">
 										Choose a strong, unique password to secure your account and cloud resources.
 									</CardDescription>
 								</div>
@@ -223,23 +221,23 @@ export default function ResetPasswordPage({ tokenResetPassword }: Props) {
 											name="password"
 											render={({ field }) => (
 												<FormItem className="space-y-1.5">
-													<FormLabel className="text-xs text-slate-300 font-medium">
+													<FormLabel className="text-xs text-foreground font-medium">
 														New Password
 													</FormLabel>
 													<FormControl>
 														<div className="relative">
-															<Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+															<Lock className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
 															<Input
 																type={showPassword ? "text" : "password"}
 																placeholder="Enter at least 8 characters"
 																autoComplete="new-password"
-																className="pl-9 pr-9 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 text-xs h-10 focus:border-amber-500"
+																className="pl-9 pr-9 bg-card border-border text-foreground text-xs h-10"
 																{...field}
 															/>
 															<button
 																type="button"
 																onClick={() => setShowPassword(!showPassword)}
-																className="absolute right-3 top-3 text-slate-500 hover:text-slate-300"
+																className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
 															>
 																{showPassword ? (
 																	<EyeOff className="w-4 h-4" />
@@ -259,17 +257,17 @@ export default function ResetPasswordPage({ tokenResetPassword }: Props) {
 											name="confirmPassword"
 											render={({ field }) => (
 												<FormItem className="space-y-1.5">
-													<FormLabel className="text-xs text-slate-300 font-medium">
+													<FormLabel className="text-xs text-foreground font-medium">
 														Confirm New Password
 													</FormLabel>
 													<FormControl>
 														<div className="relative">
-															<Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+															<Lock className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
 															<Input
 																type={showPassword ? "text" : "password"}
 																placeholder="Repeat new password"
 																autoComplete="new-password"
-																className="pl-9 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 text-xs h-10 focus:border-amber-500"
+																className="pl-9 bg-card border-border text-foreground text-xs h-10"
 																{...field}
 															/>
 														</div>
@@ -280,19 +278,19 @@ export default function ResetPasswordPage({ tokenResetPassword }: Props) {
 										/>
 
 										{/* Password Strength Checklist */}
-										<div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-1.5 text-[11px]">
-											<div className="text-slate-400 font-medium mb-1">
+										<div className="p-3 rounded-xl bg-muted/40 border border-border space-y-1.5 text-xs">
+											<div className="text-muted-foreground font-medium mb-1">
 												Password security criteria:
 											</div>
-											<div className={`flex items-center gap-1.5 ${hasLength ? "text-emerald-400" : "text-slate-500"}`}>
+											<div className={`flex items-center gap-1.5 ${hasLength ? "text-primary font-medium" : "text-muted-foreground"}`}>
 												<ShieldCheck className="w-3.5 h-3.5" />
 												<span>At least 8 characters long</span>
 											</div>
-											<div className={`flex items-center gap-1.5 ${hasNumberOrSymbol ? "text-emerald-400" : "text-slate-500"}`}>
+											<div className={`flex items-center gap-1.5 ${hasNumberOrSymbol ? "text-primary font-medium" : "text-muted-foreground"}`}>
 												<ShieldCheck className="w-3.5 h-3.5" />
 												<span>Includes a number or special symbol</span>
 											</div>
-											<div className={`flex items-center gap-1.5 ${hasUpperAndLower ? "text-emerald-400" : "text-slate-500"}`}>
+											<div className={`flex items-center gap-1.5 ${hasUpperAndLower ? "text-primary font-medium" : "text-muted-foreground"}`}>
 												<ShieldCheck className="w-3.5 h-3.5" />
 												<span>Mix of lowercase and uppercase letters</span>
 											</div>
@@ -301,7 +299,7 @@ export default function ResetPasswordPage({ tokenResetPassword }: Props) {
 										<Button
 											type="submit"
 											disabled={isLoading}
-											className="w-full bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs h-10 shadow-lg shadow-amber-600/20"
+											className="w-full text-xs h-10 font-semibold"
 										>
 											{isLoading ? (
 												<>
@@ -318,12 +316,12 @@ export default function ResetPasswordPage({ tokenResetPassword }: Props) {
 						)}
 
 						{/* Bottom Back to Login */}
-						<div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-center text-xs">
+						<div className="mt-6 pt-4 border-t border-border flex items-center justify-center text-xs">
 							<Link
 								href="/login"
-								className="text-slate-400 hover:text-white transition-colors"
+								className="text-muted-foreground hover:text-foreground transition-colors"
 							>
-								Remember your password? <span className="text-amber-400 font-medium">Log in</span>
+								Remember your password? <span className="text-primary font-medium">Log in</span>
 							</Link>
 						</div>
 					</div>

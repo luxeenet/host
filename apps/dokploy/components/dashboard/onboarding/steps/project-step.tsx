@@ -85,14 +85,16 @@ export const ProjectStep = ({ onNext, plainTitle }: Props) => {
 				<div className="flex items-center gap-2">
 					<Badge
 						variant="outline"
-						className="border-amber-500/30 bg-amber-500/10 text-amber-300 text-[11px] font-medium px-2.5 py-0.5 tracking-wide flex items-center gap-1.5"
+						className="border-border bg-muted/50 text-foreground text-xs font-medium px-2.5 py-0.5 tracking-wide flex items-center gap-1.5"
 					>
-						<FolderGit2 className="size-3 text-amber-400 shrink-0" />
+						<FolderGit2 className="size-3 text-primary shrink-0" />
 						Step 02 — Cloud Workspace
 					</Badge>
 				</div>
 
-				<h1 className={titleClassName}>Create your first project.</h1>
+				<h1 className={`${titleClassName} text-3xl sm:text-4xl text-foreground font-bold tracking-tight`}>
+					Create your first project.
+				</h1>
 				<p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
 					Projects organize your web applications, databases, environment variables, and domains
 					within an isolated private tenant space.
@@ -101,8 +103,8 @@ export const ProjectStep = ({ onNext, plainTitle }: Props) => {
 
 			{/* Quick Preset Selector */}
 			<div className="space-y-2">
-				<span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-					<Sparkles className="size-3 text-amber-400" />
+				<span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+					<Sparkles className="size-3 text-primary" />
 					Quick templates
 				</span>
 				<div className="grid grid-cols-2 gap-2">
@@ -111,10 +113,10 @@ export const ProjectStep = ({ onNext, plainTitle }: Props) => {
 							key={p.name}
 							type="button"
 							onClick={() => applyPreset(p)}
-							className="text-left p-2.5 rounded-xl border border-border/80 bg-card/60 hover:bg-card/90 hover:border-amber-500/30 transition-all text-xs"
+							className="text-left p-3 rounded-xl border border-border bg-card hover:bg-accent/50 hover:border-primary/40 transition-all text-xs text-card-foreground"
 						>
 							<div className="font-semibold text-foreground">{p.name}</div>
-							<div className="text-[10px] text-muted-foreground truncate">
+							<div className="text-[11px] text-muted-foreground truncate mt-0.5">
 								{p.description}
 							</div>
 						</button>
@@ -136,7 +138,7 @@ export const ProjectStep = ({ onNext, plainTitle }: Props) => {
 								<FormControl>
 									<Input
 										placeholder="e.g. Production App"
-										className="h-11 bg-card/80 border-border focus:border-amber-500/60"
+										className="h-10 bg-card border-border"
 										{...field}
 									/>
 								</FormControl>
@@ -157,7 +159,7 @@ export const ProjectStep = ({ onNext, plainTitle }: Props) => {
 								<FormControl>
 									<Textarea
 										placeholder="What will run in this workspace?"
-										className="resize-none h-20 bg-card/80 border-border focus:border-amber-500/60 text-xs"
+										className="resize-none h-20 bg-card border-border text-xs"
 										{...field}
 									/>
 								</FormControl>
@@ -167,8 +169,8 @@ export const ProjectStep = ({ onNext, plainTitle }: Props) => {
 					/>
 
 					{/* Security Notice */}
-					<div className="flex items-start gap-2.5 p-3 rounded-xl bg-muted/40 border border-border/60 text-[11px] text-muted-foreground">
-						<Lock className="size-3.5 text-amber-400 shrink-0 mt-0.5" />
+					<div className="flex items-start gap-2.5 p-3 rounded-xl bg-muted/40 border border-border text-xs text-muted-foreground">
+						<Lock className="size-3.5 text-primary shrink-0 mt-0.5" />
 						<span>
 							Each project operates in an isolated private cloud environment with dedicated
 							secrets management and automated SSL routing.
@@ -179,7 +181,7 @@ export const ProjectStep = ({ onNext, plainTitle }: Props) => {
 						type="submit"
 						size="lg"
 						isLoading={isPending}
-						className="w-fit px-8 h-11 mt-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs shadow-lg shadow-amber-600/20 group gap-2"
+						className="w-fit px-8 h-10 mt-2 text-xs font-semibold gap-2"
 					>
 						<span>Create project &amp; continue</span>
 						<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" />

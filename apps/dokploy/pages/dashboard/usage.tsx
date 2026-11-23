@@ -165,9 +165,9 @@ export default function ResourceUsagePage() {
 
 				{/* Upgrade Advisory Banner if nearing limits */}
 				{isNearAnyLimit && (
-					<div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+					<div className="p-4 rounded-xl bg-muted/40 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 						<div className="flex items-start gap-3">
-							<AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+							<AlertTriangle className="size-5 text-primary shrink-0 mt-0.5" />
 							<div>
 								<h3 className="text-sm font-semibold text-foreground">
 									Approaching Subscription Quota Limits
@@ -180,9 +180,9 @@ export default function ResourceUsagePage() {
 						<Link href="/dashboard/billing" className="shrink-0">
 							<Button
 								size="sm"
-								className="bg-amber-600 hover:bg-amber-500 text-foreground text-xs h-8 px-4 gap-1.5 font-semibold"
+								className="text-xs h-8 px-4 gap-1.5"
 							>
-								View Upgrades <ArrowUpRight className="w-3.5 h-3.5" />
+								View Upgrades <ArrowUpRight className="size-3.5" />
 							</Button>
 						</Link>
 					</div>

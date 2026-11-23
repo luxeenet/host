@@ -125,41 +125,41 @@ export default function SendResetPasswordPage() {
 								whitelabeling?.loginLogoUrl || whitelabeling?.logoUrl || undefined
 							}
 						/>
-						<span className="font-bold text-lg text-white tracking-tight">
+						<span className="font-bold text-lg text-foreground tracking-tight">
 							{appName}
 						</span>
 					</Link>
 
-					<div className="w-full rounded-2xl bg-slate-900/70 border border-slate-800 shadow-xl p-6 sm:p-8 backdrop-blur-sm">
+					<div className="w-full rounded-xl bg-card border border-border shadow-sm p-6 sm:p-8 text-card-foreground">
 						{sentEmail ? (
 							/* Success Confirmation State */
 							<div className="flex flex-col items-center text-center space-y-4">
-								<div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-									<CheckCircle2 className="w-7 h-7" />
+								<div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+									<CheckCircle2 className="w-6 h-6" />
 								</div>
 
 								<div className="space-y-1.5">
-									<CardTitle className="text-xl font-bold text-white">
+									<CardTitle className="text-xl font-bold text-foreground">
 										Check Your Email
 									</CardTitle>
-									<CardDescription className="text-slate-400 text-xs leading-relaxed">
+									<CardDescription className="text-muted-foreground text-xs leading-relaxed">
 										We have dispatched a password reset link to:
 										<br />
-										<span className="font-semibold text-slate-200 text-sm font-mono mt-1 inline-block">
+										<span className="font-semibold text-foreground text-sm font-mono mt-1 inline-block">
 											{sentEmail}
 										</span>
 									</CardDescription>
 								</div>
 
-								<div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800/80 text-left text-xs text-slate-400 space-y-2 w-full">
+								<div className="p-3.5 rounded-xl bg-muted/40 border border-border text-left text-xs text-muted-foreground space-y-2 w-full">
 									<div className="flex items-start gap-2">
-										<ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+										<ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
 										<span>
 											For your security, the reset link is valid for <strong>1 hour</strong>.
 										</span>
 									</div>
 									<div className="flex items-start gap-2">
-										<AlertCircle className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+										<AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
 										<span>
 											Be sure to inspect your spam or junk folder if the email doesn&apos;t arrive within 2 minutes.
 										</span>
@@ -172,12 +172,12 @@ export default function SendResetPasswordPage() {
 										variant="outline"
 										onClick={handleResend}
 										disabled={cooldown > 0 || isLoading}
-										className="w-full border-slate-800 text-slate-300 hover:bg-slate-800 text-xs h-10 gap-2"
+										className="w-full text-xs h-10 gap-2"
 									>
 										{isLoading ? (
 											<Loader2 className="w-3.5 h-3.5 animate-spin" />
 										) : (
-											<RefreshCw className={`w-3.5 h-3.5 ${cooldown > 0 ? "text-slate-500" : "text-amber-400"}`} />
+											<RefreshCw className="w-3.5 h-3.5" />
 										)}
 										{cooldown > 0
 											? `Resend available in ${cooldown}s`
@@ -191,7 +191,7 @@ export default function SendResetPasswordPage() {
 											setSentEmail(null);
 											form.reset();
 										}}
-										className="w-full text-slate-400 hover:text-white text-xs"
+										className="w-full text-muted-foreground hover:text-foreground text-xs"
 									>
 										Try another email address
 									</Button>
@@ -201,10 +201,10 @@ export default function SendResetPasswordPage() {
 							/* Request Form State */
 							<div className="space-y-5">
 								<div className="space-y-1.5 text-center sm:text-left">
-									<CardTitle className="text-xl font-bold text-white tracking-tight">
+									<CardTitle className="text-xl font-bold text-foreground tracking-tight">
 										Forgot Password
 									</CardTitle>
-									<CardDescription className="text-slate-400 text-xs">
+									<CardDescription className="text-muted-foreground text-xs">
 										Enter your registered email address and we will send you a secure link to reset your account credentials.
 									</CardDescription>
 								</div>
@@ -225,18 +225,18 @@ export default function SendResetPasswordPage() {
 											name="email"
 											render={({ field }) => (
 												<FormItem className="space-y-1.5">
-													<FormLabel className="text-xs text-slate-300 font-medium">
+													<FormLabel className="text-xs text-foreground font-medium">
 														Account Email Address
 													</FormLabel>
 													<FormControl>
 														<div className="relative">
-															<Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+															<Mail className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
 															<Input
 																type="email"
 																placeholder="name@company.com"
 																maxLength={255}
 																autoComplete="email"
-																className="pl-9 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 text-xs h-10 focus:border-amber-500"
+																className="pl-9 bg-card border-border text-foreground text-xs h-10"
 																{...field}
 															/>
 														</div>
@@ -249,7 +249,7 @@ export default function SendResetPasswordPage() {
 										<Button
 											type="submit"
 											disabled={isLoading}
-											className="w-full bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs h-10 shadow-lg shadow-amber-600/20"
+											className="w-full text-xs h-10 font-semibold"
 										>
 											{isLoading ? (
 												<>
@@ -266,10 +266,10 @@ export default function SendResetPasswordPage() {
 						)}
 
 						{/* Bottom Navigation */}
-						<div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-center text-xs">
+						<div className="mt-6 pt-4 border-t border-border flex items-center justify-center text-xs">
 							<Link
 								href="/login"
-								className="text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors font-medium"
+								className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 transition-colors font-medium"
 							>
 								<ArrowLeft className="w-3.5 h-3.5" />
 								Back to Login

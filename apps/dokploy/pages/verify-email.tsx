@@ -143,21 +143,21 @@ export default function VerifyEmailPage() {
 								whitelabeling?.loginLogoUrl || whitelabeling?.logoUrl || undefined
 							}
 						/>
-						<span className="font-bold text-lg text-white tracking-tight">
+						<span className="font-bold text-lg text-foreground tracking-tight">
 							{appName}
 						</span>
 					</Link>
 
-					<div className="w-full rounded-2xl bg-slate-900/70 border border-slate-800 shadow-xl p-6 sm:p-8 backdrop-blur-sm">
+					<div className="w-full rounded-xl bg-card border border-border shadow-sm p-6 sm:p-8 text-card-foreground">
 						{status === "verifying" ? (
 							/* Verifying in Progress */
 							<div className="flex flex-col items-center text-center space-y-4 py-4">
-								<Loader2 className="w-10 h-10 animate-spin text-amber-400" />
+								<Loader2 className="w-10 h-10 animate-spin text-primary" />
 								<div className="space-y-1">
-									<CardTitle className="text-xl font-bold text-white">
+									<CardTitle className="text-xl font-bold text-foreground">
 										Verifying Your Email
 									</CardTitle>
-									<CardDescription className="text-slate-400 text-xs">
+									<CardDescription className="text-muted-foreground text-xs">
 										Please wait a moment while we validate your security token...
 									</CardDescription>
 								</div>
@@ -165,41 +165,40 @@ export default function VerifyEmailPage() {
 						) : status === "success" ? (
 							/* Verified Successfully */
 							<div className="flex flex-col items-center text-center space-y-4">
-								<div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-									<CheckCircle2 className="w-7 h-7" />
+								<div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+									<CheckCircle2 className="w-6 h-6" />
 								</div>
 								<div className="space-y-1.5">
-									<CardTitle className="text-xl font-bold text-white">
+									<CardTitle className="text-xl font-bold text-foreground">
 										Email Verified Successfully!
 									</CardTitle>
-									<CardDescription className="text-slate-400 text-xs leading-relaxed">
+									<CardDescription className="text-muted-foreground text-xs leading-relaxed">
 										Your email address is now confirmed. Your {appName} cloud account is fully verified and active.
 									</CardDescription>
 								</div>
 
-								<div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300 w-full flex items-center gap-2">
-									<ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+								<div className="p-3 rounded-xl bg-muted/40 border border-border text-xs text-muted-foreground w-full flex items-center gap-2">
+									<ShieldCheck className="w-4 h-4 text-primary shrink-0" />
 									<span>Account security &amp; notifications unlocked.</span>
 								</div>
 
-								<Link
-									href="/dashboard/home"
-									className="w-full inline-flex items-center justify-center bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs h-10 rounded-lg gap-2 mt-2 shadow-lg shadow-amber-600/20"
-								>
-									Go to Dashboard <ArrowRight className="w-4 h-4" />
-								</Link>
+								<Button asChild className="w-full mt-2">
+									<Link href="/dashboard/home">
+										Go to Dashboard <ArrowRight className="w-4 h-4 ml-1" />
+									</Link>
+								</Button>
 							</div>
 						) : status === "error" ? (
 							/* Token Expired or Invalid */
 							<div className="flex flex-col items-center text-center space-y-4">
-								<div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-									<AlertCircle className="w-7 h-7" />
+								<div className="w-12 h-12 rounded-full bg-destructive/10 border border-destructive/20 flex items-center justify-center text-destructive">
+									<AlertCircle className="w-6 h-6" />
 								</div>
 								<div className="space-y-1.5">
-									<CardTitle className="text-xl font-bold text-white">
+									<CardTitle className="text-xl font-bold text-foreground">
 										Verification Failed
 									</CardTitle>
-									<CardDescription className="text-slate-400 text-xs leading-relaxed">
+									<CardDescription className="text-muted-foreground text-xs leading-relaxed">
 										{errorMessage ||
 											"This verification token is invalid or has expired."}
 									</CardDescription>
@@ -212,14 +211,14 @@ export default function VerifyEmailPage() {
 											placeholder="Enter your email"
 											value={manualEmail}
 											onChange={(e) => setManualEmail(e.target.value)}
-											className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 text-xs h-10"
+											className="bg-card border-border text-foreground text-xs h-10"
 										/>
 									)}
 
 									<Button
 										onClick={handleResend}
 										disabled={isResending || cooldown > 0}
-										className="w-full bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs h-10 gap-2 shadow-lg shadow-amber-600/20"
+										className="w-full text-xs h-10 gap-2 font-semibold"
 									>
 										{isResending ? (
 											<Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -235,23 +234,23 @@ export default function VerifyEmailPage() {
 						) : (
 							/* Idle State: Instructions to verify */
 							<div className="flex flex-col items-center text-center space-y-4">
-								<div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-									<Mail className="w-7 h-7" />
+								<div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+									<Mail className="w-6 h-6" />
 								</div>
 								<div className="space-y-1.5">
-									<CardTitle className="text-xl font-bold text-white">
+									<CardTitle className="text-xl font-bold text-foreground">
 										Verify Your Email Address
 									</CardTitle>
-									<CardDescription className="text-slate-400 text-xs leading-relaxed">
+									<CardDescription className="text-muted-foreground text-xs leading-relaxed">
 										We sent a verification link to your email:
 										<br />
-										<span className="font-semibold text-slate-200 text-sm font-mono mt-1 inline-block">
+										<span className="font-semibold text-foreground text-sm font-mono mt-1 inline-block">
 											{sessionData?.user?.email || "your registered email"}
 										</span>
 									</CardDescription>
 								</div>
 
-								<div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-left text-xs text-slate-400 space-y-1.5 w-full">
+								<div className="p-3.5 rounded-xl bg-muted/40 border border-border text-left text-xs text-muted-foreground space-y-1.5 w-full">
 									<div>• Click the link in the message to activate your account.</div>
 									<div>• Check your spam or promotions folder if not found.</div>
 								</div>
@@ -263,7 +262,7 @@ export default function VerifyEmailPage() {
 											placeholder="name@company.com"
 											value={manualEmail}
 											onChange={(e) => setManualEmail(e.target.value)}
-											className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 text-xs h-10"
+											className="bg-card border-border text-foreground text-xs h-10"
 										/>
 									)}
 
@@ -271,12 +270,12 @@ export default function VerifyEmailPage() {
 										onClick={handleResend}
 										disabled={isResending || cooldown > 0}
 										variant="outline"
-										className="w-full border-slate-800 text-slate-300 hover:bg-slate-800 text-xs h-10 gap-2"
+										className="w-full text-xs h-10 gap-2"
 									>
 										{isResending ? (
 											<Loader2 className="w-3.5 h-3.5 animate-spin" />
 										) : (
-											<RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+											<RefreshCw className="w-3.5 h-3.5" />
 										)}
 										{cooldown > 0
 											? `Resend link available in ${cooldown}s`
@@ -287,11 +286,11 @@ export default function VerifyEmailPage() {
 						)}
 
 						{/* Bottom Navigation */}
-						<div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-							<Link href="/login" className="hover:text-white transition-colors">
+						<div className="mt-6 pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+							<Link href="/login" className="hover:text-foreground transition-colors">
 								Sign in with another account
 							</Link>
-							<Link href="/dashboard/home" className="hover:text-white transition-colors">
+							<Link href="/dashboard/home" className="hover:text-foreground transition-colors">
 								Go to Dashboard &rarr;
 							</Link>
 						</div>

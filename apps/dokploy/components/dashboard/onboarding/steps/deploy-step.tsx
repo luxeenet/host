@@ -387,16 +387,16 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 								isError
 									? "text-destructive"
 									: isDone
-										? "text-emerald-400"
-										: "text-amber-400"
+										? "text-primary"
+										: "text-foreground font-semibold"
 							}`}
 						>
 							{isDone ? (
-								<CheckCircle2 className="size-3.5 text-emerald-400" />
+								<CheckCircle2 className="size-3.5 text-primary" />
 							) : isError ? (
-								<XCircleIcon className="size-3.5 text-rose-400" />
+								<XCircleIcon className="size-3.5 text-destructive" />
 							) : (
-								<Loader2 className="size-3.5 animate-spin text-amber-400" />
+								<Loader2 className="size-3.5 animate-spin text-primary" />
 							)}
 							{isDone
 								? "Live on Global Edge Network"
@@ -406,13 +406,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 						</span>
 						<Badge
 							variant="outline"
-							className={`font-mono text-[10px] px-2.5 py-0.5 ${
-								isDone
-									? "border-emerald-500/30 text-emerald-400 bg-emerald-950/20"
-									: isError
-										? "border-rose-500/30 text-rose-400 bg-rose-950/20"
-										: "border-amber-500/30 text-amber-400 bg-amber-950/20"
-							}`}
+							className="font-mono text-xs px-2.5 py-0.5 border-border bg-muted/50 text-foreground"
 						>
 							{isDone
 								? "Active & Verified (HTTP 200)"
@@ -422,7 +416,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 						</Badge>
 					</div>
 
-					<h1 className={titleClassName}>
+					<h1 className={`${titleClassName} text-3xl sm:text-4xl text-foreground font-bold tracking-tight`}>
 						{isDone
 							? "Your app is live!"
 							: isError
@@ -444,16 +438,16 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 				</div>
 
 				{/* Real Progress Bar Card */}
-				<div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl space-y-4">
+				<div className="rounded-xl border border-border bg-card text-card-foreground p-5 shadow-sm space-y-4">
 					<div className="flex items-center justify-between text-xs">
-						<span className="font-mono text-slate-300 font-semibold flex items-center gap-2">
+						<span className="text-foreground font-semibold flex items-center gap-2">
 							<span
 								className={`size-2 rounded-full ${
 									isDone
-										? "bg-emerald-400"
+										? "bg-primary"
 										: isError
-											? "bg-rose-400"
-											: "bg-amber-400 animate-ping"
+											? "bg-destructive"
+											: "bg-primary animate-pulse"
 								}`}
 							/>
 							{isDone
@@ -463,26 +457,18 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 									: `Current: ${stages[currentStageIndex]?.title}`}
 						</span>
 						<div className="flex items-center gap-3 font-mono">
-							<span className="text-slate-400">⏱ {elapsedSeconds}s</span>
-							<span
-								className={`font-bold text-sm ${
-									isDone ? "text-emerald-400" : "text-amber-400"
-								}`}
-							>
+							<span className="text-muted-foreground">⏱ {elapsedSeconds}s</span>
+							<span className="font-bold text-sm text-foreground">
 								{progressPercent}%
 							</span>
 						</div>
 					</div>
 
 					{/* Animated Progress Track */}
-					<div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden border border-slate-800">
+					<div className="w-full h-2 rounded-full bg-muted overflow-hidden border border-border">
 						<div
 							className={`h-full transition-all duration-700 ease-out ${
-								isDone
-									? "bg-gradient-to-r from-emerald-500 to-teal-400"
-									: isError
-										? "bg-gradient-to-r from-rose-500 to-red-600"
-										: "bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-400"
+								isError ? "bg-destructive" : "bg-primary"
 							}`}
 							style={{ width: `${progressPercent}%` }}
 						/>
@@ -498,21 +484,21 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 							return (
 								<div
 									key={stage.id}
-									className={`flex items-start gap-3 p-3 rounded-xl border text-xs transition-all ${
+									className={`flex items-start gap-3 p-3 rounded-lg border text-xs transition-all ${
 										isStageComplete
-											? "border-emerald-500/20 bg-emerald-950/10 text-slate-200"
+											? "border-primary/20 bg-primary/5 text-foreground"
 											: isStageActive
-												? "border-amber-500/40 bg-amber-950/20 text-white shadow-lg shadow-amber-500/5"
-												: "border-slate-800/40 bg-slate-950/30 text-slate-500"
+												? "border-primary bg-primary/10 text-foreground"
+												: "border-border/60 bg-muted/30 text-muted-foreground"
 									}`}
 								>
 									<div className="mt-0.5 shrink-0">
 										{isStageComplete ? (
-											<CheckCircle2 className="size-4 text-emerald-400" />
+											<CheckCircle2 className="size-4 text-primary" />
 										) : isStageActive ? (
-											<Loader2 className="size-4 animate-spin text-amber-400" />
+											<Loader2 className="size-4 animate-spin text-primary" />
 										) : (
-											<div className="size-4 rounded-full border border-slate-700 flex items-center justify-center text-[10px] text-slate-500">
+											<div className="size-4 rounded-full border border-border flex items-center justify-center text-[10px] text-muted-foreground">
 												{idx + 1}
 											</div>
 										)}
@@ -520,16 +506,14 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 									<div className="space-y-0.5">
 										<div
 											className={`font-semibold ${
-												isStageActive
-													? "text-amber-300"
-													: isStageComplete
-														? "text-slate-200"
-														: "text-slate-500"
+												isStageActive || isStageComplete
+													? "text-foreground"
+													: "text-muted-foreground"
 											}`}
 										>
 											{stage.title}
 										</div>
-										<div className="text-[11px] text-slate-400 leading-relaxed font-mono">
+										<div className="text-[11px] text-muted-foreground leading-relaxed font-mono">
 											{stage.desc}
 										</div>
 									</div>
@@ -540,7 +524,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 				</div>
 
 				{/* Collapsible Live Telemetry Terminal */}
-				<div className="rounded-2xl border border-slate-800 bg-slate-950/90 overflow-hidden shadow-2xl">
+				<div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
 					<div
 						role="button"
 						tabIndex={0}
@@ -549,17 +533,17 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 							if (e.key === "Enter" || e.key === " ")
 								setShowTerminal(!showTerminal);
 						}}
-						className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800 bg-slate-900/60 cursor-pointer select-none"
+						className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/50 cursor-pointer select-none"
 					>
 						<div className="flex items-center gap-2">
-							<Terminal className="size-3.5 text-amber-400" />
-							<span className="font-mono text-xs text-slate-300 font-semibold">
+							<Terminal className="size-3.5 text-primary" />
+							<span className="font-mono text-xs text-foreground font-semibold">
 								Edge Deployment Stream
 							</span>
-							<span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+							<span className="size-1.5 rounded-full bg-primary animate-pulse" />
 						</div>
-						<div className="flex items-center gap-2 text-slate-400 text-xs">
-							<span className="text-[10px] font-mono">
+						<div className="flex items-center gap-2 text-muted-foreground text-xs">
+							<span className="text-[11px] font-mono">
 								{telemetryLogs.length} events
 							</span>
 							{showTerminal ? (
@@ -570,17 +554,17 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 						</div>
 					</div>
 					{showTerminal && (
-						<div className="p-3.5 max-h-44 overflow-y-auto font-mono text-[11px] space-y-1.5 text-slate-300 bg-black/60">
+						<div className="p-3.5 max-h-44 overflow-y-auto font-mono text-[11px] space-y-1.5 text-foreground bg-muted/20">
 							{telemetryLogs.map((log, i) => (
 								<div key={i} className="leading-relaxed flex items-start gap-2">
-									<span className="text-slate-600 select-none">&gt;</span>
+									<span className="text-muted-foreground select-none">&gt;</span>
 									<span
 										className={
 											log.includes("✓")
-												? "text-emerald-400 font-semibold"
+												? "text-primary font-semibold"
 												: log.includes("❌")
-													? "text-rose-400 font-semibold"
-													: "text-slate-300"
+													? "text-destructive font-semibold"
+													: "text-foreground"
 										}
 									>
 										{log}
@@ -593,22 +577,22 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 
 				{/* Verified Live URL Card */}
 				{isDone && deploying.url ? (
-					<div className="flex flex-col rounded-2xl border border-emerald-500/30 bg-emerald-950/10 overflow-hidden shadow-xl">
-						<div className="flex items-center gap-2 px-5 py-3 border-b border-emerald-500/20 bg-emerald-950/30">
-							<span className="size-2 rounded-full bg-emerald-500 shrink-0" />
-							<span className="font-mono text-xs text-emerald-400 font-semibold">
+					<div className="flex flex-col rounded-xl border border-border bg-card overflow-hidden shadow-sm text-card-foreground">
+						<div className="flex items-center gap-2 px-5 py-2.5 border-b border-border bg-muted/40">
+							<span className="size-2 rounded-full bg-primary shrink-0" />
+							<span className="font-mono text-xs text-foreground font-semibold">
 								Edge Route Active • SSL Handshake Verified
 							</span>
 						</div>
 						<div className="flex items-center justify-between gap-3 p-5">
-							<span className="font-mono text-sm text-white truncate font-medium">
+							<span className="font-mono text-sm text-foreground truncate font-medium">
 								{deploying.url}
 							</span>
-							<div className="flex items-center gap-1.5 shrink-0">
+							<div className="flex items-center gap-2 shrink-0">
 								<Button
 									variant="outline"
 									size="sm"
-									className="border-slate-800 text-slate-300 hover:text-white h-8 text-xs"
+									className="h-8 text-xs"
 									onClick={() => {
 										copy(deploying.url);
 										toast.success("URL copied to clipboard!");
@@ -617,9 +601,8 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 									<CopyIcon className="size-3.5 mr-1" /> Copy
 								</Button>
 								<Button
-									variant="secondary"
 									size="sm"
-									className="bg-amber-600 hover:bg-amber-500 text-white h-8 text-xs"
+									className="h-8 text-xs"
 									asChild
 								>
 									<a href={deploying.url} target="_blank" rel="noreferrer">
@@ -636,12 +619,13 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 					<div className="flex items-center gap-3">
 						<Button
 							onClick={handleNginx}
-							className="bg-amber-600 hover:bg-amber-500 text-white text-xs gap-2"
+							size="sm"
+							className="text-xs gap-2"
 						>
 							<RefreshCw className="size-3.5" />
 							Retry Deployment
 						</Button>
-						<Button variant="outline" onClick={onNext} className="text-xs">
+						<Button variant="outline" size="sm" onClick={onNext} className="text-xs">
 							Skip to Dashboard
 						</Button>
 					</div>
@@ -650,7 +634,8 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 				{/* Primary Continue Button */}
 				<Button
 					onClick={onNext}
-					className="w-fit px-8 bg-amber-600 hover:bg-amber-500 text-white font-medium"
+					size="lg"
+					className="w-fit px-8 font-semibold text-xs"
 					disabled={!isDone && !isError}
 				>
 					Continue to Dashboard &rarr;
@@ -669,13 +654,15 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 					</span>
 					<Badge
 						variant="outline"
-						className="border-amber-500/30 text-amber-300 bg-amber-950/20 text-xs px-2.5 py-0.5"
+						className="border-border bg-muted/50 text-foreground text-xs px-2.5 py-0.5"
 					>
 						Active Plan: {planName} ({maxRamMb === -1 ? "Unlimited" : `${maxRamMb}MB`} RAM)
 					</Badge>
 				</div>
 
-				<h1 className={titleClassName}>Ship your first app.</h1>
+				<h1 className={`${titleClassName} text-3xl sm:text-4xl text-foreground font-bold tracking-tight`}>
+					Ship your first app.
+				</h1>
 				<p className="text-muted-foreground text-base max-w-lg leading-relaxed">
 					Choose a quickstart tailored to your chosen plan. Everything deploys with automated edge routing and zero-downtime health checks.
 				</p>
@@ -684,9 +671,9 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 			{/* Deployment Options Grid */}
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 				{/* Option 1: Intelligent Quickstart tailored to plan builder */}
-				<div className="flex flex-col justify-between rounded-2xl border-2 border-amber-500/50 bg-gradient-to-b from-amber-950/20 via-slate-900/60 to-slate-950 p-6 shadow-xl relative overflow-hidden">
+				<div className="flex flex-col justify-between rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-6 shadow-sm text-card-foreground relative">
 					<div className="absolute top-3 right-3">
-						<Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold uppercase">
+						<Badge variant="secondary" className="text-[10px] font-semibold uppercase">
 							{isNixpacksOnly
 								? "Universal Engine • Nixpacks"
 								: isStaticOnly
@@ -696,20 +683,20 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 					</div>
 
 					<div className="space-y-3">
-						<div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+						<div className="size-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
 							<Zap className="size-5" />
 						</div>
 
 						<div>
-							<h3 className="text-lg font-bold text-white flex items-center gap-2">
+							<h3 className="text-lg font-bold text-foreground flex items-center gap-2">
 								{isNixpacksOnly
 									? "Instant Dynamic Web App"
 									: isStaticOnly
 										? "Instant Static Website"
 										: "Instant Cloud Web App"}
-								<Sparkles className="size-4 text-amber-400" />
+								<Sparkles className="size-4 text-primary" />
 							</h3>
-							<p className="text-xs text-slate-400 mt-1 leading-relaxed">
+							<p className="text-xs text-muted-foreground mt-1 leading-relaxed">
 								{isNixpacksOnly
 									? "Pre-configured Node.js dynamic web application powered by the HatDot Universal Nixpacks Engine. Automatically detects runtime, dependencies, and provisions with zero configuration."
 									: isStaticOnly
@@ -718,12 +705,12 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 							</p>
 						</div>
 
-						<div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 space-y-1">
-							<div className="flex items-center gap-1.5 text-emerald-400">
-								<CheckCircle2 className="size-3.5" />
+						<div className="p-3 rounded-lg bg-muted/40 border border-border text-xs text-muted-foreground space-y-1">
+							<div className="flex items-center gap-1.5 text-foreground font-medium">
+								<CheckCircle2 className="size-3.5 text-primary" />
 								<span>Supported on your {planName}</span>
 							</div>
-							<div className="text-slate-400">
+							<div className="text-[11px]">
 								{isNixpacksOnly
 									? "Native Nixpacks Builder • Port 3000 • Automated Edge SSL. Zero Docker daemon configuration required."
 									: isStaticOnly
@@ -736,7 +723,8 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 					<Button
 						onClick={handleNginx}
 						disabled={!!starting}
-						className="w-full mt-6 bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs h-10 shadow-lg shadow-amber-600/20 gap-2"
+						size="lg"
+						className="w-full mt-6 text-xs font-semibold gap-2"
 					>
 						{starting === "nginx" ? (
 							<>
@@ -760,40 +748,36 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 				</div>
 
 				{/* Option 2: Pre-configured Stacks & Templates (Plan Aware) */}
-				<div className="flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/50 p-6 shadow-sm">
+				<div className="flex flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-sm text-card-foreground">
 					<div className="space-y-4">
 						<div className="flex items-center justify-between">
-							<div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+							<div className="size-10 rounded-lg bg-muted border border-border flex items-center justify-center text-foreground">
 								<Layers className="size-5" />
 							</div>
 							<Badge
 								variant="outline"
-								className={`text-[10px] ${
-									supportsCompose
-										? "border-emerald-500/30 text-emerald-400 bg-emerald-950/20"
-										: "border-amber-500/30 text-amber-400 bg-amber-950/20"
-								}`}
+								className="text-[10px]"
 							>
 								{supportsCompose ? "Multi-Service Ready" : "Requires Pro Plan"}
 							</Badge>
 						</div>
 
 						<div>
-							<h3 className="text-lg font-bold text-white">
+							<h3 className="text-lg font-bold text-foreground">
 								Production App Stacks
 							</h3>
-							<p className="text-xs text-slate-400 mt-1 leading-relaxed">
+							<p className="text-xs text-muted-foreground mt-1 leading-relaxed">
 								Pre-configured multi-tier applications combining web engines and managed database backends.
 							</p>
 						</div>
 
 						{!supportsCompose ? (
-							<div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/20 space-y-2 text-xs">
-								<div className="flex items-start gap-2 text-amber-300 font-medium">
-									<Lock className="size-4 shrink-0 mt-0.5" />
+							<div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-1.5 text-xs text-muted-foreground">
+								<div className="flex items-start gap-2 text-foreground font-medium">
+									<Lock className="size-4 shrink-0 mt-0.5 text-primary" />
 									<span>Multi-service stacks require Pro Plan &amp; 1 GB+ RAM</span>
 								</div>
-								<p className="text-[11px] text-slate-400 leading-relaxed">
+								<p className="text-[11px] leading-relaxed">
 									Your current <strong>{planName}</strong> is optimized for single services ({isNixpacksOnly ? "Universal Nixpacks Engine" : isStaticOnly ? "Static Edge Engine" : "Container Engine"}). Stacks like WordPress include an application + full MySQL database and require a Pro or Business plan. Deploy the {isNixpacksOnly ? "Dynamic App" : isStaticOnly ? "Static Website" : "Instant App"} to get live immediately.
 								</p>
 							</div>
@@ -814,19 +798,19 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 										onClick={() => handleTemplate(stack.id, stack.requiredRamMb)}
 										className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
 											isAllowed
-												? "border-slate-800 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-900 cursor-pointer"
-												: "border-slate-800/50 bg-slate-950/30 opacity-60 cursor-not-allowed"
+												? "border-border bg-card hover:bg-accent/50 hover:border-primary/40 cursor-pointer text-card-foreground"
+												: "border-border/60 bg-muted/30 opacity-60 cursor-not-allowed text-muted-foreground"
 										}`}
 									>
 										<div className="flex items-center gap-3">
-											<div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-300">
+											<div className="size-8 rounded-lg bg-muted border border-border flex items-center justify-center text-foreground">
 												<IconComponent className="size-4" />
 											</div>
 											<div>
-												<div className="text-xs font-semibold text-white">
+												<div className="text-xs font-semibold text-foreground">
 													{stack.name}
 												</div>
-												<div className="text-[10px] text-slate-400">
+												<div className="text-[10px] text-muted-foreground">
 													{stack.description}
 												</div>
 											</div>
@@ -834,13 +818,13 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 
 										<div>
 											{starting === stack.id ? (
-												<Loader2 className="size-3.5 animate-spin text-amber-400" />
+												<Loader2 className="size-3.5 animate-spin text-primary" />
 											) : isAllowed ? (
-												<span className="text-[11px] text-amber-400 font-medium">
+												<span className="text-xs font-semibold text-primary">
 													Deploy &rarr;
 												</span>
 											) : (
-												<span className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
+												<span className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
 													<Lock className="size-3" /> 1GB RAM
 												</span>
 											)}

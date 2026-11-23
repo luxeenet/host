@@ -300,10 +300,7 @@ export default function OnboardingPage() {
 											{/* Header */}
 											<div className="flex items-center gap-3 mb-4">
 												<div
-													className={cn(
-														"size-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shrink-0 shadow-inner",
-														gradient,
-													)}
+													className="size-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0"
 												>
 													{PLAN_ICONS[plan.slug] ?? <Zap className="size-5" />}
 												</div>

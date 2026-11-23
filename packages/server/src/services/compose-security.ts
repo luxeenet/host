@@ -71,6 +71,7 @@ function isPathDangerous(hostPath: string): boolean {
 export function validateSafeComposeSpecification(
 	composeSpec: ComposeSpecification,
 	isPlatformAdmin = false,
+	maxCpuMillicores?: number,
 ): void {
 	if (isPlatformAdmin) return;
 	if (!composeSpec || typeof composeSpec !== "object") return;
@@ -219,15 +220,75 @@ export function validateSafeComposeSpecification(
 				}
 			}
 		}
+
+		// 8. Plan CPU Quota Enforcement: zero bypass
+		if (maxCpuMillicores !== undefined && maxCpuMillicores !== -1 && maxCpuMillicores > 0) {
+			const maxVcpu = maxCpuMillicores / 1000;
+			const serviceCpus =
+				(service as any).cpus !== undefined
+					? Number((service as any).cpus)
+					: (service as any).deploy?.resources?.limits?.cpus !== undefined
+						? Number((service as any).deploy.resources.limits.cpus)
+						: undefined;
+
+			if (serviceCpus !== undefined && !Number.isNaN(serviceCpus) && serviceCpus > maxVcpu) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: `Service '${serviceName}': Requested CPU (${serviceCpus} vCPU) exceeds your plan limit of ${maxVcpu} vCPU. Please upgrade your plan.`,
+				});
+			}
+		}
 	}
 }
 
 /**
- * Validates a raw YAML docker-compose string against security policies.
+ * Automatically clamps and injects plan CPU limits into Compose specification
+ * so unconstrained services do not run with unlimited host CPU cores.
+ */
+export function enforceComposePlanLimits(
+	composeSpec: ComposeSpecification,
+	maxCpuMillicores?: number,
+): void {
+	if (!maxCpuMillicores || maxCpuMillicores === -1 || maxCpuMillicores <= 0) return;
+	if (!composeSpec || typeof composeSpec !== "object") return;
+	const services = composeSpec.services;
+	if (!services || typeof services !== "object") return;
+
+	const maxVcpu = maxCpuMillicores / 1000;
+
+	for (const [_, service] of Object.entries(services)) {
+		if (!service || typeof service !== "object") continue;
+
+		const hasDirectCpu = (service as any).cpus !== undefined;
+		const hasDeployLimit = (service as any).deploy?.resources?.limits?.cpus !== undefined;
+
+		if (!hasDirectCpu && !hasDeployLimit) {
+			if (!service.deploy) service.deploy = {};
+			if (!service.deploy.resources) service.deploy.resources = {};
+			if (!service.deploy.resources.limits) service.deploy.resources.limits = {};
+			service.deploy.resources.limits.cpus = String(maxVcpu);
+			(service as any).cpus = maxVcpu;
+		} else {
+			if (hasDirectCpu && Number((service as any).cpus) > maxVcpu) {
+				(service as any).cpus = maxVcpu;
+			}
+			if (
+				hasDeployLimit &&
+				Number((service as any).deploy?.resources?.limits?.cpus) > maxVcpu
+			) {
+				(service as any).deploy.resources.limits.cpus = String(maxVcpu);
+			}
+		}
+	}
+}
+
+/**
+ * Validates a raw YAML docker-compose string against security policies and plan quotas.
  */
 export function validateSafeComposeYaml(
 	yamlString: string,
 	isPlatformAdmin = false,
+	maxCpuMillicores?: number,
 ): void {
 	if (isPlatformAdmin) return;
 	if (!yamlString || !yamlString.trim()) return;
@@ -235,7 +296,7 @@ export function validateSafeComposeYaml(
 	try {
 		const parsed = parse(yamlString, { maxAliasCount: 10000 }) as ComposeSpecification;
 		if (parsed && typeof parsed === "object") {
-			validateSafeComposeSpecification(parsed, isPlatformAdmin);
+			validateSafeComposeSpecification(parsed, isPlatformAdmin, maxCpuMillicores);
 		}
 	} catch (error) {
 		if (error instanceof TRPCError) {

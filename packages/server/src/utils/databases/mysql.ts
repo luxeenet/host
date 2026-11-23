@@ -1,6 +1,7 @@
 import type { InferResultType } from "@dokploy/server/types/with";
 import type { CreateServiceOptions } from "dockerode";
 import { resolveServiceNetworks } from "../../services/network";
+import { PlanEntitlementService } from "../../services/plan-entitlement";
 import {
 	calculateResources,
 	generateBindMounts,
@@ -64,11 +65,28 @@ export const buildMysql = async (rawMysql: MysqlNested) => {
 		EndpointSpec,
 		Ulimits,
 	} = generateConfigContainer(mysql);
+	const orgId = mysql.environment?.project?.organizationId;
+	const effectiveCpuNano = orgId
+		? await PlanEntitlementService.resolveEffectiveCpuLimitNano(
+				orgId,
+				cpuLimit,
+			)
+		: (cpuLimit ? Number(cpuLimit) : undefined);
+	const effectiveCpuReservationNano = orgId
+		? await PlanEntitlementService.resolveEffectiveCpuReservationNano(
+				orgId,
+				cpuReservation,
+				effectiveCpuNano,
+			)
+		: (cpuReservation ? Number(cpuReservation) : undefined);
+
 	const resources = calculateResources({
 		memoryLimit,
 		memoryReservation,
-		cpuLimit,
-		cpuReservation,
+		cpuLimit: effectiveCpuNano ? String(effectiveCpuNano) : null,
+		cpuReservation: effectiveCpuReservationNano
+			? String(effectiveCpuReservationNano)
+			: null,
 	});
 	const envVariables = prepareEnvironmentVariables(
 		defaultMysqlEnv,

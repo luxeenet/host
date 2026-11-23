@@ -17,7 +17,7 @@
  *   priority_support, docker_access, compose_access,
  *   volume_mounts, scheduled_tasks, rollbacks
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../db";
 import * as schema from "../db/schema";
@@ -61,6 +61,7 @@ const PLANS: PlanSeedDef[] = [
 			{ key: "max_storage_gb", value: 1 },
 			{ key: "max_bandwidth_gb", value: 5 },
 			{ key: "max_ram_mb", value: 256 },
+			{ key: "max_cpu_millicores", value: 1000, unit: "mCPU" },
 			{ key: "build_minutes_per_month", value: 60 },
 			{ key: "max_team_members", value: 1 },
 			{ key: "max_environments", value: 1 },
@@ -106,6 +107,7 @@ const PLANS: PlanSeedDef[] = [
 			{ key: "max_storage_gb", value: 5 },
 			{ key: "max_bandwidth_gb", value: 20 },
 			{ key: "max_ram_mb", value: 512 },
+			{ key: "max_cpu_millicores", value: 1000, unit: "mCPU" },
 			{ key: "build_minutes_per_month", value: 200 },
 			{ key: "max_team_members", value: 1 },
 			{ key: "max_environments", value: 2 },
@@ -151,6 +153,7 @@ const PLANS: PlanSeedDef[] = [
 			{ key: "max_storage_gb", value: 20 },
 			{ key: "max_bandwidth_gb", value: 100 },
 			{ key: "max_ram_mb", value: 2048 },
+			{ key: "max_cpu_millicores", value: 2000, unit: "mCPU" },
 			{ key: "build_minutes_per_month", value: 1000 },
 			{ key: "max_team_members", value: 3 },
 			{ key: "max_environments", value: 3 },
@@ -197,6 +200,7 @@ const PLANS: PlanSeedDef[] = [
 			{ key: "max_storage_gb", value: 100 },
 			{ key: "max_bandwidth_gb", value: 500 },
 			{ key: "max_ram_mb", value: 8192 },
+			{ key: "max_cpu_millicores", value: 4000, unit: "mCPU" },
 			{ key: "build_minutes_per_month", value: 5000 },
 			{ key: "max_team_members", value: 10 },
 			{ key: "max_environments", value: 5 },
@@ -243,6 +247,7 @@ const PLANS: PlanSeedDef[] = [
 			{ key: "max_storage_gb", value: -1 },
 			{ key: "max_bandwidth_gb", value: -1 },
 			{ key: "max_ram_mb", value: -1 },
+			{ key: "max_cpu_millicores", value: -1, unit: "mCPU" },
 			{ key: "build_minutes_per_month", value: -1 },
 			{ key: "max_team_members", value: -1 },
 			{ key: "max_environments", value: -1 },
@@ -273,7 +278,7 @@ const PLANS: PlanSeedDef[] = [
  * Idempotent: skips plans that already exist by slug.
  */
 export async function seedPlans(): Promise<void> {
-	console.log("[PlanSeed] Seeding platform plans...");
+	console.log("[PlanSeed] Seeding and verifying platform plans...");
 
 	for (const planDef of PLANS) {
 		const existing = await db.query.plans.findFirst({
@@ -281,7 +286,26 @@ export async function seedPlans(): Promise<void> {
 		});
 
 		if (existing) {
-			console.log(`[PlanSeed] Skipping "${planDef.slug}" — already exists.`);
+			console.log(`[PlanSeed] Plan "${planDef.slug}" exists — verifying resources.`);
+			// Ensure essential resources (specifically max_cpu_millicores) exist
+			for (const r of planDef.resources) {
+				const existingRes = await db.query.planResources.findFirst({
+					where: and(
+						eq(schema.planResources.planId, existing.id),
+						eq(schema.planResources.resourceKey, r.key),
+					),
+				});
+				if (!existingRes) {
+					await db.insert(schema.planResources).values({
+						id: nanoid(),
+						planId: existing.id,
+						resourceKey: r.key,
+						value: r.value,
+						unit: r.unit ?? null,
+					});
+					console.log(`[PlanSeed] Synced missing resource "${r.key}"=${r.value} on plan "${planDef.slug}".`);
+				}
+			}
 			continue;
 		}
 
@@ -332,6 +356,31 @@ export async function seedPlans(): Promise<void> {
 		});
 
 		console.log(`[PlanSeed] Created plan "${planDef.name}" (${planDef.slug})`);
+	}
+
+	// Guarantee every plan in database has max_cpu_millicores defined
+	try {
+		const allDbPlans = await db.query.plans.findMany();
+		for (const p of allDbPlans) {
+			const cpuRes = await db.query.planResources.findFirst({
+				where: and(
+					eq(schema.planResources.planId, p.id),
+					eq(schema.planResources.resourceKey, "max_cpu_millicores"),
+				),
+			});
+			if (!cpuRes) {
+				await db.insert(schema.planResources).values({
+					id: nanoid(),
+					planId: p.id,
+					resourceKey: "max_cpu_millicores",
+					value: 1000,
+					unit: "mCPU",
+				});
+				console.log(`[PlanSeed] Set fallback 1.0 vCPU limit on plan "${p.name}".`);
+			}
+		}
+	} catch (err: any) {
+		console.error("[PlanSeed] Error verifying global plan CPU resources:", err?.message);
 	}
 
 	console.log("[PlanSeed] Done.");

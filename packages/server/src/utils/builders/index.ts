@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { resolveServiceNetworks } from "@dokploy/server/services/network";
+import { PlanEntitlementService } from "@dokploy/server/services/plan-entitlement";
 import { findRegistryByIdWithCredentials } from "@dokploy/server/services/registry";
 import type { InferResultType } from "@dokploy/server/types/with";
 import type { CreateServiceOptions } from "dockerode";
@@ -242,11 +243,28 @@ export const mechanizeDockerContainer = async (
 		ports,
 	} = application;
 
+	const orgId = application.environment?.project?.organizationId;
+	const effectiveCpuNano = orgId
+		? await PlanEntitlementService.resolveEffectiveCpuLimitNano(
+				orgId,
+				cpuLimit,
+			)
+		: (cpuLimit ? Number(cpuLimit) : undefined);
+	const effectiveCpuReservationNano = orgId
+		? await PlanEntitlementService.resolveEffectiveCpuReservationNano(
+				orgId,
+				cpuReservation,
+				effectiveCpuNano,
+			)
+		: (cpuReservation ? Number(cpuReservation) : undefined);
+
 	const resources = calculateResources({
 		memoryLimit,
 		memoryReservation,
-		cpuLimit,
-		cpuReservation,
+		cpuLimit: effectiveCpuNano ? String(effectiveCpuNano) : null,
+		cpuReservation: effectiveCpuReservationNano
+			? String(effectiveCpuReservationNano)
+			: null,
 	});
 
 	const volumesMount = generateVolumeMounts(mounts);

@@ -117,9 +117,18 @@ export const composeRouter = createTRPCRouter({
 						);
 
 						if (input.composeFile) {
+							const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+							const resourceLimits = isPlatformAdmin
+								? undefined
+								: await PlanEntitlementService.getResourceLimitsForOrganization(
+										ctx.session.activeOrganizationId,
+										false,
+										tx,
+									);
 							validateSafeComposeYaml(
 								input.composeFile,
-								Boolean((ctx.user as any)?.isPlatformAdmin),
+								isPlatformAdmin,
+								resourceLimits?.maxCpuMillicores,
 							);
 						}
 
@@ -249,9 +258,17 @@ export const composeRouter = createTRPCRouter({
 			}
 
 			if (input.composeFile) {
+				const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
+				const resourceLimits = isPlatformAdmin
+					? undefined
+					: await PlanEntitlementService.getResourceLimitsForOrganization(
+							ctx.session.activeOrganizationId,
+							false,
+						);
 				validateSafeComposeYaml(
 					input.composeFile,
-					Boolean((ctx.user as any)?.isPlatformAdmin),
+					isPlatformAdmin,
+					resourceLimits?.maxCpuMillicores,
 				);
 			}
 

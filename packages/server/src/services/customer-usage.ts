@@ -354,7 +354,7 @@ export class CustomerUsageService {
 		}
 
 		const ramLimitMb = hasValidSub ? (planResources["max_ram_mb"] ?? 2048) : 0;
-		const cpuLimitMillicores = hasValidSub ? (planResources["max_cpu_millicores"] ?? 2000) : 0;
+		const cpuLimitMillicores = hasValidSub ? (planResources["max_cpu_millicores"] ?? 1000) : 0;
 		const storageLimitGb = hasValidSub ? (planResources["max_storage_gb"] ?? 20) : 0;
 		const bandwidthLimitGb = hasValidSub ? (planResources["max_bandwidth_gb"] ?? 250) : 0;
 		const appLimit = hasValidSub ? (planResources["max_applications"] ?? 5) : 0;

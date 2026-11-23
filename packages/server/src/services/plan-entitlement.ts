@@ -1084,7 +1084,9 @@ export class PlanEntitlementService {
 			};
 		}
 
-		const maxCpu = snapshot.resources["max_cpu_millicores"] ?? -1;
+		// Default fallback for maxCpu must be 1000 mCPU (1.0 vCPU), NOT -1 (unlimited),
+		// ensuring zero bypass even if a plan record omitted max_cpu_millicores.
+		const maxCpu = snapshot.resources["max_cpu_millicores"] ?? 1000;
 		if (
 			maxCpu !== -1 &&
 			requestedCpuMillicores !== undefined &&
@@ -1092,7 +1094,7 @@ export class PlanEntitlementService {
 		) {
 			return {
 				allowed: false,
-				reason: `Requested CPU (${requestedCpuMillicores} mCPU) exceeds your plan limit of ${maxCpu} mCPU. Please upgrade your plan.`,
+				reason: `Requested CPU (${requestedCpuMillicores} mCPU) exceeds your plan limit of ${maxCpu} mCPU (${(maxCpu / 1000).toFixed(1)} vCPU). Please upgrade your plan.`,
 				current: requestedCpuMillicores,
 				limit: maxCpu,
 			};
@@ -1129,6 +1131,113 @@ export class PlanEntitlementService {
 				});
 			}
 		}
+	}
+
+	/**
+	 * Authoritatively resolves the effective NanoCPUs limit for a container or Swarm service.
+	 * ZERO-BYPASS GUARANTEE:
+	 * - If platform admin: honors explicit custom limits; unbounded if unspecified.
+	 * - If customer:
+	 *     - If plan allows 1 vCPU (1000 mCPU), max allowed is 1,000,000,000 NanoCPUs.
+	 *     - If requested is empty/null/0: automatically clamped to the plan limit (1 vCPU).
+	 *     - If requested exceeds the plan quota: clamped to the plan limit.
+	 *     - If requested is lower (e.g. 0.5 vCPU): honors the lower requested limit.
+	 * Under no circumstances does a customer container receive unbounded CPU cores.
+	 */
+	static async resolveEffectiveCpuLimitNano(
+		organizationId: string,
+		requestedCpuLimit?: string | number | null,
+		isPlatformAdmin = false,
+		executor: any = db,
+	): Promise<number | undefined> {
+		if (isPlatformAdmin) {
+			if (
+				requestedCpuLimit !== undefined &&
+				requestedCpuLimit !== null &&
+				requestedCpuLimit !== ""
+			) {
+				const parsed = Number(requestedCpuLimit);
+				if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+			}
+			return undefined;
+		}
+
+		const snapshot = await this.getPlanSnapshot(organizationId, executor);
+		const maxCpuMillicores = snapshot?.resources["max_cpu_millicores"] ?? 1000;
+
+		// If plan explicitly grants unlimited (-1):
+		if (maxCpuMillicores === -1) {
+			if (
+				requestedCpuLimit !== undefined &&
+				requestedCpuLimit !== null &&
+				requestedCpuLimit !== ""
+			) {
+				const parsed = Number(requestedCpuLimit);
+				if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+			}
+			return undefined;
+		}
+
+		// 1 vCPU = 1,000,000,000 NanoCPUs
+		const planMaxNano = maxCpuMillicores * 1_000_000;
+
+		if (
+			requestedCpuLimit === undefined ||
+			requestedCpuLimit === null ||
+			requestedCpuLimit === ""
+		) {
+			// Customer did not specify a CPU limit -> default to their plan limit (e.g. 1 vCPU)
+			return planMaxNano;
+		}
+
+		const requestedNum = Number(requestedCpuLimit);
+		if (Number.isNaN(requestedNum) || requestedNum <= 0) {
+			// Zero, invalid, or negative -> fallback to plan limit
+			return planMaxNano;
+		}
+
+		// Strictly clamp to the plan limit: zero bypass!
+		return Math.min(requestedNum, planMaxNano);
+	}
+
+	/**
+	 * Authoritatively resolves the effective NanoCPUs reservation.
+	 * Ensures reservations never exceed the effective CPU limit or plan ceiling.
+	 */
+	static async resolveEffectiveCpuReservationNano(
+		organizationId: string,
+		requestedCpuReservation?: string | number | null,
+		effectiveCpuLimitNano?: number,
+		isPlatformAdmin = false,
+	): Promise<number | undefined> {
+		if (isPlatformAdmin) {
+			if (
+				requestedCpuReservation !== undefined &&
+				requestedCpuReservation !== null &&
+				requestedCpuReservation !== ""
+			) {
+				const parsed = Number(requestedCpuReservation);
+				if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+			}
+			return undefined;
+		}
+
+		if (
+			requestedCpuReservation === undefined ||
+			requestedCpuReservation === null ||
+			requestedCpuReservation === ""
+		) {
+			return undefined;
+		}
+
+		const parsed = Number(requestedCpuReservation);
+		if (Number.isNaN(parsed) || parsed <= 0) return undefined;
+
+		if (effectiveCpuLimitNano !== undefined && parsed > effectiveCpuLimitNano) {
+			return effectiveCpuLimitNano;
+		}
+
+		return parsed;
 	}
 
 	/**

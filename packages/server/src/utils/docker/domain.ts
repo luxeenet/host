@@ -17,7 +17,11 @@ import { cloneGitlabRepository } from "../providers/gitlab";
 import { getCreateComposeFileCommand } from "../providers/raw";
 import { randomizeDeployableSpecificationFile } from "./collision";
 import { randomizeSpecificationFile } from "./compose";
-import { validateSafeComposeSpecification } from "../../services/compose-security";
+import {
+	enforceComposePlanLimits,
+	validateSafeComposeSpecification,
+} from "../../services/compose-security";
+import { PlanEntitlementService } from "../../services/plan-entitlement";
 import type {
 	ComposeSpecification,
 	DefinitionsService,
@@ -221,10 +225,26 @@ export const addDomainToCompose = async (
 
 	result = (await applyComposeFilePatch(compose)) ?? result;
 
+	const orgId = (compose as any).environment?.project?.organizationId;
+	const isPlatformAdmin = Boolean((compose as any).isPlatformAdmin);
+	let maxCpuMillicores: number | undefined;
+	if (orgId && !isPlatformAdmin) {
+		const limits = await PlanEntitlementService.getResourceLimitsForOrganization(
+			orgId,
+			false,
+		);
+		maxCpuMillicores = limits.maxCpuMillicores;
+	}
+
 	validateSafeComposeSpecification(
 		result,
-		Boolean((compose as any).isPlatformAdmin),
+		isPlatformAdmin,
+		maxCpuMillicores,
 	);
+
+	if (!isPlatformAdmin && maxCpuMillicores) {
+		enforceComposePlanLimits(result, maxCpuMillicores);
+	}
 
 	if (compose.isolatedDeployment) {
 		const randomized = randomizeDeployableSpecificationFile(

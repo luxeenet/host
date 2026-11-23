@@ -23,6 +23,7 @@ import { findDeploymentById } from "./deployment";
 import type { Environment } from "./environment";
 import type { Mount } from "./mount";
 import { resolveServiceNetworks } from "./network";
+import { PlanEntitlementService } from "./plan-entitlement";
 import type { Port } from "./port";
 import type { Project } from "./project";
 import {
@@ -241,11 +242,28 @@ const rollbackApplication = async (
 		ports,
 	} = resolvedContext;
 
+	const orgId = (resolvedContext as any)?.environment?.project?.organizationId;
+	const effectiveCpuNano = orgId
+		? await PlanEntitlementService.resolveEffectiveCpuLimitNano(
+				orgId,
+				cpuLimit,
+			)
+		: (cpuLimit ? Number(cpuLimit) : undefined);
+	const effectiveCpuReservationNano = orgId
+		? await PlanEntitlementService.resolveEffectiveCpuReservationNano(
+				orgId,
+				cpuReservation,
+				effectiveCpuNano,
+			)
+		: (cpuReservation ? Number(cpuReservation) : undefined);
+
 	const resources = calculateResources({
 		memoryLimit,
 		memoryReservation,
-		cpuLimit,
-		cpuReservation,
+		cpuLimit: effectiveCpuNano ? String(effectiveCpuNano) : null,
+		cpuReservation: effectiveCpuReservationNano
+			? String(effectiveCpuReservationNano)
+			: null,
 	});
 
 	const volumesMount = generateVolumeMounts(mounts);

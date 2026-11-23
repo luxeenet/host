@@ -244,6 +244,11 @@ export const ShowResources = ({ id, type }: Props) => {
 			}
 		}
 
+		const defaultPlanCpuLimit =
+			resourceLimits && resourceLimits.maxCpuMillicores !== -1
+				? String(resourceLimits.maxCpuMillicores * 1_000_000)
+				: null;
+
 		const payload: any = {
 			applicationId: id || "",
 			libsqlId: id || "",
@@ -252,7 +257,7 @@ export const ShowResources = ({ id, type }: Props) => {
 			mysqlId: id || "",
 			postgresId: id || "",
 			redisId: id || "",
-			cpuLimit: formData.cpuLimit || null,
+			cpuLimit: formData.cpuLimit || defaultPlanCpuLimit,
 			cpuReservation: formData.cpuReservation || null,
 			memoryLimit: formData.memoryLimit || null,
 			memoryReservation: formData.memoryReservation || null,
@@ -409,6 +414,11 @@ export const ShowResources = ({ id, type }: Props) => {
 												onClick={(e) => e.preventDefault()}
 											>
 												<FormLabel>CPU Limit (Hard Max)</FormLabel>
+												{maxCpuValue && (
+													<Badge variant="outline" className="text-[10px] ml-auto">
+														Plan Max: {maxCpuValue.toFixed(2)} vCPU
+													</Badge>
+												)}
 												<TooltipProvider>
 													<Tooltip delayDuration={0}>
 														<TooltipTrigger type="button">
@@ -417,7 +427,7 @@ export const ShowResources = ({ id, type }: Props) => {
 														<TooltipContent>
 															<p>
 																Maximum compute allocation (in CPU cores) dedicated
-																to this service.
+																to this service. Defaults to your full plan allocation if unset.
 															</p>
 														</TooltipContent>
 													</Tooltip>
@@ -427,7 +437,11 @@ export const ShowResources = ({ id, type }: Props) => {
 												<NumberInputWithSteps
 													value={field.value}
 													onChange={field.onChange}
-													placeholder="e.g. 1.00 CPU"
+													placeholder={
+														maxCpuValue
+															? `${maxCpuValue.toFixed(2)} CPU (Plan Default)`
+															: "e.g. 1.00 CPU"
+													}
 													step={CPU_STEP}
 													converter={cpuConverter}
 													presets={cpuPresets}

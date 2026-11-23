@@ -416,5 +416,61 @@ describe("Runtime Resource Normalization and Validation", () => {
 				PlanEntitlementService.assertRuntimeResources("org-1", storedApp),
 			).rejects.toThrow(TRPCError);
 		});
+
+		it("Scenario H — zero bypass: customers with 1 vCPU plan strictly get 1 vCPU (1e9 NanoCPUs)", async () => {
+			vi.spyOn(PlanEntitlementService, "getPlanSnapshot").mockResolvedValue({
+				planId: "starter",
+				planName: "Starter",
+				resources: {
+					max_ram_mb: 512,
+					max_cpu_millicores: 1000, // 1 vCPU
+				},
+				features: {},
+				applicationTypes: [],
+				subscriptionStatus: "active",
+			});
+
+			// If unspecified (null or undefined), container gets exactly 1.0 vCPU (1,000,000,000 NanoCPUs), NEVER unlimited
+			const unsetNano = await PlanEntitlementService.resolveEffectiveCpuLimitNano("org-1", undefined);
+			expect(unsetNano).toBe(1_000_000_000);
+
+			const nullNano = await PlanEntitlementService.resolveEffectiveCpuLimitNano("org-1", null);
+			expect(nullNano).toBe(1_000_000_000);
+
+			// If customer attempts to set "0" to remove CPU limit, it is clamped to plan's 1 vCPU
+			const zeroNano = await PlanEntitlementService.resolveEffectiveCpuLimitNano("org-1", "0");
+			expect(zeroNano).toBe(1_000_000_000);
+
+			// If customer attempts to request 4 vCPU, it is clamped to plan's 1 vCPU
+			const overLimitNano = await PlanEntitlementService.resolveEffectiveCpuLimitNano("org-1", "4000000000");
+			expect(overLimitNano).toBe(1_000_000_000);
+
+			// If customer requests within plan (e.g. 0.5 vCPU), allowed
+			const subNano = await PlanEntitlementService.resolveEffectiveCpuLimitNano("org-1", "500000000");
+			expect(subNano).toBe(500_000_000);
+		});
+
+		it("Scenario I — missing max_cpu_millicores resource in plan record safely defaults to 1.0 vCPU", async () => {
+			vi.spyOn(PlanEntitlementService, "getPlanSnapshot").mockResolvedValueOnce({
+				planId: "legacy-plan",
+				planName: "Legacy",
+				resources: {
+					max_ram_mb: 512,
+					// max_cpu_millicores omitted!
+				},
+				features: {},
+				applicationTypes: [],
+				subscriptionStatus: "active",
+			});
+
+			const check = await PlanEntitlementService.checkRuntimeResources(
+				"org-legacy",
+				512,
+				2000, // Attempting 2 vCPU on plan missing resource record
+			);
+			// Must be rejected because default fallback is 1000 mCPU (1 vCPU)
+			expect(check.allowed).toBe(false);
+			expect(check.limit).toBe(1000);
+		});
 	});
 });

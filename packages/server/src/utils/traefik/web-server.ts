@@ -28,18 +28,26 @@ export const updateServerTraefik = (
 	config.http.routers = config.http.routers || {};
 	config.http.services = config.http.services || {};
 
+	const buildHostRule = (targetHost: string) => {
+		const clean = targetHost.trim();
+		if (clean === "hatdot.cloud" || clean === "panel.hatdot.cloud") {
+			return "Host(`hatdot.cloud`) || Host(`panel.hatdot.cloud`)";
+		}
+		return `Host(\`${clean}\`)`;
+	};
+
+	const hostRule = buildHostRule(host);
+
 	// Get or create router config, but always update the rule with newHost
 	const currentRouterConfig = config.http.routers[`${appName}-router-app`] || {
 		service: `${appName}-service-app`,
 		entryPoints: ["web"],
-		rule: `Host(\`${newHost}\`)`,
+		rule: hostRule,
 		priority: 1000000,
 	};
 
-	// Always update the rule with the new host
-	if (newHost) {
-		currentRouterConfig.rule = `Host(\`${newHost}\`)`;
-	}
+	// Always update the rule with the target host rule
+	currentRouterConfig.rule = hostRule;
 	currentRouterConfig.priority = 1000000;
 
 	config.http.routers[`${appName}-router-app`] = currentRouterConfig;
@@ -63,7 +71,7 @@ export const updateServerTraefik = (
 
 		if (certificateType === "letsencrypt") {
 			config.http.routers[`${appName}-router-app-secure`] = {
-				rule: `Host(\`${newHost}\`)`,
+				rule: hostRule,
 				service: `${appName}-service-app`,
 				entryPoints: ["websecure"],
 				tls: { certResolver: "letsencrypt" },
@@ -71,7 +79,7 @@ export const updateServerTraefik = (
 			};
 		} else {
 			config.http.routers[`${appName}-router-app-secure`] = {
-				rule: `Host(\`${newHost}\`)`,
+				rule: hostRule,
 				service: `${appName}-service-app`,
 				entryPoints: ["websecure"],
 				priority: 1000000,

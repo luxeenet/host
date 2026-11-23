@@ -74,7 +74,7 @@ export default function AdminPaymentsPage() {
 
 	const webhookUrl = typeof window !== "undefined"
 		? `${window.location.origin}/api/webhooks/sonicpesa`
-		: `https://console.${brand.PLATFORM_SUBDOMAIN_BASE}/api/webhooks/sonicpesa`;
+		: `https://${brand.PLATFORM_SUBDOMAIN_BASE}/api/webhooks/sonicpesa`;
 
 	const handleCopyWebhook = () => {
 		navigator.clipboard.writeText(webhookUrl);

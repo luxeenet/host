@@ -13,7 +13,7 @@ export const BRAND = {
   TAGLINE:
     process.env.BRAND_TAGLINE ?? "Deploy Instantly. Scale Effortlessly. Own Your Cloud.",
   /** Primary domain for the platform control plane */
-  APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? "https://app.hatdot.cloud",
+  APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? "https://hatdot.cloud",
   /** Public-facing marketing site */
   MARKETING_URL:
     process.env.BRAND_MARKETING_URL ?? "https://hatdot.cloud",

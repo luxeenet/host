@@ -21,7 +21,7 @@ export type TemplateProps = {
 
 export const VerifyEmailTemplate = ({
 	userName = "User",
-	verificationUrl = `https://console.${brand.PLATFORM_SUBDOMAIN_BASE}/verify`,
+	verificationUrl = `https://${brand.PLATFORM_SUBDOMAIN_BASE}/verify`,
 }: TemplateProps) => {
 	const previewText = `Verify your email address to get started with ${brand.APP_NAME}`;
 	return (

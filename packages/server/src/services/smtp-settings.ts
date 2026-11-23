@@ -373,7 +373,7 @@ export async function sendSampleEmailNotification(
 		throw new Error("SMTP is not configured yet. Please configure SMTP host and credentials first.");
 	}
 
-	const appBaseUrl = `https://${creds.host || brand.PLATFORM_SUBDOMAIN_BASE || "panel.hatdot.cloud"}`;
+	const appBaseUrl = `https://${creds.host || brand.PLATFORM_SUBDOMAIN_BASE || "hatdot.cloud"}`;
 
 	switch (templateId) {
 		case "verify-email": {

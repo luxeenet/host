@@ -64,6 +64,8 @@ const resolveTrustedOrigins = async () => {
 		return [
 			...(settings?.serverIp ? [`http://${settings?.serverIp}:3000`] : []),
 			...(settings?.host ? [`https://${settings?.host}`] : []),
+			"https://hatdot.cloud",
+			"https://panel.hatdot.cloud",
 			...devOrigins,
 			...trustedOrigins,
 		];

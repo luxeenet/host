@@ -17,10 +17,35 @@ export const getWebServerSettings = async () => {
 			// Create default settings if none exist
 			const [newSettings] = await db
 				.insert(webServerSettings)
-				.values({})
+				.values({
+					host: "hatdot.cloud",
+				})
 				.returning();
 
 			return newSettings;
+		}
+
+		// Auto-migrate panel domain from panel.hatdot.cloud to hatdot.cloud
+		if (settings.host === "panel.hatdot.cloud") {
+			const [updated] = await db
+				.update(webServerSettings)
+				.set({
+					host: "hatdot.cloud",
+					updatedAt: new Date(),
+				})
+				.where(eq(webServerSettings.id, settings.id))
+				.returning();
+
+			const nextSettings = updated ?? { ...settings, host: "hatdot.cloud" };
+
+			try {
+				const { updateServerTraefik } = await import(
+					"../utils/traefik/web-server"
+				);
+				updateServerTraefik(nextSettings, "hatdot.cloud");
+			} catch {}
+
+			return nextSettings;
 		}
 
 		return settings;

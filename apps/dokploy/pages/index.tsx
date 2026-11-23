@@ -326,7 +326,7 @@ export default function LandingPage() {
 								</div>
 								<div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1 text-xs text-muted-foreground font-mono">
 									<Lock className="size-3 text-emerald-500" />
-									<span>https://console.{brand.PLATFORM_SUBDOMAIN_BASE}/project/production</span>
+									<span>https://{brand.PLATFORM_SUBDOMAIN_BASE}/project/production</span>
 								</div>
 								<div className="flex items-center gap-2 text-xs font-medium text-emerald-500">
 									<span className="size-2 rounded-full bg-emerald-500 animate-ping" />

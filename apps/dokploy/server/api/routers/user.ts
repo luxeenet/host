@@ -12,9 +12,11 @@ import {
 	removeUserById,
 	renderInvitationEmail,
 	sendEmailNotification,
+	sendPlatformMail,
 	sendResendNotification,
 	updateUser,
 } from "@dokploy/server";
+import { brand } from "@paas/branding";
 import { db } from "@dokploy/server/db";
 import {
 	account,
@@ -798,33 +800,18 @@ export const userRouter = createTRPCRouter({
 		.input(
 			z.object({
 				invitationId: z.string().min(1),
-				notificationId: z.string().min(1),
+				notificationId: z.string().min(1).optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
-			if (IS_CLOUD) {
-				return;
-			}
-
-			const notification = await findNotificationById(input.notificationId);
-			if (notification.organizationId !== ctx.session.activeOrganizationId) {
-				throw new TRPCError({
-					code: "FORBIDDEN",
-					message: "You are not authorized to use this email provider",
-				});
-			}
-
-			const email = notification.email;
-			const resend = notification.resend;
-
 			const currentInvitation = await db.query.invitation.findFirst({
 				where: eq(invitation.id, input.invitationId),
 			});
 
-			if (!email && !resend) {
+			if (!currentInvitation) {
 				throw new TRPCError({
 					code: "NOT_FOUND",
-					message: "Email provider not found",
+					message: "Invitation not found",
 				});
 			}
 
@@ -838,38 +825,57 @@ export const userRouter = createTRPCRouter({
 				ctx.session.activeOrganizationId,
 			);
 
-			try {
-				const toEmail = currentInvitation?.email || "";
-				const orgName = organization?.name || "organization";
-				const subject = `You've been invited to join ${orgName} on Dokploy`;
-				const html = await renderInvitationEmail({
-					email: toEmail,
-					inviteLink,
-					organizationName: orgName,
-				});
+			const toEmail = currentInvitation.email;
+			const orgName = organization?.name || "organization";
+			const subject = `You've been invited to join ${orgName} on ${brand.APP_NAME}`;
+			const html = await renderInvitationEmail({
+				email: toEmail,
+				inviteLink,
+				organizationName: orgName,
+			});
 
-				if (email) {
-					await sendEmailNotification(
-						{ ...email, toAddresses: [toEmail] },
-						subject,
-						html,
-					);
-				} else if (resend) {
-					await sendResendNotification(
-						{ ...resend, toAddresses: [toEmail] },
-						subject,
-						html,
+			let dispatched = false;
+			if (input.notificationId) {
+				try {
+					const notification = await findNotificationById(input.notificationId);
+					if (notification.organizationId === ctx.session.activeOrganizationId) {
+						if (notification.email) {
+							await sendEmailNotification(
+								{ ...notification.email, toAddresses: [toEmail] },
+								subject,
+								html,
+							);
+							dispatched = true;
+						} else if (notification.resend) {
+							await sendResendNotification(
+								{ ...notification.resend, toAddresses: [toEmail] },
+								subject,
+								html,
+							);
+							dispatched = true;
+						}
+					}
+				} catch (notifError) {
+					console.warn(
+						"[user.sendInvitation] Notification provider send failed, falling back to platform mail:",
+						notifError,
 					);
 				}
-			} catch (error) {
-				console.log(error);
-				throw error;
 			}
+
+			if (!dispatched) {
+				await sendPlatformMail({
+					to: toEmail,
+					subject,
+					html,
+				});
+			}
+
 			await audit(ctx, {
 				action: "create",
 				resourceType: "user",
 				resourceId: input.invitationId,
-				resourceName: currentInvitation?.email || "",
+				resourceName: toEmail,
 				metadata: { type: "sendInvitation" },
 			});
 			return inviteLink;

@@ -14,6 +14,7 @@ import { IS_CLOUD } from "../constants";
 import { db } from "../db";
 import * as schema from "../db/schema";
 import {
+	getDokployUrl,
 	getTrustedOrigins,
 	getTrustedProviders,
 	getUserByToken,
@@ -36,6 +37,7 @@ import {
 import { getHubSpotUTK, submitToHubSpot } from "../utils/tracking/hubspot";
 import {
 	sendEmail,
+	sendInvitationEmail,
 	sendVerificationEmail,
 } from "../verification/send-verification-email";
 import { getPublicIpWithFallback } from "../wss/utils";
@@ -571,6 +573,22 @@ const createBetterAuth = () =>
 				dynamicAccessControl: {
 					enabled: true,
 					maximumRolesPerOrganization: 10,
+				},
+				sendInvitationEmail: async (data) => {
+					try {
+						const baseUrl = await getDokployUrl();
+						const inviteLink = `${baseUrl}/invitation?token=${data.id}`;
+						await sendInvitationEmail({
+							email: data.email,
+							inviteLink,
+							organizationName: data.organization?.name || "organization",
+						});
+					} catch (error) {
+						console.error(
+							`[auth] Failed to dispatch invitation email to ${data.email}:`,
+							error,
+						);
+					}
 				},
 			}),
 			// Self-hosted needs the admin plugin too: SCIM deactivation (active: false)

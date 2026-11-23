@@ -1,5 +1,6 @@
 import { db } from "@dokploy/server/db";
 import {
+	getDokployUrl,
 	hasValidLicense,
 	IS_CLOUD,
 	sendInvitationEmail,
@@ -386,22 +387,29 @@ export const organizationRouter = createTRPCRouter({
 				})
 				.returning();
 
-			if (IS_CLOUD && created) {
-				const host =
-					process.env.NODE_ENV === "development"
-						? "http://localhost:3000"
-						: "https://app.dokploy.com";
-				const inviteLink = `${host}/invitation?token=${created.id}`;
+			if (created) {
+				try {
+					const host =
+						process.env.NODE_ENV === "development"
+							? "http://localhost:3000"
+							: await getDokployUrl();
+					const inviteLink = `${host}/invitation?token=${created.id}`;
 
-				const org = await db.query.organization.findFirst({
-					where: eq(organization.id, orgId),
-				});
+					const org = await db.query.organization.findFirst({
+						where: eq(organization.id, orgId),
+					});
 
-				await sendInvitationEmail({
-					email,
-					inviteLink,
-					organizationName: org?.name || "organization",
-				});
+					await sendInvitationEmail({
+						email,
+						inviteLink,
+						organizationName: org?.name || "organization",
+					});
+				} catch (err) {
+					console.error(
+						`[organization.inviteMember] Failed to dispatch invitation email to ${email}:`,
+						err,
+					);
+				}
 			}
 
 			await audit(ctx, {

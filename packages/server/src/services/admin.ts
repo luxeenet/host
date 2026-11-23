@@ -1,4 +1,5 @@
 import { db } from "@dokploy/server/db";
+import { brand } from "@paas/branding";
 import {
 	invitation,
 	member,
@@ -110,7 +111,7 @@ export const removeUserById = async (userId: string) => {
 
 export const getDokployUrl = async () => {
 	if (IS_CLOUD) {
-		return "https://app.dokploy.com";
+		return brand.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://hatdot.cloud";
 	}
 	const settings = await getWebServerSettings();
 
@@ -118,7 +119,11 @@ export const getDokployUrl = async () => {
 		const protocol = settings?.https ? "https" : "http";
 		return `${protocol}://${settings?.host}`;
 	}
-	return `http://${settings?.serverIp}:${process.env.PORT}`;
+	if (settings?.serverIp) {
+		const port = process.env.PORT || 3000;
+		return `http://${settings.serverIp}:${port}`;
+	}
+	return brand.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://hatdot.cloud";
 };
 
 const TRUSTED_ORIGINS_CACHE_TTL_MS = 30 * 60_000;

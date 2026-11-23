@@ -37,6 +37,8 @@ export const ShowInvitations = () => {
 
 	const { mutateAsync: removeInvitation } =
 		api.organization.removeInvitation.useMutation();
+	const { mutateAsync: sendInvitation } =
+		api.user.sendInvitation.useMutation();
 
 	return (
 		<div className="w-full">
@@ -155,6 +157,30 @@ export const ShowInvitations = () => {
 																						}}
 																					>
 																						Copy Invitation
+																					</DropdownMenuItem>
+																				)}
+
+																				{invitation.status === "pending" && (
+																					<DropdownMenuItem
+																						className="w-full cursor-pointer"
+																						onSelect={async () => {
+																							await sendInvitation({
+																								invitationId: invitation.id,
+																							})
+																								.then(() => {
+																									toast.success(
+																										"Invitation email resent successfully",
+																									);
+																								})
+																								.catch((err: any) => {
+																									toast.error(
+																										err?.message ||
+																											"Failed to resend invitation email",
+																									);
+																								});
+																						}}
+																					>
+																						Resend Email
 																					</DropdownMenuItem>
 																				)}
 

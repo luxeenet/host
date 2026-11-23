@@ -173,7 +173,7 @@ export const AddInvitation = () => {
 							toast.error(error.message);
 						});
 				} else {
-					toast.success("Invitation created");
+					toast.success("Invitation created and email sent");
 				}
 
 				setOpen(false);

@@ -14,6 +14,7 @@ import type {
 } from "@dokploy/server/db/schema";
 import nodemailer from "nodemailer";
 import { Resend } from "resend";
+import { brand } from "@paas/branding";
 
 export const sendEmailNotification = async (
 	connection: typeof email.$inferInsert,
@@ -65,7 +66,7 @@ export const sendEmailNotification = async (
 		});
 
 		await transporter.sendMail({
-			from: from || `HatDot <notifications@hatdot.cloud>`,
+			from: from || `"${brand.APP_NAME}" <${brand.EMAIL_FROM}>`,
 			to: toAddresses.join(", "),
 			subject,
 			html: htmlContent,

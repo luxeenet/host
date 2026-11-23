@@ -28,8 +28,7 @@ export default function Document({
 	baseUrl,
 }: WhitelabelingDocumentProps) {
 	const title = appName || brand.APP_NAME;
-	const description =
-		appDescription || brand.TAGLINE;
+	const description = appDescription || brand.TAGLINE;
 
 	let ogImage = ogImageUrl || "/og.png";
 	if (ogImage.startsWith("/")) {
@@ -39,16 +38,43 @@ export default function Document({
 	return (
 		<Html lang="en" className="font-sans">
 			<Head>
-				{/* Rendered on the server so the correct branding is present on first
-				    paint (and for social scrapers), avoiding a flash of / fallback to
-				    the default Dokploy branding. */}
-				<title>{title}</title>
+				{/* Primary Meta Tags */}
+				<meta name="title" content={title} />
+				<meta name="description" content={description} />
+
+				{/* Open Graph / Facebook / WhatsApp / Telegram / LinkedIn */}
+				<meta property="og:site_name" content={title} />
+				<meta property="og:type" content="website" />
 				<meta property="og:title" content={title} />
 				<meta property="og:description" content={description} />
 				<meta property="og:image" content={ogImage} />
-				<link rel="icon" href={faviconHref || brand.ICON_URL || "/logo-icon.png"} />
+				<meta property="og:image:secure_url" content={ogImage} />
+				<meta property="og:image:type" content="image/png" />
+				<meta property="og:image:width" content="1200" />
+				<meta property="og:image:height" content="630" />
+				<meta property="og:image:alt" content={title} />
+
+				{/* Twitter / X */}
+				<meta name="twitter:card" content="summary_large_image" />
+				<meta name="twitter:title" content={title} />
+				<meta name="twitter:description" content={description} />
+				<meta name="twitter:image" content={ogImage} />
+				<meta name="twitter:image:alt" content={title} />
+
+				{/* Fallback image for link preview scrapers */}
+				<link rel="image_src" href={ogImage} />
+
+				{/* Favicons & App Icons */}
+				<link rel="icon" type="image/x-icon" href={faviconHref || "/favicon.ico"} />
 				<link rel="shortcut icon" href={faviconHref || "/favicon.ico"} />
-				<link rel="apple-touch-icon" href={faviconHref || brand.ICON_URL || "/logo-icon.png"} />
+				<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+				<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+				<link rel="icon" type="image/png" sizes="48x48" href="/favicon.png" />
+				<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+				<link rel="manifest" href="/site.webmanifest" />
+				<meta name="theme-color" content="#09090b" />
+				<meta name="msapplication-TileColor" content="#09090b" />
+
 				{customCss && (
 					<style
 						id="whitelabeling-styles"
@@ -90,8 +116,14 @@ Document.getInitialProps = async (
 	let faviconHref: string | null = null;
 	let customCss: string | null = null;
 
-	const host = ctx.req?.headers?.host || "localhost:3000";
-	const protocol = ctx.req?.headers?.["x-forwarded-proto"] || "http";
+	const host = ctx.req?.headers?.host || "hatdot.cloud";
+	const forwardedProto = ctx.req?.headers?.["x-forwarded-proto"];
+	const protocol =
+		typeof forwardedProto === "string"
+			? forwardedProto
+			: host.includes("localhost") || host.includes("127.0.0.1")
+			? "http"
+			: "https";
 	const baseUrl = `${protocol}://${host}`;
 
 	if (

@@ -292,7 +292,7 @@ describe("Email Delivery & Multi-Daily Billing Reminders", () => {
 
 			const calls = mockSendEmail.mock.calls;
 			expect(calls.length).toBeGreaterThan(0);
-			const lastCall = calls[calls.length - 1][0];
+			const lastCall = calls[calls.length - 1]![0];
 
 			expect(lastCall.subject).not.toMatch(/dokploy/i);
 			expect(lastCall.subject).not.toMatch(/sonicpesa/i);

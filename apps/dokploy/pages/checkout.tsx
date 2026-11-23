@@ -334,16 +334,16 @@ export default function CheckoutPage() {
 					) : (
 						<div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
 							{/* Left 2 Cols: Payment Methods & Phone Form */}
-							<div className="lg:col-span-2 space-y-6">
+							<div className="order-2 lg:order-1 lg:col-span-2 space-y-6">
 								{/* Step 1: Select Payment Gateway */}
 								<Card className="border-border bg-card">
-									<CardHeader className="pb-4">
-										<div className="flex items-center justify-between">
+									<CardHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
+										<div className="flex items-center justify-between gap-2 flex-wrap">
 											<div className="flex items-center gap-2">
-												<div className="size-6 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center">
+												<div className="size-6 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
 													1
 												</div>
-												<CardTitle className="text-base font-semibold">
+												<CardTitle className="text-sm sm:text-base font-semibold">
 													Choose Payment Method
 												</CardTitle>
 											</div>
@@ -355,12 +355,12 @@ export default function CheckoutPage() {
 											Choose how you would like to settle your subscription. Direct mobile money is settled in real-time.
 										</CardDescription>
 									</CardHeader>
-									<CardContent className="space-y-4">
+									<CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-4">
 										<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 											{/* Mobile Money Option */}
 											<div
 												onClick={() => setPaymentMethod("mobile_money")}
-												className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3.5 ${
+												className={`p-3.5 sm:p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3.5 ${
 													paymentMethod === "mobile_money"
 														? "bg-accent border-primary ring-1 ring-primary/20 shadow-sm"
 														: "bg-muted/30 border-border hover:border-foreground/30 hover:bg-muted/50"
@@ -373,10 +373,10 @@ export default function CheckoutPage() {
 													<div className="flex items-center justify-between">
 														<span className="text-sm font-bold text-foreground">Mobile Money</span>
 														{paymentMethod === "mobile_money" && (
-															<CheckCircle2 className="size-4 text-primary" />
+															<CheckCircle2 className="size-4 text-primary shrink-0" />
 														)}
 													</div>
-													<p className="text-xs text-muted-foreground mt-0.5">
+													<p className="text-xs text-muted-foreground mt-0.5 break-words">
 														M-Pesa, Tigo Pesa, Airtel Money, Halopesa
 													</p>
 													<span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium block mt-1">
@@ -388,7 +388,7 @@ export default function CheckoutPage() {
 											{/* Card Option */}
 											<div
 												onClick={() => setPaymentMethod("card")}
-												className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3.5 ${
+												className={`p-3.5 sm:p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3.5 ${
 													paymentMethod === "card"
 														? "bg-accent border-primary ring-1 ring-primary/20 shadow-sm"
 														: "bg-muted/30 border-border hover:border-foreground/30 hover:bg-muted/50"
@@ -401,10 +401,10 @@ export default function CheckoutPage() {
 													<div className="flex items-center justify-between">
 														<span className="text-sm font-bold text-foreground">Debit / Credit Card</span>
 														{paymentMethod === "card" && (
-															<CheckCircle2 className="size-4 text-primary" />
+															<CheckCircle2 className="size-4 text-primary shrink-0" />
 														)}
 													</div>
-													<p className="text-xs text-muted-foreground mt-0.5">
+													<p className="text-xs text-muted-foreground mt-0.5 break-words">
 														Visa, Mastercard, UnionPay
 													</p>
 													<span className="text-[11px] text-muted-foreground font-medium block mt-1">
@@ -420,24 +420,24 @@ export default function CheckoutPage() {
 												<label className="text-xs font-semibold text-foreground uppercase tracking-wider block">
 													Select Mobile Operator
 												</label>
-												<div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+												<div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
 													{OPERATORS.map((op) => {
 														const isOpSelected = operator === op.id;
 														return (
 															<div
 																key={op.id}
 																onClick={() => setOperator(op.id as any)}
-																className={`p-3 rounded-xl border text-center cursor-pointer transition-all flex flex-col items-center gap-1.5 ${
+																className={`p-2.5 sm:p-3 rounded-xl border text-center cursor-pointer transition-all flex flex-col items-center gap-1 min-w-0 ${
 																	isOpSelected
 																		? "bg-primary/10 border-primary ring-1 ring-primary/20 font-bold"
 																		: "bg-muted/20 border-border hover:bg-muted/40"
 																}`}
 															>
-																<div className={`size-2.5 rounded-full ${op.badgeColor}`} />
-																<span className="text-xs text-foreground font-semibold leading-tight">
+																<div className={`size-2.5 rounded-full ${op.badgeColor} shrink-0`} />
+																<span className="text-xs text-foreground font-semibold leading-tight truncate max-w-full">
 																	{op.name}
 																</span>
-																<span className="text-[10px] text-muted-foreground font-mono">
+																<span className="text-[10px] text-muted-foreground font-mono truncate max-w-full">
 																	{op.prefix}
 																</span>
 															</div>
@@ -451,12 +451,12 @@ export default function CheckoutPage() {
 
 								{/* Step 2: Payer Details & Authorize */}
 								<Card className="border-border bg-card">
-									<CardHeader className="pb-4">
+									<CardHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
 										<div className="flex items-center gap-2">
-											<div className="size-6 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center">
+											<div className="size-6 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
 												2
 											</div>
-											<CardTitle className="text-base font-semibold">
+											<CardTitle className="text-sm sm:text-base font-semibold">
 												Payment & Account Details
 											</CardTitle>
 										</div>
@@ -464,7 +464,7 @@ export default function CheckoutPage() {
 											Enter the mobile money number that will receive the USSD authorization prompt.
 										</CardDescription>
 									</CardHeader>
-									<CardContent className="space-y-4">
+									<CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-4">
 										<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 											<div className="space-y-1.5">
 												<label className="text-xs font-semibold text-foreground">
@@ -490,7 +490,7 @@ export default function CheckoutPage() {
 										</div>
 
 										<div className="space-y-1.5">
-											<label className="text-xs font-semibold text-foreground flex items-center justify-between">
+											<label className="text-xs font-semibold text-foreground flex flex-col sm:flex-row sm:items-center justify-between gap-1">
 												<span>
 													{paymentMethod === "mobile_money"
 														? "Mobile Money Phone Number"
@@ -530,7 +530,7 @@ export default function CheckoutPage() {
 												isLoading={
 													initiatePaymentMutation.isPending || subscribeMutation.isPending
 												}
-												className="w-full h-12 text-sm font-semibold shadow-md gap-2"
+												className="w-full h-auto min-h-12 py-3 px-4 text-xs sm:text-sm font-semibold shadow-md gap-2 whitespace-normal leading-snug text-center"
 											>
 												{Number(selectedPlan?.price) === 0 ||
 												(selectedPlan?.trialDays && selectedPlan.trialDays > 0) ? (
@@ -539,11 +539,11 @@ export default function CheckoutPage() {
 															Activate {selectedPlan?.name || "Plan"}{" "}
 															{selectedPlan?.trialDays ? `(${selectedPlan.trialDays}-Day Free Trial)` : ""}
 														</span>
-														<ArrowRight className="size-4" />
+														<ArrowRight className="size-4 shrink-0" />
 													</>
 												) : (
 													<>
-														<Lock className="size-4 text-emerald-400" />
+														<Lock className="size-4 text-emerald-400 shrink-0" />
 														<span>
 															Pay{" "}
 															{selectedPlan
@@ -581,9 +581,9 @@ export default function CheckoutPage() {
 							</div>
 
 							{/* Right 1 Col: Plan Breakdown & Order Summary */}
-							<div className="space-y-4">
+							<div className="order-1 lg:order-2 space-y-4">
 								<Card className="border-border bg-card shadow-sm sticky top-20">
-									<CardHeader className="pb-3 border-b">
+									<CardHeader className="p-4 sm:p-6 pb-3 border-b">
 										<div className="flex items-center justify-between">
 											<Badge variant="outline" className="text-xs uppercase tracking-wider font-semibold">
 												Order Summary
@@ -606,7 +606,7 @@ export default function CheckoutPage() {
 											</p>
 										</div>
 									</CardHeader>
-									<CardContent className="space-y-4 pt-4">
+									<CardContent className="p-4 sm:p-6 pt-4 space-y-4">
 										{/* Price Banner */}
 										<div className="p-3.5 rounded-xl bg-muted/40 border border-border flex items-baseline justify-between">
 											<span className="text-xs text-muted-foreground font-medium">

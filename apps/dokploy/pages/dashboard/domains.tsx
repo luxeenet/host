@@ -294,8 +294,8 @@ export default function CustomDomainsPage() {
 			/>
 
 			<div className="w-full">
-				<Card className="h-full bg-sidebar p-2.5 rounded-xl min-h-[85vh]">
-					<div className="rounded-xl bg-background shadow-md p-6 flex flex-col gap-6 h-full">
+				<Card className="h-full bg-sidebar p-2 sm:p-2.5 rounded-xl min-h-[85vh]">
+					<div className="rounded-xl bg-background shadow-md p-4 sm:p-6 flex flex-col gap-6 h-full">
 						{/* Header */}
 						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 							<div>
@@ -561,17 +561,17 @@ export default function CustomDomainsPage() {
 												key={dom.domainId}
 												className="p-4 sm:p-5 hover:bg-muted/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
 											>
-												<div className="space-y-1.5 min-w-0">
+												<div className="space-y-1.5 min-w-0 flex-1">
 													<div className="flex items-center gap-2 flex-wrap">
 														<Globe className="size-4 text-foreground shrink-0" />
 														<a
 															href={`${dom.https ? "https" : "http"}://${dom.host}${dom.path || ""}`}
 															target="_blank"
 															rel="noopener noreferrer"
-															className="text-sm font-semibold text-foreground hover:underline flex items-center gap-1.5"
+															className="text-sm font-semibold text-foreground hover:underline flex items-center gap-1.5 break-all"
 														>
 															{dom.host}
-															<ExternalLink className="size-3 text-muted-foreground" />
+															<ExternalLink className="size-3 text-muted-foreground shrink-0" />
 														</a>
 
 														{dom.isPrimary && (
@@ -619,7 +619,7 @@ export default function CustomDomainsPage() {
 												</div>
 
 												{/* Row Actions */}
-												<div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+												<div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
 													<Button
 														variant="outline"
 														size="sm"

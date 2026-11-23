@@ -454,8 +454,8 @@ export default function OnboardingPage() {
 				</main>
 
 				{/* Sticky Bottom Action Bar */}
-				<footer className="sticky bottom-0 z-30 w-full border-t border-border bg-background/95 backdrop-blur-md px-4 sm:px-8 py-4 shadow-lg">
-					<div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+				<footer className="sticky bottom-0 z-30 w-full border-t border-border bg-background/95 backdrop-blur-md px-4 sm:px-8 py-3.5 sm:py-4 shadow-lg">
+					<div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
 						<div className="flex items-center gap-4 text-sm">
 							<div className="hidden sm:flex size-10 rounded-full bg-primary/10 border border-primary/20 items-center justify-center text-primary shrink-0">
 								<Lock className="size-4" />
@@ -496,7 +496,7 @@ export default function OnboardingPage() {
 								disabled={!selectedPlanId || subscribing}
 								isLoading={subscribing}
 								size="lg"
-								className="w-full sm:w-auto min-w-[240px] font-semibold h-11 text-sm shadow-md"
+								className="w-full sm:w-auto sm:min-w-[240px] font-semibold h-auto min-h-11 py-2.5 px-4 text-xs sm:text-sm shadow-md whitespace-normal leading-snug text-center"
 							>
 								{selectedPlan?.trialDays && selectedPlan.trialDays > 0
 									? `Start ${selectedPlan.trialDays}-Day Free Trial →`

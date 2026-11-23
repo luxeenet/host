@@ -130,11 +130,11 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 	return (
 		<>
 			<div className="fixed inset-0 z-50 flex flex-col md:flex-row bg-background text-foreground">
-				<aside className="relative shrink-0 md:w-[300px] lg:w-[340px] overflow-hidden bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-					<div className="relative flex md:h-full flex-col p-6 lg:p-8">
+				<aside className="relative shrink-0 md:w-[300px] lg:w-[340px] overflow-hidden bg-sidebar text-sidebar-foreground border-b md:border-b-0 md:border-r border-sidebar-border">
+					<div className="relative flex md:h-full flex-col p-4 sm:p-6 lg:p-8">
 						<div className="flex items-center justify-between md:block">
 							<div className="flex items-center gap-2.5 text-sidebar-foreground">
-								<Logo className="size-7" />
+								<Logo className="size-7 shrink-0" />
 								<span className="text-lg font-semibold tracking-tight">
 									{brand.APP_NAME}
 								</span>
@@ -150,9 +150,29 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 							)}
 						</div>
 
+						{/* Mobile Step Status & Progress */}
+						<div className="md:hidden mt-3 pt-2.5 border-t border-sidebar-border">
+							<div className="flex items-center justify-between text-xs">
+								<span className="text-muted-foreground text-[11px] font-medium">
+									Step {visibleIndex + 1} of {visibleStepIds.length}
+								</span>
+								<span className="font-semibold text-foreground text-xs">
+									{steps.find((s) => s.id === stepper.current.id)?.title}
+								</span>
+							</div>
+							<div className="w-full bg-muted/50 h-1 rounded-full mt-2 overflow-hidden">
+								<div
+									className="bg-primary h-full transition-all duration-300"
+									style={{
+										width: `${((visibleIndex + 1) / visibleStepIds.length) * 100}%`,
+									}}
+								/>
+							</div>
+						</div>
+
 						{/* Active Plan Context in Sidebar */}
 						{activePlanName && (
-							<div className="mt-6 p-3 rounded-xl bg-card border border-border text-xs text-card-foreground">
+							<div className="hidden sm:block mt-4 md:mt-6 p-2.5 sm:p-3 rounded-xl bg-card border border-border text-xs text-card-foreground">
 								<div className="flex items-center justify-between text-[11px] text-muted-foreground">
 									<span>Selected Plan</span>
 									<span className="text-foreground font-semibold">{activePlanName}</span>
@@ -167,7 +187,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 						)}
 
 						{/* Enterprise Security Badge */}
-						<div className="mt-3 p-2.5 rounded-xl bg-muted/40 border border-border text-[10px] text-muted-foreground flex items-center gap-2">
+						<div className="hidden md:flex mt-3 p-2.5 rounded-xl bg-muted/40 border border-border text-[10px] text-muted-foreground items-center gap-2">
 							<ShieldCheck className="size-3.5 text-primary shrink-0" />
 							<span>Dedicated Private Cloud • Encrypted Isolation</span>
 						</div>
@@ -242,7 +262,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 				</aside>
 
 				<div className="flex-1 overflow-y-auto">
-					<div className="mx-auto w-full max-w-2xl px-6 py-14 lg:py-20">
+					<div className="mx-auto w-full max-w-2xl px-4 sm:px-6 py-6 md:py-14 lg:py-20">
 						{stepper.switch({
 							welcome: () => <WelcomeStep onNext={goToNextVisible} />,
 							plan: () => <PlanStep onNext={goToNextVisible} />,

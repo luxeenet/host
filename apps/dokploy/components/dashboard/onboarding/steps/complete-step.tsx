@@ -152,7 +152,7 @@ export const CompleteStep = ({ projectId, environmentId, onFinish }: Props) => {
 			<div className="flex items-center gap-3 pt-2">
 				<Button
 					size="lg"
-					className="w-fit px-8 h-10 text-xs font-semibold gap-2"
+					className="w-full sm:w-fit px-8 h-10 text-xs font-semibold gap-2"
 					isLoading={isFinishing}
 					onClick={handleFinish}
 				>

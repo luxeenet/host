@@ -107,7 +107,7 @@ export const ProjectStep = ({ onNext, plainTitle }: Props) => {
 					<Sparkles className="size-3 text-primary" />
 					Quick templates
 				</span>
-				<div className="grid grid-cols-2 gap-2">
+				<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
 					{PRESETS.map((p) => (
 						<button
 							key={p.name}
@@ -181,7 +181,7 @@ export const ProjectStep = ({ onNext, plainTitle }: Props) => {
 						type="submit"
 						size="lg"
 						isLoading={isPending}
-						className="w-fit px-8 h-10 mt-2 text-xs font-semibold gap-2"
+						className="w-full sm:w-fit px-8 h-10 mt-2 text-xs font-semibold gap-2"
 					>
 						<span>Create project &amp; continue</span>
 						<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" />

@@ -503,9 +503,9 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 											</div>
 										)}
 									</div>
-									<div className="space-y-0.5">
+									<div className="space-y-0.5 min-w-0 flex-1">
 										<div
-											className={`font-semibold ${
+											className={`font-semibold break-words ${
 												isStageActive || isStageComplete
 													? "text-foreground"
 													: "text-muted-foreground"
@@ -513,7 +513,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 										>
 											{stage.title}
 										</div>
-										<div className="text-[11px] text-muted-foreground leading-relaxed font-mono">
+										<div className="text-[11px] text-muted-foreground leading-relaxed font-mono break-words">
 											{stage.desc}
 										</div>
 									</div>
@@ -556,16 +556,16 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 					{showTerminal && (
 						<div className="p-3.5 max-h-44 overflow-y-auto font-mono text-[11px] space-y-1.5 text-foreground bg-muted/20">
 							{telemetryLogs.map((log, i) => (
-								<div key={i} className="leading-relaxed flex items-start gap-2">
-									<span className="text-muted-foreground select-none">&gt;</span>
+								<div key={i} className="leading-relaxed flex items-start gap-2 min-w-0">
+									<span className="text-muted-foreground select-none shrink-0">&gt;</span>
 									<span
-										className={
+										className={`break-all ${
 											log.includes("✓")
 												? "text-primary font-semibold"
 												: log.includes("❌")
 													? "text-destructive font-semibold"
 													: "text-foreground"
-										}
+										}`}
 									>
 										{log}
 									</span>
@@ -578,14 +578,14 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 				{/* Verified Live URL Card */}
 				{isDone && deploying.url ? (
 					<div className="flex flex-col rounded-xl border border-border bg-card overflow-hidden shadow-sm text-card-foreground">
-						<div className="flex items-center gap-2 px-5 py-2.5 border-b border-border bg-muted/40">
+						<div className="flex items-center gap-2 px-4 sm:px-5 py-2.5 border-b border-border bg-muted/40">
 							<span className="size-2 rounded-full bg-primary shrink-0" />
 							<span className="font-mono text-xs text-foreground font-semibold">
 								Edge Route Active • SSL Handshake Verified
 							</span>
 						</div>
-						<div className="flex items-center justify-between gap-3 p-5">
-							<span className="font-mono text-sm text-foreground truncate font-medium">
+						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5">
+							<span className="font-mono text-xs sm:text-sm text-foreground break-all font-medium min-w-0 flex-1">
 								{deploying.url}
 							</span>
 							<div className="flex items-center gap-2 shrink-0">
@@ -616,7 +616,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 
 				{/* Error Retry Actions */}
 				{isError && (
-					<div className="flex items-center gap-3">
+					<div className="flex items-center gap-3 flex-wrap">
 						<Button
 							onClick={handleNginx}
 							size="sm"
@@ -635,7 +635,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 				<Button
 					onClick={onNext}
 					size="lg"
-					className="w-fit px-8 font-semibold text-xs"
+					className="w-full sm:w-fit px-8 font-semibold text-xs"
 					disabled={!isDone && !isError}
 				>
 					Continue to Dashboard &rarr;
@@ -671,7 +671,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 			{/* Deployment Options Grid */}
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 				{/* Option 1: Intelligent Quickstart tailored to plan builder */}
-				<div className="flex flex-col justify-between rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-6 shadow-sm text-card-foreground relative">
+				<div className="flex flex-col justify-between rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-4 sm:p-6 shadow-sm text-card-foreground relative">
 					<div className="absolute top-3 right-3">
 						<Badge variant="secondary" className="text-[10px] font-semibold uppercase">
 							{isNixpacksOnly
@@ -748,7 +748,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 				</div>
 
 				{/* Option 2: Pre-configured Stacks & Templates (Plan Aware) */}
-				<div className="flex flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-sm text-card-foreground">
+				<div className="flex flex-col justify-between rounded-xl border border-border bg-card p-4 sm:p-6 shadow-sm text-card-foreground">
 					<div className="space-y-4">
 						<div className="flex items-center justify-between">
 							<div className="size-10 rounded-lg bg-muted border border-border flex items-center justify-center text-foreground">
@@ -802,21 +802,21 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 												: "border-border/60 bg-muted/30 opacity-60 cursor-not-allowed text-muted-foreground"
 										}`}
 									>
-										<div className="flex items-center gap-3">
-											<div className="size-8 rounded-lg bg-muted border border-border flex items-center justify-center text-foreground">
+										<div className="flex items-center gap-3 min-w-0 flex-1">
+											<div className="size-8 rounded-lg bg-muted border border-border flex items-center justify-center text-foreground shrink-0">
 												<IconComponent className="size-4" />
 											</div>
-											<div>
-												<div className="text-xs font-semibold text-foreground">
+											<div className="min-w-0 flex-1">
+												<div className="text-xs font-semibold text-foreground truncate">
 													{stack.name}
 												</div>
-												<div className="text-[10px] text-muted-foreground">
+												<div className="text-[10px] text-muted-foreground truncate">
 													{stack.description}
 												</div>
 											</div>
 										</div>
 
-										<div>
+										<div className="shrink-0 ml-2">
 											{starting === stack.id ? (
 												<Loader2 className="size-3.5 animate-spin text-primary" />
 											) : isAllowed ? (

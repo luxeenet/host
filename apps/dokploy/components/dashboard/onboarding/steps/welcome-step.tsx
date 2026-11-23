@@ -131,7 +131,7 @@ export const WelcomeStep = ({ onNext }: Props) => {
 				<Button
 					size="lg"
 					onClick={onNext}
-					className="px-8 h-11 text-xs font-semibold gap-2"
+					className="w-full sm:w-auto px-8 h-11 text-xs font-semibold gap-2"
 				>
 					<span>Get started</span>
 					<ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />

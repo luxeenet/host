@@ -1001,8 +1001,8 @@ describe("Cloudflare for SaaS Custom Hostnames & SSL Management", () => {
 				path.resolve(__dirname, "../../pages/admin/index.tsx"),
 				"utf8",
 			);
-			const serverSettingsSrc = fs.readFileSync(
-				path.resolve(__dirname, "../../pages/dashboard/settings/server.tsx"),
+			const cloudflareSaasPageSrc = fs.readFileSync(
+				path.resolve(__dirname, "../../pages/dashboard/settings/cloudflare-saas.tsx"),
 				"utf8",
 			);
 			const componentSrc = fs.readFileSync(
@@ -1015,15 +1015,15 @@ describe("Cloudflare for SaaS Custom Hostnames & SSL Management", () => {
 
 			// Sidebar menu includes Cloudflare for SaaS gated by isPlatformAdmin
 			expect(sideSrc).toContain('title: "Cloudflare for SaaS"');
-			expect(sideSrc).toContain('url: "/dashboard/settings/server#cloudflare-saas"');
+			expect(sideSrc).toContain('url: "/dashboard/settings/cloudflare-saas"');
 
 			// Admin portal layout includes Cloudflare for SaaS navigation item
 			expect(adminLayoutSrc).toContain('label: "Cloudflare for SaaS"');
 			expect(adminLayoutSrc).toContain('href: "/admin#cloudflare-saas"');
 
-			// Both /admin and /dashboard/settings/server render CustomDomainRoutingSettings
+			// Both /admin and /dashboard/settings/cloudflare-saas render CustomDomainRoutingSettings
 			expect(adminIndexSrc).toContain("<CustomDomainRoutingSettings />");
-			expect(serverSettingsSrc).toContain("<CustomDomainRoutingSettings />");
+			expect(cloudflareSaasPageSrc).toContain("<CustomDomainRoutingSettings />");
 
 			// Component includes all required Cloudflare for SaaS fields and actions
 			expect(componentSrc).toContain("Cloudflare for SaaS");

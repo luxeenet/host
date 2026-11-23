@@ -338,7 +338,7 @@ export default function CustomDomainsPage() {
 											</p>
 										</div>
 									</div>
-									<Link href="/dashboard/settings/server#cloudflare-saas">
+									<Link href="/dashboard/settings/cloudflare-saas">
 										<Button
 											variant="outline"
 											size="sm"

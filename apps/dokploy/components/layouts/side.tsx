@@ -270,7 +270,7 @@ export const MENU: Menu = {
 		{
 			isSingle: true,
 			title: "Cloudflare for SaaS",
-			url: "/dashboard/settings/server#cloudflare-saas",
+			url: "/dashboard/settings/cloudflare-saas",
 			icon: Cloud,
 			isEnabled: ({ isPlatformAdmin }) => !!isPlatformAdmin,
 		},

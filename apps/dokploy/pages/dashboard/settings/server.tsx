@@ -1,19 +1,27 @@
 import type { GetServerSidePropsContext } from "next";
 import type { ReactElement } from "react";
+import { useEffect } from "react";
+import { useRouter } from "next/router";
 import { ShowBackups } from "@/components/dashboard/database/backups/show-backups";
 import { WebDomain } from "@/components/dashboard/settings/web-domain";
 import { WebServer } from "@/components/dashboard/settings/web-server";
-import { CustomDomainRoutingSettings } from "@/components/dashboard/settings/custom-domain-routing-settings";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { Card } from "@/components/ui/card";
 import { api } from "@/utils/api";
 
 const Page = () => {
+	const router = useRouter();
 	const { data: user } = api.user.get.useQuery();
+
+	useEffect(() => {
+		if (typeof window !== "undefined" && window.location.hash === "#cloudflare-saas") {
+			router.replace("/dashboard/settings/cloudflare-saas");
+		}
+	}, [router]);
+
 	return (
 		<div className="w-full">
 			<div className="h-full rounded-xl w-full flex flex-col gap-4">
-				<CustomDomainRoutingSettings />
 				<WebDomain />
 				<WebServer />
 				<div className="w-full flex flex-col gap-4">
@@ -35,6 +43,7 @@ export default Page;
 Page.getLayout = (page: ReactElement) => {
 	return <DashboardLayout metaName="Server">{page}</DashboardLayout>;
 };
+
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,
 ) {

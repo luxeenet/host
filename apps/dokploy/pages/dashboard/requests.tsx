@@ -9,7 +9,7 @@ export default function Requests() {
 	return <ShowRequests />;
 }
 Requests.getLayout = (page: ReactElement) => {
-	return <DashboardLayout>{page}</DashboardLayout>;
+	return <DashboardLayout metaName="Requests">{page}</DashboardLayout>;
 };
 export async function getServerSideProps(
 	ctx: GetServerSidePropsContext<{ serviceId: string }>,

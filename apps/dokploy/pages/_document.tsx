@@ -46,7 +46,9 @@ export default function Document({
 				<meta property="og:title" content={title} />
 				<meta property="og:description" content={description} />
 				<meta property="og:image" content={ogImage} />
-				<link rel="icon" href={faviconHref || "/icon.svg"} />
+				<link rel="icon" href={faviconHref || brand.ICON_URL || "/logo-icon.png"} />
+				<link rel="shortcut icon" href={faviconHref || "/favicon.ico"} />
+				<link rel="apple-touch-icon" href={faviconHref || brand.ICON_URL || "/logo-icon.png"} />
 				{customCss && (
 					<style
 						id="whitelabeling-styles"

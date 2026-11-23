@@ -27,7 +27,7 @@ function SchedulesPage() {
 export default SchedulesPage;
 
 SchedulesPage.getLayout = (page: ReactElement) => {
-	return <DashboardLayout>{page}</DashboardLayout>;
+	return <DashboardLayout metaName="Schedules">{page}</DashboardLayout>;
 };
 
 export async function getServerSideProps(

@@ -49,7 +49,7 @@ const Home = () => {
 export default Home;
 
 Home.getLayout = (page: ReactElement) => {
-	return <DashboardLayout>{page}</DashboardLayout>;
+	return <DashboardLayout metaName="Home">{page}</DashboardLayout>;
 };
 
 export async function getServerSideProps(ctx: GetServerSidePropsContext) {

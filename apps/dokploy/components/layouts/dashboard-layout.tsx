@@ -81,13 +81,23 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 
 	return (
 		<>
-			{metaName && (
-				<Head>
-					<title>
-						{metaName} | {appName}
-					</title>
-				</Head>
-			)}
+			<Head>
+				<title>
+					{metaName ? `${metaName} | ${appName}` : `${appName} — Cloud Console`}
+				</title>
+				<link
+					rel="icon"
+					href={whitelabeling?.faviconUrl || brand.ICON_URL || "/logo-icon.png"}
+				/>
+				<link
+					rel="shortcut icon"
+					href={whitelabeling?.faviconUrl || "/favicon.ico"}
+				/>
+				<link
+					rel="apple-touch-icon"
+					href={whitelabeling?.faviconUrl || brand.ICON_URL || "/logo-icon.png"}
+				/>
+			</Head>
 			<EmailVerificationBanner />
 			<Page>{children}</Page>
 			{isChatEnabled && (

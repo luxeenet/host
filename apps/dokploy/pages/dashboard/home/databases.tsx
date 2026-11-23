@@ -959,7 +959,7 @@ export default function ManagedDatabasesPage() {
 }
 
 ManagedDatabasesPage.getLayout = (page: ReactElement) => (
-	<DashboardLayout>{page}</DashboardLayout>
+	<DashboardLayout metaName="Managed Databases">{page}</DashboardLayout>
 );
 
 export async function getServerSideProps(ctx: GetServerSidePropsContext) {

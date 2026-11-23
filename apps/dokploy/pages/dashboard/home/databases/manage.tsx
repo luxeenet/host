@@ -3471,7 +3471,7 @@ export default function DatabaseManagePage() {
 }
 
 DatabaseManagePage.getLayout = (page: ReactElement) => (
-	<DashboardLayout>{page}</DashboardLayout>
+	<DashboardLayout metaName="Database Cluster">{page}</DashboardLayout>
 );
 
 export async function getServerSideProps(ctx: GetServerSidePropsContext) {

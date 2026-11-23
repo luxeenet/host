@@ -1,4 +1,5 @@
 import { brand } from "@paas/branding";
+import Head from "next/head";
 import { IS_CLOUD, isAdminPresent, validateRequest } from "@dokploy/server";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
 import { generateServerSideHelper } from "@/utils/create-server-helpers";
@@ -134,6 +135,9 @@ const Register = ({ isCloud }: Props) => {
 	};
 	return (
 		<div className="">
+			<Head>
+				<title>Create Account — {brand.APP_NAME}</title>
+			</Head>
 			<div className="flex  w-full items-center justify-center ">
 				<div className="flex flex-col items-center gap-4 w-full">
 					<CardTitle className="text-2xl font-bold flex  items-center gap-2">

@@ -79,7 +79,7 @@ const Overview = () => {
 export default Overview;
 
 Overview.getLayout = (page: ReactElement) => {
-	return <DashboardLayout>{page}</DashboardLayout>;
+	return <DashboardLayout metaName="Overview">{page}</DashboardLayout>;
 };
 
 export async function getServerSideProps(ctx: GetServerSidePropsContext) {

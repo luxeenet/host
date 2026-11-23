@@ -17,7 +17,7 @@ const Page = () => {
 export default Page;
 
 Page.getLayout = (page: ReactElement) => {
-	return <DashboardLayout>{page}</DashboardLayout>;
+	return <DashboardLayout metaName="AI Settings">{page}</DashboardLayout>;
 };
 import { requirePlatformAdminSession } from "@/utils/server-auth-guards";
 

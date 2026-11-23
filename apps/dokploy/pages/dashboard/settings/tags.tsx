@@ -17,7 +17,7 @@ const Page = () => {
 export default Page;
 
 Page.getLayout = (page: ReactElement) => {
-	return <DashboardLayout>{page}</DashboardLayout>;
+	return <DashboardLayout metaName="Tags">{page}</DashboardLayout>;
 };
 import { requireAuthSession } from "@/utils/server-auth-guards";
 

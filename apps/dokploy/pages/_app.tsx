@@ -2,10 +2,12 @@ import "@/styles/globals.css";
 
 import type { NextPage } from "next";
 import type { AppProps } from "next/app";
+import Head from "next/head";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import NextTopLoader from "nextjs-toploader";
 import type { ReactElement, ReactNode } from "react";
+import { brand } from "@paas/branding";
 import { SearchCommand } from "@/components/dashboard/search-command";
 import { Analytics } from "@/components/shared/analytics";
 import { Toaster } from "@/components/ui/sonner";
@@ -31,6 +33,12 @@ const MyApp = ({
 
 	return (
 		<>
+			<Head>
+				<title>{brand.APP_NAME} — {brand.TAGLINE}</title>
+				<link rel="icon" href={brand.ICON_URL || "/logo-icon.png"} />
+				<link rel="shortcut icon" href="/favicon.ico" />
+				<link rel="apple-touch-icon" href={brand.ICON_URL || "/logo-icon.png"} />
+			</Head>
 			<style jsx global>
 				{`
 					:root {

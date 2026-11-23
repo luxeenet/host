@@ -1,4 +1,5 @@
 import { brand } from "@paas/branding";
+import Head from "next/head";
 import {
 	getWebServerSettings,
 	IS_CLOUD,
@@ -297,6 +298,9 @@ export default function LoginPage({ IS_CLOUD, enforceSSO }: Props) {
 
 	return (
 		<>
+			<Head>
+				<title>Sign in to {brand.APP_NAME}</title>
+			</Head>
 			<div className="flex flex-col space-y-2 text-center">
 				<h1 className="text-2xl font-bold tracking-tight">
 					<div className="flex flex-row items-center justify-center gap-2">

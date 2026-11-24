@@ -85,6 +85,7 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 				<title>
 					{metaName ? `${metaName} | ${appName}` : `${appName} — Cloud Console`}
 				</title>
+				<meta name="robots" content="noindex, nofollow" />
 				<link
 					rel="icon"
 					type="image/x-icon"

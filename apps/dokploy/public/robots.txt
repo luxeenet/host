@@ -1,3 +1,72 @@
-User-agent: *
-Disallow: /
+# -----------------------------------------------------------------------------
+# HatDot Cloud Platform - robots.txt
+# Allows search engines (Google, Bing, Yahoo, DuckDuckGo, etc.) to crawl and
+# index public marketing, registration, and landing pages.
+# -----------------------------------------------------------------------------
 
+User-agent: *
+Allow: /
+Allow: /signup
+Allow: /register
+Allow: /login
+Allow: /sitemap.xml
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /settings/
+Disallow: /setup/
+
+# Google Search Engine Crawler
+User-agent: Googlebot
+Allow: /
+Allow: /signup
+Allow: /register
+Allow: /login
+Allow: /sitemap.xml
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /settings/
+Disallow: /setup/
+
+# Bing Search Engine Crawler
+User-agent: Bingbot
+Allow: /
+Allow: /signup
+Allow: /register
+Allow: /login
+Allow: /sitemap.xml
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /settings/
+Disallow: /setup/
+
+# Apple Search Crawler
+User-agent: Applebot
+Allow: /
+Allow: /signup
+Allow: /register
+Allow: /login
+Allow: /sitemap.xml
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /settings/
+Disallow: /setup/
+
+# DuckDuckGo Crawler
+User-agent: DuckDuckBot
+Allow: /
+Allow: /signup
+Allow: /register
+Allow: /login
+Allow: /sitemap.xml
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /settings/
+Disallow: /setup/
+
+# Canonical Sitemap URL
+Sitemap: https://hatdot.cloud/sitemap.xml

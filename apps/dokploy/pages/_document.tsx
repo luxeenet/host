@@ -42,6 +42,24 @@ export default function Document({
 				<meta name="title" content={title} />
 				<meta name="description" content={description} />
 
+				{/* Search Engine Robots & Crawling Directives */}
+				<meta
+					name="robots"
+					content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+				/>
+				<meta
+					name="googlebot"
+					content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+				/>
+				<meta
+					name="bingbot"
+					content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+				/>
+				<meta name="author" content="HatDot Cloud" />
+				<meta name="application-name" content={title} />
+				<meta name="apple-mobile-web-app-title" content={title} />
+				<link rel="canonical" href={`${baseUrl}/`} />
+
 				{/* Open Graph / Facebook / WhatsApp / Telegram / LinkedIn */}
 				<meta property="og:site_name" content={title} />
 				<meta property="og:type" content="website" />

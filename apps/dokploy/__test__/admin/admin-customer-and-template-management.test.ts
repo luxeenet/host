@@ -101,7 +101,10 @@ services:
 		});
 
 		it("should fallback to platform wildcard domain when no custom domain exists", () => {
-			const app = {
+			const app: {
+				appName: string;
+				domains: Array<{ host: string; path?: string; https?: boolean }>;
+			} = {
 				appName: "customer-blog-9988",
 				domains: [],
 			};

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Head from "next/head";
 import { useRouter } from "next/router";
 import { type ReactNode, useState } from "react";
 import {
@@ -145,7 +146,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 	);
 
 	return (
-		<div className="min-h-screen bg-slate-950 flex">
+		<>
+			<Head>
+				<meta name="robots" content="noindex, nofollow" />
+			</Head>
+			<div className="min-h-screen bg-slate-950 flex">
 			{/* Desktop Sidebar */}
 			<aside className="hidden lg:flex w-60 shrink-0 flex-col bg-slate-900/90 border-r border-slate-800 fixed left-0 top-0 bottom-0 z-30">
 				<SidebarContent />
@@ -171,5 +176,6 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 				</main>
 			</div>
 		</div>
+		</>
 	);
 }

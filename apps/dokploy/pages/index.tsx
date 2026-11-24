@@ -96,14 +96,99 @@ export default function LandingPage() {
 				<title>{brand.APP_NAME} — {brand.TAGLINE}</title>
 				<meta
 					name="description"
-					content={`Deploy and manage modern applications, databases, and multi-service cloud stacks on high-performance cloud infrastructure with ${brand.APP_NAME}.`}
+					content={`Deploy and manage modern applications, Docker containers, databases, and multi-service cloud stacks on high-performance infrastructure with ${brand.APP_NAME}.`}
 				/>
+				<meta
+					name="keywords"
+					content="hatdot, hatdot cloud, cloud hosting, application hosting, docker hosting, developer paas, managed databases, postgresql, mysql, redis, cloud platform, tanzania cloud"
+				/>
+				<meta
+					name="robots"
+					content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+				/>
+				<meta
+					name="googlebot"
+					content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+				/>
+				<meta
+					name="bingbot"
+					content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+				/>
+				<link rel="canonical" href="https://hatdot.cloud/" />
+
+				{/* Open Graph / Facebook / LinkedIn */}
+				<meta property="og:site_name" content={brand.APP_NAME} />
 				<meta property="og:title" content={`${brand.APP_NAME} — ${brand.TAGLINE}`} />
 				<meta
 					property="og:description"
-					content={`Next-generation developer PaaS. Deploy Git repositories, web services, and managed databases with zero-downtime rollouts and automatic edge SSL.`}
+					content={`Next-generation developer PaaS. Deploy Git repositories, web services, and managed databases with zero-downtime rollouts and automatic edge SSL on ${brand.APP_NAME}.`}
 				/>
 				<meta property="og:type" content="website" />
+				<meta property="og:url" content="https://hatdot.cloud/" />
+				<meta property="og:image" content="https://hatdot.cloud/og.png" />
+				<meta property="og:image:width" content="1200" />
+				<meta property="og:image:height" content="630" />
+				<meta property="og:locale" content="en_US" />
+
+				{/* Twitter Card */}
+				<meta name="twitter:card" content="summary_large_image" />
+				<meta name="twitter:title" content={`${brand.APP_NAME} — ${brand.TAGLINE}`} />
+				<meta
+					name="twitter:description"
+					content={`Deploy Git repositories, web services, and managed databases with zero-downtime rollouts and automatic edge SSL on ${brand.APP_NAME}.`}
+				/>
+				<meta name="twitter:image" content="https://hatdot.cloud/og.png" />
+
+				{/* Schema.org Structured Data for Google Rich Snippets */}
+				<script
+					type="application/ld+json"
+					dangerouslySetInnerHTML={{
+						__html: JSON.stringify({
+							"@context": "https://schema.org",
+							"@graph": [
+								{
+									"@type": "WebSite",
+									"@id": "https://hatdot.cloud/#website",
+									"url": "https://hatdot.cloud/",
+									"name": "HatDot",
+									"alternateName": ["HatDot Cloud", "HatDot Platform", "hatdot.cloud"],
+									"description": "Next-generation developer PaaS. Deploy Git repositories, web services, and managed databases with zero-downtime rollouts.",
+									"publisher": {
+										"@id": "https://hatdot.cloud/#organization"
+									},
+									"inLanguage": "en-US"
+								},
+								{
+									"@type": "Organization",
+									"@id": "https://hatdot.cloud/#organization",
+									"name": "HatDot",
+									"alternateName": "HatDot Cloud",
+									"url": "https://hatdot.cloud/",
+									"logo": {
+										"@type": "ImageObject",
+										"url": "https://hatdot.cloud/logo-icon.png",
+										"caption": "HatDot Cloud Logo"
+									},
+									"image": "https://hatdot.cloud/og.png"
+								},
+								{
+									"@type": "SoftwareApplication",
+									"@id": "https://hatdot.cloud/#application",
+									"name": "HatDot Cloud Platform",
+									"applicationCategory": "DeveloperApplication",
+									"operatingSystem": "All",
+									"url": "https://hatdot.cloud/",
+									"offers": {
+										"@type": "AggregateOffer",
+										"priceCurrency": "TZS",
+										"lowPrice": "0",
+										"offerCount": "4"
+									}
+								}
+							]
+						}),
+					}}
+				/>
 			</Head>
 
 			<div className="min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary">

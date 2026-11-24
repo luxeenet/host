@@ -18,6 +18,7 @@ import {
 	Users,
 	Zap,
 	X,
+	Boxes,
 } from "lucide-react";
 import { api } from "@/utils/api";
 import { useEffect } from "react";
@@ -32,6 +33,7 @@ export const ADMIN_NAV_ITEMS = [
 	{ label: "Payment Gateways", icon: CreditCard, href: "/admin/payments" },
 	{ label: "Email & Notifications", icon: Mail, href: "/admin/notifications" },
 	{ label: "Customers", icon: Users, href: "/admin/customers" },
+	{ label: "App Templates", icon: Boxes, href: "/admin/templates" },
 	{ label: "Server Nodes", icon: Server, href: "/admin/servers" },
 	{ label: "Cloudflare for SaaS", icon: Cloud, href: "/admin#cloudflare-saas" },
 	{ label: "Web Server Settings", icon: Settings, href: "/dashboard/settings/server" },

@@ -113,29 +113,202 @@ export const adminRouter = createTRPCRouter({
 		};
 	}),
 
-	/** Platform Admin: List all registered customers */
+	/** Platform Admin: List all registered customers with hosted apps, amounts paid, and subscription plans */
 	listCustomers: platformAdminProcedure.query(async () => {
-		const users = await db.query.user.findMany({
-			with: {
-				organizations: {
-					with: {
-						projects: true,
+		const [users, allSubs, allPayments] = await Promise.all([
+			db.query.user.findMany({
+				with: {
+					organizations: {
+						with: {
+							projects: {
+								with: {
+									environments: {
+										with: {
+											applications: {
+												with: {
+													domains: true,
+												},
+											},
+											compose: {
+												with: {
+													domains: true,
+												},
+											},
+											postgres: true,
+											mariadb: true,
+											mysql: true,
+											mongo: true,
+											redis: true,
+											libsql: true,
+										},
+									},
+								},
+							},
+						},
 					},
 				},
-			},
-			orderBy: (u, { desc }) => [desc(u.createdAt)],
-		});
+				orderBy: (u, { desc }) => [desc(u.createdAt)],
+			}),
+			db.query.subscriptions.findMany({
+				with: {
+					plan: true,
+				},
+			}),
+			db.query.payments.findMany({
+				where: eq(schema.payments.status, "succeeded"),
+			}),
+		]);
 
-		return users.map((u) => ({
-			id: u.id,
-			firstName: u.firstName,
-			lastName: u.lastName,
-			email: u.email,
-			role: u.role,
-			isPlatformAdmin: u.isPlatformAdmin,
-			createdAt: u.createdAt,
-			projectCount: u.organizations?.reduce((acc, org) => acc + (org.projects?.length || 0), 0) || 0,
-		}));
+		const subsByOrg = new Map<string, typeof allSubs>();
+		for (const sub of allSubs) {
+			if (!sub.organizationId) continue;
+			const list = subsByOrg.get(sub.organizationId) || [];
+			list.push(sub);
+			subsByOrg.set(sub.organizationId, list);
+		}
+
+		const paymentsByOrg = new Map<string, typeof allPayments>();
+		for (const p of allPayments) {
+			if (!p.organizationId) continue;
+			const list = paymentsByOrg.get(p.organizationId) || [];
+			list.push(p);
+			paymentsByOrg.set(p.organizationId, list);
+		}
+
+		return users.map((u) => {
+			const orgs = (u.organizations || []) as any[];
+
+			let totalPaid = 0;
+			let currency = "TZS";
+			let paymentCount = 0;
+
+			for (const org of orgs) {
+				const orgPayments = paymentsByOrg.get(org.id) || [];
+				for (const p of orgPayments) {
+					totalPaid += Number.parseFloat(p.amount) || 0;
+					currency = p.currency || currency;
+					paymentCount += 1;
+				}
+			}
+
+			let primarySub: any = null;
+			for (const org of orgs) {
+				const orgSubs = subsByOrg.get(org.id) || [];
+				const active =
+					orgSubs.find(
+						(s: any) =>
+							s.status === "active" ||
+							s.status === "trial" ||
+							s.status === "grace_period" ||
+							s.status === "past_due",
+					) || orgSubs[0];
+				if (active) {
+					primarySub = active;
+					break;
+				}
+			}
+
+			const allApps: any[] = [];
+			const allCompose: any[] = [];
+			const allDbs: any[] = [];
+
+			for (const org of orgs) {
+				for (const project of org.projects || []) {
+					for (const env of project.environments || []) {
+						for (const app of env.applications || []) {
+							const domain = app.domains?.[0];
+							const primaryUrl = domain
+								? `${domain.https ? "https" : "http"}://${domain.host}${domain.path || ""}`
+								: `https://${app.appName}.hatdot.cloud`;
+
+							allApps.push({
+								applicationId: app.applicationId,
+								name: app.name,
+								appName: app.appName,
+								status: app.applicationStatus || "idle",
+								createdAt: app.createdAt ? String(app.createdAt) : "",
+								serverId: app.serverId,
+								domains: app.domains || [],
+								primaryUrl,
+							});
+						}
+
+						for (const comp of env.compose || []) {
+							const domain = comp.domains?.[0];
+							const primaryUrl = domain
+								? `${domain.https ? "https" : "http"}://${domain.host}${domain.path || ""}`
+								: `https://${comp.appName}.hatdot.cloud`;
+
+							allCompose.push({
+								composeId: comp.composeId,
+								name: comp.name,
+								appName: comp.appName,
+								composeType: comp.composeType,
+								status: comp.composeStatus || "idle",
+								createdAt: comp.createdAt ? String(comp.createdAt) : "",
+								serverId: comp.serverId,
+								domains: comp.domains || [],
+								primaryUrl,
+							});
+						}
+
+						for (const dbItem of env.postgres || []) {
+							allDbs.push({ id: dbItem.postgresId, name: dbItem.name, appName: dbItem.appName, type: "postgres", status: dbItem.applicationStatus });
+						}
+						for (const dbItem of env.mysql || []) {
+							allDbs.push({ id: dbItem.mysqlId, name: dbItem.name, appName: dbItem.appName, type: "mysql", status: dbItem.applicationStatus });
+						}
+						for (const dbItem of env.mariadb || []) {
+							allDbs.push({ id: dbItem.mariadbId, name: dbItem.name, appName: dbItem.appName, type: "mariadb", status: dbItem.applicationStatus });
+						}
+						for (const dbItem of env.mongo || []) {
+							allDbs.push({ id: dbItem.mongoId, name: dbItem.name, appName: dbItem.appName, type: "mongo", status: dbItem.applicationStatus });
+						}
+						for (const dbItem of env.redis || []) {
+							allDbs.push({ id: dbItem.redisId, name: dbItem.name, appName: dbItem.appName, type: "redis", status: dbItem.applicationStatus });
+						}
+						for (const dbItem of env.libsql || []) {
+							allDbs.push({ id: dbItem.libsqlId, name: dbItem.name, appName: dbItem.appName, type: "libsql", status: dbItem.applicationStatus });
+						}
+					}
+				}
+			}
+
+			return {
+				id: u.id,
+				firstName: u.firstName,
+				lastName: u.lastName,
+				email: u.email,
+				role: u.role,
+				isPlatformAdmin: u.isPlatformAdmin,
+				banned: u.banned ?? false,
+				banReason: u.banReason,
+				createdAt: u.createdAt,
+				projectCount: orgs.reduce(
+					(acc: number, org: any) => acc + (org.projects?.length || 0),
+					0,
+				),
+				totalAmountPaid: totalPaid,
+				currency,
+				paymentCount,
+				subscription: primarySub
+					? {
+							id: primarySub.id,
+							status: primarySub.status,
+							planName: primarySub.plan?.name || "Free Tier",
+							planPrice: primarySub.plan?.price || "0",
+							billingCycle: primarySub.plan?.billingCycle || "monthly",
+							currentPeriodStart: primarySub.currentPeriodStart,
+							currentPeriodEnd: primarySub.currentPeriodEnd,
+							gracePeriodEndsAt: primarySub.gracePeriodEndsAt,
+					  }
+					: null,
+				applications: allApps,
+				composeStacks: allCompose,
+				databases: allDbs,
+				totalServicesCount: allApps.length + allCompose.length + allDbs.length,
+			};
+		});
 	}),
 
 	/** Platform Admin: List all connected server nodes */
@@ -301,5 +474,115 @@ export const adminRouter = createTRPCRouter({
 				input.templateId,
 				input.targetEmail,
 			);
+		}),
+
+	/** Platform Admin: Toggle customer account access (Disable / Re-enable) */
+	toggleCustomerStatus: platformAdminProcedure
+		.input(
+			z.object({
+				userId: z.string(),
+				banned: z.boolean(),
+				reason: z.string().optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			if (input.userId === ctx.user.id || input.userId === process.env.USER_ADMIN_ID) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "You cannot disable your own administrator account.",
+				});
+			}
+
+			await db
+				.update(schema.user)
+				.set({
+					banned: input.banned,
+					banReason: input.banned
+						? input.reason || "Account deactivated by platform administrator"
+						: null,
+					updatedAt: new Date(),
+				})
+				.where(eq(schema.user.id, input.userId));
+
+			return { success: true, banned: input.banned };
+		}),
+
+	/** Platform Admin: Delete customer account and completely purge all applications, containers, and volumes */
+	deleteCustomerAccount: platformAdminProcedure
+		.input(z.object({ userId: z.string() }))
+		.mutation(async ({ input, ctx }) => {
+			const { purgeCustomerAccount } = await import("@dokploy/server");
+			return await purgeCustomerAccount(input.userId, ctx.user.id);
+		}),
+
+	/** Platform Admin: Delete an individual customer application (containers, volumes, and routing) */
+	deleteCustomerApplication: platformAdminProcedure
+		.input(z.object({ applicationId: z.string() }))
+		.mutation(async ({ input }) => {
+			const { deleteCustomerApplication } = await import("@dokploy/server");
+			return await deleteCustomerApplication(input.applicationId);
+		}),
+
+	/** Platform Admin: Delete an individual customer compose service */
+	deleteCustomerCompose: platformAdminProcedure
+		.input(z.object({ composeId: z.string() }))
+		.mutation(async ({ input }) => {
+			const { deleteCustomerCompose } = await import("@dokploy/server");
+			return await deleteCustomerCompose(input.composeId);
+		}),
+
+	/** Platform Admin: List all templates (including custom templates, excluding deleted ones) */
+	listTemplates: platformAdminProcedure.query(async () => {
+		const { fetchTemplatesList } = await import("@dokploy/server");
+		return await fetchTemplatesList();
+	}),
+
+	/** Platform Admin: Add a new custom application template */
+	addTemplate: platformAdminProcedure
+		.input(
+			z.object({
+				id: z
+					.string()
+					.min(1)
+					.regex(
+						/^[a-z0-9-_]+$/i,
+						"ID must contain only letters, numbers, hyphens, and underscores",
+					),
+				name: z.string().min(1),
+				description: z.string().min(1),
+				version: z.string().default("1.0.0"),
+				tags: z.array(z.string()).default([]),
+				logo: z.string().optional(),
+				dockerCompose: z.string().min(1),
+				env: z.string().optional(),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const { saveCustomTemplate, validateSafeComposeYaml } = await import(
+				"@dokploy/server"
+			);
+			validateSafeComposeYaml(input.dockerCompose, true);
+
+			await saveCustomTemplate({
+				id: input.id.toLowerCase().trim(),
+				name: input.name.trim(),
+				description: input.description.trim(),
+				version: input.version || "1.0.0",
+				tags: input.tags.length > 0 ? input.tags : ["Custom"],
+				logo: input.logo,
+				dockerCompose: input.dockerCompose,
+				env: input.env,
+			});
+
+			return { success: true };
+		}),
+
+	/** Platform Admin: Delete / remove an application template */
+	deleteTemplate: platformAdminProcedure
+		.input(z.object({ templateId: z.string() }))
+		.mutation(async ({ input }) => {
+			const { deleteTemplateById } = await import("@dokploy/server");
+			await deleteTemplateById(input.templateId);
+			return { success: true };
 		}),
 });

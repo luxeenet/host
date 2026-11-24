@@ -10,6 +10,7 @@ export * from "./lib/logger";
 export * from "./lib/oauth-state";
 export * from "./monitoring/utils";
 export * from "./services/admin";
+export * from "./services/admin-account";
 export * from "./services/app-detector";
 export * from "./services/application";
 export * from "./services/builder-analytics";
@@ -103,6 +104,7 @@ export * from "./setup/server-validate";
 export * from "./setup/setup";
 export * from "./setup/traefik-setup";
 export * from "./templates/processors";
+export * from "./templates/github";
 export * from "./utils/access-log/handler";
 export {
 	getLogCleanupStatus,

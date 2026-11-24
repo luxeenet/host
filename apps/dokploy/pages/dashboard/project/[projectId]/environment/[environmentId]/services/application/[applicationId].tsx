@@ -143,8 +143,11 @@ const Service = (
 	);
 
 	const { data: auth } = api.user.get.useQuery();
+	const { data: haveRootAccess } = api.user.haveRootAccess.useQuery();
 	const isPlatformAdmin = Boolean(
-		(auth as any)?.user?.isPlatformAdmin || (auth as any)?.isPlatformAdmin,
+		haveRootAccess ||
+			(auth as any)?.user?.isPlatformAdmin ||
+			(auth as any)?.isPlatformAdmin,
 	);
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { data: serverIp } = api.settings.getIp.useQuery(undefined, {
@@ -527,8 +530,12 @@ const Service = (
 									{permissions?.service.create && (
 										<TabsContent value="advanced">
 											<div className="flex flex-col gap-6 pt-2.5">
-												<RunContainerCommand applicationId={applicationId} />
-												<AddCommand applicationId={applicationId} />
+												{isPlatformAdmin && (
+													<>
+														<RunContainerCommand applicationId={applicationId} />
+														<AddCommand applicationId={applicationId} />
+													</>
+												)}
 												<ShowPorts applicationId={applicationId} />
 												{isPlatformAdmin && (
 													<ShowClusterSettings

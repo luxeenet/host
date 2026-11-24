@@ -8,11 +8,6 @@ import {
 	Globe,
 	Zap,
 	ShieldCheck,
-	Lock,
-	Layers,
-	BookOpen,
-	Workflow,
-	Activity,
 	Sparkles,
 	AlertCircle,
 	Terminal,
@@ -34,41 +29,6 @@ interface Props {
 	onNext: () => void;
 	plainTitle?: boolean;
 }
-
-const TEMPLATE_STACKS = [
-	{
-		id: "wordpress",
-		name: "WordPress Stack",
-		description: "Full CMS + MySQL database engine",
-		requiredRamMb: 1024,
-		icon: Globe,
-		tag: "CMS & Blog",
-	},
-	{
-		id: "ghost",
-		name: "Ghost Publishing",
-		description: "High-speed publishing platform + MySQL",
-		requiredRamMb: 1024,
-		icon: BookOpen,
-		tag: "Publishing",
-	},
-	{
-		id: "n8n",
-		name: "n8n Workflows",
-		description: "Automated workflow & integration engine",
-		requiredRamMb: 1024,
-		icon: Workflow,
-		tag: "Automation",
-	},
-	{
-		id: "uptime-kuma",
-		name: "Uptime Monitor",
-		description: "Self-hosted service status & latency monitor",
-		requiredRamMb: 512,
-		icon: Activity,
-		tag: "Monitoring",
-	},
-];
 
 type Deploying = { kind: "app" | "template"; id: string; url: string };
 
@@ -166,9 +126,6 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 
 	const { mutateAsync: deployNginx } =
 		api.application.deployNginxQuickstart.useMutation();
-	const { mutateAsync: deployTemplate } =
-		api.compose.deployTemplate.useMutation();
-	const { mutateAsync: deployCompose } = api.compose.deploy.useMutation();
 	const utils = api.useUtils();
 
 	const { data: application } = api.application.one.useQuery(
@@ -339,39 +296,7 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 		}
 	};
 
-	const handleTemplate = async (templateId: string, requiredRam: number) => {
-		if (!supportsCompose || (maxRamMb !== -1 && maxRamMb < requiredRam)) {
-			toast.info(
-				`This multi-container stack requires at least ${requiredRam} MB RAM. Please deploy the Instant Web App or upgrade your plan.`,
-			);
-			return;
-		}
 
-		setStarting(templateId);
-		try {
-			const composeResult = await deployTemplate({
-				environmentId,
-				serverId,
-				id: templateId,
-			});
-			await deployCompose({ composeId: composeResult.composeId });
-			const domains = await utils.domain.byComposeId.fetch({
-				composeId: composeResult.composeId,
-			});
-			const host = domains?.[0]?.host;
-			setDeploying({
-				kind: "template",
-				id: composeResult.composeId,
-				url: host ? `http://${host}` : "",
-			});
-		} catch (error) {
-			toast.error(
-				error instanceof Error ? error.message : "Error deploying the stack",
-			);
-		} finally {
-			setStarting(null);
-		}
-	};
 
 	if (deploying) {
 		const isDone = status === "done";
@@ -668,11 +593,10 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 				</p>
 			</div>
 
-			{/* Deployment Options Grid */}
-			<div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-				{/* Option 1: Intelligent Quickstart tailored to plan builder */}
-				<div className="flex flex-col justify-between rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-4 sm:p-6 shadow-sm text-card-foreground relative">
-					<div className="absolute top-3 right-3">
+			{/* Deployment Quickstart Card */}
+			<div className="max-w-xl mx-auto w-full">
+				<div className="flex flex-col justify-between rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-5 sm:p-7 shadow-sm text-card-foreground relative">
+					<div className="absolute top-4 right-4">
 						<Badge variant="secondary" className="text-[10px] font-semibold uppercase">
 							{isNixpacksOnly
 								? "Universal Engine • Nixpacks"
@@ -682,13 +606,13 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 						</Badge>
 					</div>
 
-					<div className="space-y-3">
-						<div className="size-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-							<Zap className="size-5" />
+					<div className="space-y-4">
+						<div className="size-11 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+							<Zap className="size-6" />
 						</div>
 
 						<div>
-							<h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+							<h3 className="text-xl font-bold text-foreground flex items-center gap-2">
 								{isNixpacksOnly
 									? "Instant Dynamic Web App"
 									: isStaticOnly
@@ -696,26 +620,26 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 										: "Instant Cloud Web App"}
 								<Sparkles className="size-4 text-primary" />
 							</h3>
-							<p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+							<p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
 								{isNixpacksOnly
 									? "Pre-configured Node.js dynamic web application powered by the HatDot Universal Nixpacks Engine. Automatically detects runtime, dependencies, and provisions with zero configuration."
 									: isStaticOnly
-										? "Pre-configured, high-speed static website running on the HatDot edge network. Deploys instantly with pre-packaged static codes and automated HTTPS."
+										? "Pre-configured, high-speed static website running on the HatDot edge network. Deploys instantly with pre-packaged static code and automated HTTPS."
 										: "Pre-configured cloud application running on HatDot high-speed infrastructure. Deploys with automated edge routing, health checks, and global SSL."}
 							</p>
 						</div>
 
-						<div className="p-3 rounded-lg bg-muted/40 border border-border text-xs text-muted-foreground space-y-1">
+						<div className="p-3.5 rounded-lg bg-muted/40 border border-border text-xs text-muted-foreground space-y-1.5">
 							<div className="flex items-center gap-1.5 text-foreground font-medium">
-								<CheckCircle2 className="size-3.5 text-primary" />
+								<CheckCircle2 className="size-4 text-primary" />
 								<span>Supported on your {planName}</span>
 							</div>
-							<div className="text-[11px]">
+							<div className="text-[12px] leading-relaxed">
 								{isNixpacksOnly
-									? "Native Nixpacks Builder • Port 3000 • Automated Edge SSL. Zero Docker daemon configuration required."
+									? "Native Nixpacks Builder • Port 3000 • Automated Edge SSL. Zero complex Dockerfile setup required."
 									: isStaticOnly
 										? "Static Edge Engine • Port 80 • Automated Edge SSL. Zero build delay or quota errors."
-										: "Full Builder Access (Nixpacks & Docker) • Port 80/3000 • Automated Edge SSL."}
+										: "Full Cloud Builder Access • Port 80/3000 • Automated Edge SSL."}
 							</div>
 						</div>
 					</div>
@@ -724,11 +648,11 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 						onClick={handleNginx}
 						disabled={!!starting}
 						size="lg"
-						className="w-full mt-6 text-xs font-semibold gap-2"
+						className="w-full mt-7 text-sm font-semibold gap-2"
 					>
 						{starting === "nginx" ? (
 							<>
-								<Loader2 className="size-3.5 animate-spin" />
+								<Loader2 className="size-4 animate-spin" />
 								{isNixpacksOnly
 									? "Deploying Dynamic App..."
 									: isStaticOnly
@@ -745,95 +669,6 @@ export const DeployStep = ({ environmentId, onNext, plainTitle }: Props) => {
 							</>
 						)}
 					</Button>
-				</div>
-
-				{/* Option 2: Pre-configured Stacks & Templates (Plan Aware) */}
-				<div className="flex flex-col justify-between rounded-xl border border-border bg-card p-4 sm:p-6 shadow-sm text-card-foreground">
-					<div className="space-y-4">
-						<div className="flex items-center justify-between">
-							<div className="size-10 rounded-lg bg-muted border border-border flex items-center justify-center text-foreground">
-								<Layers className="size-5" />
-							</div>
-							<Badge
-								variant="outline"
-								className="text-[10px]"
-							>
-								{supportsCompose ? "Multi-Service Ready" : "Requires Pro Plan"}
-							</Badge>
-						</div>
-
-						<div>
-							<h3 className="text-lg font-bold text-foreground">
-								Production App Stacks
-							</h3>
-							<p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-								Pre-configured multi-tier applications combining web engines and managed database backends.
-							</p>
-						</div>
-
-						{!supportsCompose ? (
-							<div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-1.5 text-xs text-muted-foreground">
-								<div className="flex items-start gap-2 text-foreground font-medium">
-									<Lock className="size-4 shrink-0 mt-0.5 text-primary" />
-									<span>Multi-service stacks require Pro Plan &amp; 1 GB+ RAM</span>
-								</div>
-								<p className="text-[11px] leading-relaxed">
-									Your current <strong>{planName}</strong> is optimized for single services ({isNixpacksOnly ? "Universal Nixpacks Engine" : isStaticOnly ? "Static Edge Engine" : "Container Engine"}). Stacks like WordPress include an application + full MySQL database and require a Pro or Business plan. Deploy the {isNixpacksOnly ? "Dynamic App" : isStaticOnly ? "Static Website" : "Instant App"} to get live immediately.
-								</p>
-							</div>
-						) : null}
-
-						<div className="grid grid-cols-1 gap-2 pt-1">
-							{TEMPLATE_STACKS.map((stack) => {
-								const IconComponent = stack.icon;
-								const isAllowed =
-									supportsCompose &&
-									(maxRamMb === -1 || maxRamMb >= stack.requiredRamMb);
-
-								return (
-									<button
-										key={stack.id}
-										type="button"
-										disabled={!isAllowed || !!starting}
-										onClick={() => handleTemplate(stack.id, stack.requiredRamMb)}
-										className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
-											isAllowed
-												? "border-border bg-card hover:bg-accent/50 hover:border-primary/40 cursor-pointer text-card-foreground"
-												: "border-border/60 bg-muted/30 opacity-60 cursor-not-allowed text-muted-foreground"
-										}`}
-									>
-										<div className="flex items-center gap-3 min-w-0 flex-1">
-											<div className="size-8 rounded-lg bg-muted border border-border flex items-center justify-center text-foreground shrink-0">
-												<IconComponent className="size-4" />
-											</div>
-											<div className="min-w-0 flex-1">
-												<div className="text-xs font-semibold text-foreground truncate">
-													{stack.name}
-												</div>
-												<div className="text-[10px] text-muted-foreground truncate">
-													{stack.description}
-												</div>
-											</div>
-										</div>
-
-										<div className="shrink-0 ml-2">
-											{starting === stack.id ? (
-												<Loader2 className="size-3.5 animate-spin text-primary" />
-											) : isAllowed ? (
-												<span className="text-xs font-semibold text-primary">
-													Deploy &rarr;
-												</span>
-											) : (
-												<span className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
-													<Lock className="size-3" /> 1GB RAM
-												</span>
-											)}
-										</div>
-									</button>
-								);
-							})}
-						</div>
-					</div>
 				</div>
 			</div>
 		</div>

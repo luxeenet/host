@@ -68,10 +68,32 @@ function isPathDangerous(hostPath: string): boolean {
 	return false;
 }
 
+export function parseMemoryToMb(mem: unknown): number | undefined {
+	if (mem === undefined || mem === null) return undefined;
+	if (typeof mem === "number") {
+		return Math.round(mem / (1024 * 1024));
+	}
+	if (typeof mem === "string") {
+		const trimmed = mem.trim().toLowerCase();
+		const match = trimmed.match(/^([0-9.]+)\s*([kmgtp]?b?)$/);
+		if (!match) return undefined;
+		const val = Number.parseFloat(match[1]!);
+		const unit = match[2] || "b";
+		if (Number.isNaN(val)) return undefined;
+		if (unit.startsWith("k")) return Math.round(val / 1024);
+		if (unit.startsWith("m")) return Math.round(val);
+		if (unit.startsWith("g")) return Math.round(val * 1024);
+		if (unit.startsWith("t")) return Math.round(val * 1024 * 1024);
+		return Math.round(val / (1024 * 1024));
+	}
+	return undefined;
+}
+
 export function validateSafeComposeSpecification(
 	composeSpec: ComposeSpecification,
 	isPlatformAdmin = false,
 	maxCpuMillicores?: number,
+	maxRamMb?: number,
 ): void {
 	if (isPlatformAdmin) return;
 	if (!composeSpec || typeof composeSpec !== "object") return;
@@ -238,45 +260,98 @@ export function validateSafeComposeSpecification(
 				});
 			}
 		}
+
+		// 9. Plan Memory Quota Enforcement: zero bypass
+		if (maxRamMb !== undefined && maxRamMb !== -1 && maxRamMb > 0) {
+			const memLimitRaw =
+				(service as any).mem_limit !== undefined
+					? (service as any).mem_limit
+					: (service as any).deploy?.resources?.limits?.memory;
+			const serviceMemMb = parseMemoryToMb(memLimitRaw);
+
+			if (serviceMemMb !== undefined && serviceMemMb > maxRamMb) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: `Service '${serviceName}': Requested memory (${serviceMemMb} MB) exceeds your plan limit of ${maxRamMb} MB. Please upgrade your plan.`,
+				});
+			}
+		}
 	}
 }
 
 /**
- * Automatically clamps and injects plan CPU limits into Compose specification
- * so unconstrained services do not run with unlimited host CPU cores.
+ * Automatically clamps and injects plan CPU & RAM limits into Compose specification
+ * so unconstrained services do not run with unlimited host CPU cores or memory.
  */
 export function enforceComposePlanLimits(
 	composeSpec: ComposeSpecification,
 	maxCpuMillicores?: number,
+	maxRamMb?: number,
 ): void {
-	if (!maxCpuMillicores || maxCpuMillicores === -1 || maxCpuMillicores <= 0) return;
 	if (!composeSpec || typeof composeSpec !== "object") return;
 	const services = composeSpec.services;
 	if (!services || typeof services !== "object") return;
 
-	const maxVcpu = maxCpuMillicores / 1000;
+	const hasCpuLimit =
+		maxCpuMillicores !== undefined && maxCpuMillicores !== -1 && maxCpuMillicores > 0;
+	const maxVcpu = hasCpuLimit ? maxCpuMillicores / 1000 : undefined;
+	const hasRamLimit = maxRamMb !== undefined && maxRamMb !== -1 && maxRamMb > 0;
 
 	for (const [_, service] of Object.entries(services)) {
 		if (!service || typeof service !== "object") continue;
 
-		const hasDirectCpu = (service as any).cpus !== undefined;
-		const hasDeployLimit = (service as any).deploy?.resources?.limits?.cpus !== undefined;
+		// Enforce CPU
+		if (hasCpuLimit && maxVcpu !== undefined) {
+			const hasDirectCpu = (service as any).cpus !== undefined;
+			const hasDeployLimit =
+				(service as any).deploy?.resources?.limits?.cpus !== undefined;
 
-		if (!hasDirectCpu && !hasDeployLimit) {
-			if (!service.deploy) service.deploy = {};
-			if (!service.deploy.resources) service.deploy.resources = {};
-			if (!service.deploy.resources.limits) service.deploy.resources.limits = {};
-			service.deploy.resources.limits.cpus = String(maxVcpu);
-			(service as any).cpus = maxVcpu;
-		} else {
-			if (hasDirectCpu && Number((service as any).cpus) > maxVcpu) {
+			if (!hasDirectCpu && !hasDeployLimit) {
+				if (!service.deploy) service.deploy = {};
+				if (!service.deploy.resources) service.deploy.resources = {};
+				if (!service.deploy.resources.limits) service.deploy.resources.limits = {};
+				service.deploy.resources.limits.cpus = String(maxVcpu);
 				(service as any).cpus = maxVcpu;
+			} else {
+				if (hasDirectCpu && Number((service as any).cpus) > maxVcpu) {
+					(service as any).cpus = maxVcpu;
+				}
+				if (
+					hasDeployLimit &&
+					Number((service as any).deploy?.resources?.limits?.cpus) > maxVcpu
+				) {
+					(service as any).deploy.resources.limits.cpus = String(maxVcpu);
+				}
 			}
-			if (
-				hasDeployLimit &&
-				Number((service as any).deploy?.resources?.limits?.cpus) > maxVcpu
-			) {
-				(service as any).deploy.resources.limits.cpus = String(maxVcpu);
+		}
+
+		// Enforce RAM
+		if (hasRamLimit) {
+			const hasDirectMem = (service as any).mem_limit !== undefined;
+			const hasDeployMem =
+				(service as any).deploy?.resources?.limits?.memory !== undefined;
+
+			if (!hasDirectMem && !hasDeployMem) {
+				if (!service.deploy) service.deploy = {};
+				if (!service.deploy.resources) service.deploy.resources = {};
+				if (!service.deploy.resources.limits) service.deploy.resources.limits = {};
+				service.deploy.resources.limits.memory = `${maxRamMb}M`;
+				(service as any).mem_limit = `${maxRamMb}m`;
+			} else {
+				if (hasDirectMem) {
+					const curMb = parseMemoryToMb((service as any).mem_limit);
+					if (curMb !== undefined && curMb > maxRamMb) {
+						(service as any).mem_limit = `${maxRamMb}m`;
+					}
+				}
+				if (hasDeployMem) {
+					const curMb = parseMemoryToMb(
+						(service as any).deploy?.resources?.limits?.memory,
+					);
+					if (curMb !== undefined && curMb > maxRamMb) {
+						(service as any).deploy.resources.limits.memory = `${maxRamMb}M`;
+					}
+				}
 			}
 		}
 	}
@@ -289,6 +364,7 @@ export function validateSafeComposeYaml(
 	yamlString: string,
 	isPlatformAdmin = false,
 	maxCpuMillicores?: number,
+	maxRamMb?: number,
 ): void {
 	if (isPlatformAdmin) return;
 	if (!yamlString || !yamlString.trim()) return;
@@ -296,7 +372,12 @@ export function validateSafeComposeYaml(
 	try {
 		const parsed = parse(yamlString, { maxAliasCount: 10000 }) as ComposeSpecification;
 		if (parsed && typeof parsed === "object") {
-			validateSafeComposeSpecification(parsed, isPlatformAdmin, maxCpuMillicores);
+			validateSafeComposeSpecification(
+				parsed,
+				isPlatformAdmin,
+				maxCpuMillicores,
+				maxRamMb,
+			);
 		}
 	} catch (error) {
 		if (error instanceof TRPCError) {

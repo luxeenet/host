@@ -3,6 +3,8 @@ import { TRPCError } from "@trpc/server";
 import {
 	validateSafeComposeSpecification,
 	validateSafeComposeYaml,
+	enforceComposePlanLimits,
+	parseMemoryToMb,
 } from "@dokploy/server/services/compose-security";
 
 vi.mock("@dokploy/server/db", () => {
@@ -640,6 +642,119 @@ describe("Multi-Tenant Isolation & Security across Customer Tabs", () => {
 					true,
 				),
 			).not.toThrow();
+		});
+
+		it("enforces CPU quota in compose specification and rejects attempts to exceed plan limit", () => {
+			// Plan allows 1000 millicores (1 vCPU), customer requests 2 vCPU
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							app: {
+								image: "node:18",
+								cpus: 2,
+							},
+						},
+					} as any,
+					false,
+					1000, // 1 vCPU max
+				),
+			).toThrowError(
+				expect.objectContaining({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("Requested CPU (2 vCPU) exceeds your plan limit of 1 vCPU"),
+				}),
+			);
+		});
+
+		it("enforces RAM quota in compose specification and rejects attempts to exceed plan limit", () => {
+			// Plan allows 1024 MB RAM, customer requests 2048 MB via deploy limits
+			expect(() =>
+				validateSafeComposeSpecification(
+					{
+						services: {
+							heavyDb: {
+								image: "postgres:15",
+								deploy: {
+									resources: {
+										limits: {
+											memory: "2G",
+										},
+									},
+								},
+							},
+						},
+					} as any,
+					false,
+					1000,
+					1024, // 1024 MB max
+				),
+			).toThrowError(
+				expect.objectContaining({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("Requested memory (2048 MB) exceeds your plan limit of 1024 MB"),
+				}),
+			);
+		});
+
+		it("enforceComposePlanLimits injects plan vCPU and RAM limits into services lacking resource declarations", () => {
+			const spec = {
+				services: {
+					web: {
+						image: "nginx",
+					},
+					worker: {
+						image: "worker",
+					},
+				},
+			};
+
+			enforceComposePlanLimits(spec as any, 1000, 512);
+
+			expect((spec.services.web as any).cpus).toBe(1);
+			expect((spec.services.web as any).deploy.resources.limits.cpus).toBe("1");
+			expect((spec.services.web as any).mem_limit).toBe("512m");
+			expect((spec.services.web as any).deploy.resources.limits.memory).toBe("512M");
+
+			expect((spec.services.worker as any).cpus).toBe(1);
+			expect((spec.services.worker as any).deploy.resources.limits.memory).toBe("512M");
+		});
+
+		it("enforceComposePlanLimits clamps services that declare resources higher than plan limits", () => {
+			const spec = {
+				services: {
+					web: {
+						image: "nginx",
+						cpus: 4,
+						mem_limit: "4096m",
+						deploy: {
+							resources: {
+								limits: {
+									cpus: "4",
+									memory: "4G",
+								},
+							},
+						},
+					},
+				},
+			};
+
+			enforceComposePlanLimits(spec as any, 2000, 1024);
+
+			expect((spec.services.web as any).cpus).toBe(2);
+			expect((spec.services.web as any).deploy.resources.limits.cpus).toBe("2");
+			expect((spec.services.web as any).mem_limit).toBe("1024m");
+			expect((spec.services.web as any).deploy.resources.limits.memory).toBe("1024M");
+		});
+
+		it("parseMemoryToMb correctly parses various memory string units and byte numbers", () => {
+			expect(parseMemoryToMb("512m")).toBe(512);
+			expect(parseMemoryToMb("512M")).toBe(512);
+			expect(parseMemoryToMb("1G")).toBe(1024);
+			expect(parseMemoryToMb("2g")).toBe(2048);
+			expect(parseMemoryToMb("1048576k")).toBe(1024);
+			expect(parseMemoryToMb(1073741824)).toBe(1024);
+			expect(parseMemoryToMb(undefined)).toBeUndefined();
 		});
 	});
 });

@@ -108,8 +108,11 @@ const Service = (
 	const { data } = api.compose.one.useQuery({ composeId });
 
 	const { data: auth } = api.user.get.useQuery();
+	const { data: haveRootAccess } = api.user.haveRootAccess.useQuery();
 	const isPlatformAdmin = Boolean(
-		(auth as any)?.user?.isPlatformAdmin || (auth as any)?.isPlatformAdmin,
+		haveRootAccess ||
+			(auth as any)?.user?.isPlatformAdmin ||
+			(auth as any)?.isPlatformAdmin,
 	);
 	const { data: permissions } = api.user.getPermissions.useQuery();
 	const { data: isCloud } = api.settings.isCloud.useQuery();
@@ -312,7 +315,7 @@ const Service = (
 														Monitoring
 													</TabsTrigger>
 												)}
-											{permissions?.service.create && (
+											{permissions?.service.create && isPlatformAdmin && (
 												<TabsTrigger value="advanced">Advanced</TabsTrigger>
 											)}
 										</TabsList>
@@ -472,21 +475,15 @@ const Service = (
 										</div>
 									</TabsContent>
 
-									{permissions?.service.create && (
+									{permissions?.service.create && isPlatformAdmin && (
 										<TabsContent value="advanced">
 											<div className="flex flex-col gap-4 pt-2.5">
 												<AddCommandCompose composeId={composeId} />
-												{isPlatformAdmin && (
-													<ShowVolumes id={composeId} type="compose" />
-												)}
+												<ShowVolumes id={composeId} type="compose" />
 												<ShowImport composeId={composeId} />
-												{isPlatformAdmin && (
-													<AssignComposeNetworks composeId={composeId} />
-												)}
+												<AssignComposeNetworks composeId={composeId} />
 												<IsolatedDeploymentTab composeId={composeId} />
-												{isPlatformAdmin && (
-													<FreshVolumes composeId={composeId} />
-												)}
+												<FreshVolumes composeId={composeId} />
 											</div>
 										</TabsContent>
 									)}

@@ -228,22 +228,25 @@ export const addDomainToCompose = async (
 	const orgId = (compose as any).environment?.project?.organizationId;
 	const isPlatformAdmin = Boolean((compose as any).isPlatformAdmin);
 	let maxCpuMillicores: number | undefined;
+	let maxRamMb: number | undefined;
 	if (orgId && !isPlatformAdmin) {
 		const limits = await PlanEntitlementService.getResourceLimitsForOrganization(
 			orgId,
 			false,
 		);
 		maxCpuMillicores = limits.maxCpuMillicores;
+		maxRamMb = limits.maxRamMb;
 	}
 
 	validateSafeComposeSpecification(
 		result,
 		isPlatformAdmin,
 		maxCpuMillicores,
+		maxRamMb,
 	);
 
-	if (!isPlatformAdmin && maxCpuMillicores) {
-		enforceComposePlanLimits(result, maxCpuMillicores);
+	if (!isPlatformAdmin && (maxCpuMillicores || maxRamMb)) {
+		enforceComposePlanLimits(result, maxCpuMillicores, maxRamMb);
 	}
 
 	if (compose.isolatedDeployment) {

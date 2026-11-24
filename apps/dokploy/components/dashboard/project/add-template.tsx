@@ -10,6 +10,7 @@ import {
 	Loader2,
 	PuzzleIcon,
 	SearchIcon,
+	Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -105,6 +106,13 @@ export const AddTemplate = ({ environmentId, baseUrl }: Props) => {
 		}
 	}, [customBaseUrl]);
 
+	const { data: authUser } = api.user.get.useQuery();
+	const { data: haveRootAccess } = api.user.haveRootAccess.useQuery();
+	const isPlatformAdmin = Boolean(
+		haveRootAccess ||
+			(authUser as any)?.user?.isPlatformAdmin ||
+			(authUser as any)?.isPlatformAdmin,
+	);
 	const {
 		data,
 		isLoading: isLoadingTemplates,
@@ -113,26 +121,21 @@ export const AddTemplate = ({ environmentId, baseUrl }: Props) => {
 	} = api.compose.templates.useQuery(
 		{ baseUrl: customBaseUrl },
 		{
-			enabled: open,
+			enabled: open && isPlatformAdmin,
 		},
-	);
-	const { data: authUser } = api.user.get.useQuery();
-	const isPlatformAdmin = Boolean(
-		(authUser as any)?.user?.isPlatformAdmin ||
-			(authUser as any)?.isPlatformAdmin,
 	);
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { data: servers } = api.server.withSSHKey.useQuery();
 	const { data: tags, isPending: isLoadingTags } = api.compose.getTags.useQuery(
 		{ baseUrl: customBaseUrl },
 		{
-			enabled: open,
+			enabled: open && isPlatformAdmin,
 		},
 	);
 
 	const { data: bookmarkIds = [], isLoading: isLoadingBookmarks } =
 		api.user.getBookmarkedTemplates.useQuery(undefined, {
-			enabled: open,
+			enabled: open && isPlatformAdmin,
 		});
 
 	const utils = api.useUtils();
@@ -213,15 +216,61 @@ export const AddTemplate = ({ environmentId, baseUrl }: Props) => {
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger className="w-full">
 				<DropdownMenuItem
-					className="w-full cursor-pointer space-x-3"
+					className="w-full flex items-center justify-between cursor-pointer space-x-3"
 					onSelect={(e) => e.preventDefault()}
 				>
-					<PuzzleIcon className="size-4 text-muted-foreground" />
-					<span>Template</span>
+					<div className="flex items-center space-x-3">
+						<PuzzleIcon className="size-4 text-muted-foreground" />
+						<span>Template</span>
+					</div>
+					{!isPlatformAdmin && (
+						<Badge
+							variant="secondary"
+							className="text-[10px] uppercase font-mono tracking-wider ml-auto text-muted-foreground"
+						>
+							Coming Soon
+						</Badge>
+					)}
 				</DropdownMenuItem>
 			</DialogTrigger>
-			<DialogContent className="sm:max-w-[90vw] p-0">
-				<DialogHeader className="sticky top-0 z-10 bg-background p-6 border-b">
+			<DialogContent className={isPlatformAdmin ? "sm:max-w-[90vw] p-0" : "sm:max-w-md p-6"}>
+				{!isPlatformAdmin ? (
+					<div className="flex flex-col items-center text-center p-6 space-y-4">
+						<div className="size-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+							<PuzzleIcon className="size-7" />
+						</div>
+						<div className="space-y-2">
+							<div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wider">
+								<Sparkles className="size-3" />
+								Coming Soon
+							</div>
+							<DialogTitle className="text-xl font-bold tracking-tight">
+								Application Templates
+							</DialogTitle>
+							<DialogDescription className="text-sm text-muted-foreground max-w-sm leading-relaxed">
+								Our curated 1-click application templates and production stacks are currently in private preview and will be available for customers in an upcoming release.
+							</DialogDescription>
+						</div>
+						<div className="w-full p-3.5 rounded-xl bg-muted/40 border border-border text-xs text-muted-foreground text-left space-y-1">
+							<span className="font-semibold text-foreground block">
+								Need to deploy a service?
+							</span>
+							<p className="leading-relaxed">
+								You can deploy applications directly using your Git repository, Dockerfile, or Universal Nixpacks with zero configuration.
+							</p>
+						</div>
+						<Button
+							type="button"
+							variant="outline"
+							className="w-full mt-2"
+							onClick={() => setOpen(false)}
+						>
+							Back to Project
+						</Button>
+					</div>
+				) : (
+					<>
+						<DialogHeader className="sticky top-0 z-10 bg-background p-6 border-b">
 					<div className="flex flex-col space-y-6">
 						<div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
 							<div>
@@ -655,6 +704,8 @@ export const AddTemplate = ({ environmentId, baseUrl }: Props) => {
 						)}
 					</div>
 				</ScrollArea>
+					</>
+				)}
 			</DialogContent>
 		</Dialog>
 	);

@@ -129,6 +129,7 @@ export const composeRouter = createTRPCRouter({
 								input.composeFile,
 								isPlatformAdmin,
 								resourceLimits?.maxCpuMillicores,
+								resourceLimits?.maxRamMb,
 							);
 						}
 
@@ -257,8 +258,28 @@ export const composeRouter = createTRPCRouter({
 				await assertSourceTypeAvailable(input.sourceType);
 			}
 
+			const isPlatformAdmin = Boolean(
+				(ctx.user as any)?.isPlatformAdmin ||
+				ctx.user.id === process.env.USER_ADMIN_ID ||
+				ctx.session?.impersonatedBy === process.env.USER_ADMIN_ID
+			);
+
+			if (IS_CLOUD && !isPlatformAdmin) {
+				if (input.command !== undefined && input.command !== null && input.command !== "") {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "Custom deployment commands can only be configured by platform administrators.",
+					});
+				}
+				if (input.isolatedDeployment !== undefined) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "Isolated deployment toggle is restricted to platform administrators.",
+					});
+				}
+			}
+
 			if (input.composeFile) {
-				const isPlatformAdmin = Boolean((ctx.user as any)?.isPlatformAdmin);
 				const resourceLimits = isPlatformAdmin
 					? undefined
 					: await PlanEntitlementService.getResourceLimitsForOrganization(
@@ -269,6 +290,7 @@ export const composeRouter = createTRPCRouter({
 					input.composeFile,
 					isPlatformAdmin,
 					resourceLimits?.maxCpuMillicores,
+					resourceLimits?.maxRamMb,
 				);
 			}
 
@@ -666,6 +688,18 @@ export const composeRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
+			const isPlatformAdmin = Boolean(
+				(ctx.user as any)?.isPlatformAdmin ||
+				ctx.user.id === process.env.USER_ADMIN_ID ||
+				ctx.session?.impersonatedBy === process.env.USER_ADMIN_ID
+			);
+			if (IS_CLOUD && !isPlatformAdmin) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Application templates are coming soon for public access. Platform administrator access is required.",
+				});
+			}
+
 			const environment = await findEnvironmentById(input.environmentId);
 			const project = await findProjectById(environment.projectId);
 
@@ -769,9 +803,18 @@ export const composeRouter = createTRPCRouter({
 					);
 
 					if (template.dockerCompose) {
+						const resourceLimits = isPlatformAdmin
+							? undefined
+							: await PlanEntitlementService.getResourceLimitsForOrganization(
+									ctx.session.activeOrganizationId,
+									false,
+									tx,
+								);
 						validateSafeComposeYaml(
 							template.dockerCompose,
-							Boolean((ctx.user as any)?.isPlatformAdmin),
+							isPlatformAdmin,
+							resourceLimits?.maxCpuMillicores,
+							resourceLimits?.maxRamMb,
 						);
 					}
 
@@ -893,7 +936,15 @@ export const composeRouter = createTRPCRouter({
 
 	templates: protectedProcedure
 		.input(z.object({ baseUrl: z.string().optional() }))
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			const isPlatformAdmin = Boolean(
+				(ctx.user as any)?.isPlatformAdmin ||
+				ctx.user.id === process.env.USER_ADMIN_ID ||
+				ctx.session?.impersonatedBy === process.env.USER_ADMIN_ID
+			);
+			if (IS_CLOUD && !isPlatformAdmin) {
+				return [];
+			}
 			try {
 				const githubTemplates = await fetchTemplatesList(input.baseUrl);
 
@@ -911,7 +962,15 @@ export const composeRouter = createTRPCRouter({
 
 	getTags: protectedProcedure
 		.input(z.object({ baseUrl: z.string().optional() }))
-		.query(async ({ input }) => {
+		.query(async ({ ctx, input }) => {
+			const isPlatformAdmin = Boolean(
+				(ctx.user as any)?.isPlatformAdmin ||
+				ctx.user.id === process.env.USER_ADMIN_ID ||
+				ctx.session?.impersonatedBy === process.env.USER_ADMIN_ID
+			);
+			if (IS_CLOUD && !isPlatformAdmin) {
+				return [];
+			}
 			try {
 				const githubTemplates = await fetchTemplatesList(input.baseUrl);
 				const allTags = githubTemplates.flatMap((template) => template.tags);
@@ -1019,6 +1078,18 @@ export const composeRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input, ctx }) => {
 			try {
+				const isPlatformAdmin = Boolean(
+					(ctx.user as any)?.isPlatformAdmin ||
+					ctx.user.id === process.env.USER_ADMIN_ID ||
+					ctx.session?.impersonatedBy === process.env.USER_ADMIN_ID
+				);
+				if (IS_CLOUD && !isPlatformAdmin) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "Template processing is restricted to platform administrators.",
+					});
+				}
+
 				await checkServicePermissionAndAccess(ctx, input.composeId, {
 					service: ["create"],
 				});
@@ -1089,6 +1160,18 @@ export const composeRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input, ctx }) => {
 			try {
+				const isPlatformAdmin = Boolean(
+					(ctx.user as any)?.isPlatformAdmin ||
+					ctx.user.id === process.env.USER_ADMIN_ID ||
+					ctx.session?.impersonatedBy === process.env.USER_ADMIN_ID
+				);
+				if (IS_CLOUD && !isPlatformAdmin) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "Template previewing is restricted to platform administrators.",
+					});
+				}
+
 				if (input.serverId) {
 					const accessibleIds = await getAccessibleServerIds(ctx.session);
 					if (!accessibleIds.has(input.serverId)) {
@@ -1170,6 +1253,18 @@ export const composeRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input, ctx }) => {
 			try {
+				const isPlatformAdmin = Boolean(
+					(ctx.user as any)?.isPlatformAdmin ||
+					ctx.user.id === process.env.USER_ADMIN_ID ||
+					ctx.session?.impersonatedBy === process.env.USER_ADMIN_ID
+				);
+				if (IS_CLOUD && !isPlatformAdmin) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "Importing compose configurations is restricted to platform administrators.",
+					});
+				}
+
 				await checkServicePermissionAndAccess(ctx, input.composeId, {
 					service: ["create"],
 				});

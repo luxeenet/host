@@ -21,26 +21,6 @@ import { Button } from "@/components/ui/button";
 export default function AccountPage() {
 	const [name, setName] = useState("Platform Developer");
 	const [email, setEmail] = useState("dev@company.tld");
-	const [apiKey, setApiKey] = useState("paas_live_9a8f7c6e5d4c3b2a1");
-	const [copiedKey, setCopiedKey] = useState(false);
-	const [generating, setGenerating] = useState(false);
-
-	const handleCopyKey = () => {
-		navigator.clipboard.writeText(apiKey);
-		setCopiedKey(true);
-		toast.success("API key copied to clipboard!");
-		setTimeout(() => setCopiedKey(false), 2000);
-	};
-
-	const handleRegenerateKey = () => {
-		setGenerating(true);
-		setTimeout(() => {
-			const newKey = "paas_live_" + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
-			setApiKey(newKey);
-			setGenerating(false);
-			toast.success("New API key generated successfully!");
-		}, 1000);
-	};
 
 	return (
 		<>
@@ -52,7 +32,7 @@ export default function AccountPage() {
 				<div>
 					<h1 className="text-2xl font-bold text-white tracking-tight">Account & Security</h1>
 					<p className="text-slate-400 text-sm mt-1">
-						Manage your profile, team access, API access keys, and security settings.
+						Manage your profile and account security settings.
 					</p>
 				</div>
 
@@ -96,45 +76,6 @@ export default function AccountPage() {
 						>
 							Save Profile
 						</Button>
-					</div>
-				</div>
-
-				{/* API Access Tokens Card */}
-				<div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-5">
-					<div className="flex items-center justify-between border-b border-slate-800 pb-4">
-						<div className="flex items-center gap-3">
-							<div className="w-10 h-10 rounded-lg bg-cyan-950/80 border border-cyan-500/20 flex items-center justify-center shrink-0">
-								<Key className="w-5 h-5 text-cyan-400" />
-							</div>
-							<div>
-								<h3 className="text-base font-bold text-white">API Access Tokens</h3>
-								<p className="text-xs text-slate-400">Use API keys for automated deployments & CI/CD workflows.</p>
-							</div>
-						</div>
-
-						<Button
-							disabled={generating}
-							onClick={handleRegenerateKey}
-							variant="outline"
-							className="border-slate-800 text-slate-300 hover:bg-slate-800 text-xs gap-1.5"
-						>
-							{generating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />}
-							Roll Key
-						</Button>
-					</div>
-
-					<div className="space-y-2">
-						<label className="text-xs font-medium text-slate-300 block">Production API Secret Key</label>
-						<div className="flex items-center gap-2 p-3 rounded-lg bg-slate-950 border border-slate-800">
-							<code className="text-xs text-cyan-300 font-mono flex-1">{apiKey}</code>
-							<button
-								type="button"
-								onClick={handleCopyKey}
-								className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-							>
-								{copiedKey ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-							</button>
-						</div>
 					</div>
 				</div>
 

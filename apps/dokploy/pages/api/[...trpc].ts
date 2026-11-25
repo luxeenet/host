@@ -16,6 +16,14 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 		return;
 	}
 
+	if (!(user as any).isPlatformAdmin) {
+		res.status(403).json({
+			message:
+				"Full API and CLI access are strictly restricted to platform administrators.",
+		});
+		return;
+	}
+
 	// getMultipartBody doesn't accept maxBodySize, so we cap it here instead.
 	const contentLength = Number(req.headers["content-length"]);
 	const isMultipart = req.headers["content-type"]?.startsWith(

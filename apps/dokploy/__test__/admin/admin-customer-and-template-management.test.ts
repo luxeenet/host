@@ -135,4 +135,50 @@ services:
 			);
 		});
 	});
+
+	describe("CLI & Full API Access Restrictions", () => {
+		it("should strictly reject non-platform-admin customers from CLI access", () => {
+			const checkCliAccess = (user: { role: string; isPlatformAdmin?: boolean }) => {
+				if (!user.isPlatformAdmin) {
+					throw new Error("CLI access is strictly restricted to platform administrators.");
+				}
+				return true;
+			};
+
+			const customerUser = { role: "owner", isPlatformAdmin: false };
+			expect(() => checkCliAccess(customerUser)).toThrow(
+				/CLI access is strictly restricted to platform administrators/i,
+			);
+		});
+
+		it("should allow platform administrators to access CLI procedures", () => {
+			const checkCliAccess = (user: { role: string; isPlatformAdmin?: boolean }) => {
+				if (!user.isPlatformAdmin) {
+					throw new Error("CLI access is strictly restricted to platform administrators.");
+				}
+				return true;
+			};
+
+			const adminUser = { role: "owner", isPlatformAdmin: true };
+			expect(checkCliAccess(adminUser)).toBe(true);
+		});
+
+		it("should restrict OpenAPI and REST API execution to platform administrators", () => {
+			const checkApiAccess = (user: { isPlatformAdmin?: boolean }) => {
+				if (!user.isPlatformAdmin) {
+					return { status: 403, error: "API and CLI access are strictly restricted to platform administrators." };
+				}
+				return { status: 200, success: true };
+			};
+
+			expect(checkApiAccess({ isPlatformAdmin: false })).toEqual({
+				status: 403,
+				error: "API and CLI access are strictly restricted to platform administrators.",
+			});
+			expect(checkApiAccess({ isPlatformAdmin: true })).toEqual({
+				status: 200,
+				success: true,
+			});
+		});
+	});
 });

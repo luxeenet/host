@@ -49,7 +49,7 @@ import { toast } from "sonner";
 
 export default function AdminCustomersPage() {
 	const utils = api.useUtils();
-	const { data: customers = [], isLoading, refetch } = api.admin.listCustomers.useQuery();
+	const { data: customers = [], isLoading, isError, error, refetch } = api.admin.listCustomers.useQuery();
 	const [search, setSearch] = useState("");
 	const [statusFilter, setStatusFilter] = useState<"all" | "active" | "banned">("all");
 
@@ -269,6 +269,21 @@ export default function AdminCustomersPage() {
 							<div className="text-slate-400 text-sm p-12 text-center flex flex-col items-center justify-center gap-2">
 								<RefreshCw className="w-5 h-5 animate-spin text-slate-500" />
 								<span>Loading customer database...</span>
+							</div>
+						) : isError ? (
+							<div className="p-8 text-center space-y-3">
+								<div className="text-rose-400 text-sm font-semibold">
+									Failed to load customer list: {error?.message || "Internal database query error"}
+								</div>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => refetch()}
+									className="border-slate-800 text-slate-300 hover:bg-slate-800"
+								>
+									<RefreshCw className="w-3.5 h-3.5 mr-2" />
+									Retry Query
+								</Button>
 							</div>
 						) : filtered.length === 0 ? (
 							<div className="text-slate-500 text-sm p-12 text-center">

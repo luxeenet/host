@@ -57,7 +57,6 @@ import { cn } from "@/lib/utils";
 
 export default function LandingPage() {
 	const [activeTab, setActiveTab] = useState<string>("apps-db");
-	const [copied, setCopied] = useState(false);
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
 	const { data: dbPlans } = api.plan.list.useQuery();
@@ -79,15 +78,6 @@ export default function LandingPage() {
 		const r = resources.find((item) => item.resourceKey === key);
 		if (!r) return null;
 		return r.value === -1 ? "Unlimited" : `${r.value}${r.unit ? ` ${r.unit}` : ""}`;
-	};
-
-	const installCmd = "curl -sSL https://get.hatdot.cloud/install.sh | sh";
-
-	const handleCopy = () => {
-		navigator.clipboard.writeText(installCmd);
-		setCopied(true);
-		toast.success("Command copied to clipboard!");
-		setTimeout(() => setCopied(false), 2500);
 	};
 
 	return (
@@ -376,28 +366,6 @@ export default function LandingPage() {
 							<Button size="lg" variant="outline" asChild className="h-12 px-8 text-base font-medium">
 								<Link href="/login">Sign in to Console</Link>
 							</Button>
-						</div>
-
-						{/* Quick CLI snippet */}
-						<div className="mt-8 flex items-center justify-center">
-							<div
-								onClick={handleCopy}
-								className="group flex items-center gap-3 rounded-xl border border-border bg-card/80 backdrop-blur-sm px-4 py-2.5 font-mono text-xs sm:text-sm text-muted-foreground shadow-sm hover:border-primary/50 cursor-pointer transition-all"
-							>
-								<Terminal className="size-4 text-primary shrink-0" />
-								<span className="select-all text-foreground">{installCmd}</span>
-								<button
-									type="button"
-									className="ml-2 text-muted-foreground group-hover:text-foreground transition-colors"
-									aria-label="Copy install command"
-								>
-									{copied ? (
-										<Check className="size-4 text-emerald-500" />
-									) : (
-										<Copy className="size-4" />
-									)}
-								</button>
-							</div>
 						</div>
 
 						{/* Hero Dashboard Graphic / Interactive Mockup */}

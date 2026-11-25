@@ -9,7 +9,7 @@ import {
 import { db } from "@dokploy/server/db";
 import * as schema from "@dokploy/server/db/schema";
 import { TRPCError } from "@trpc/server";
-import { count, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { apiUpdateWebServerMonitoring } from "@/server/db/schema";
 import { createTRPCRouter, platformAdminProcedure } from "../trpc";
@@ -115,74 +115,211 @@ export const adminRouter = createTRPCRouter({
 
 	/** Platform Admin: List all registered customers with hosted apps, amounts paid, and subscription plans */
 	listCustomers: platformAdminProcedure.query(async () => {
-		const [users, allSubs, allPayments] = await Promise.all([
-			db.query.user.findMany({
-				with: {
-					organizations: {
-						with: {
-							projects: {
-								with: {
-									environments: {
-										with: {
-											applications: {
-												with: {
-													domains: true,
-												},
-											},
-											compose: {
-												with: {
-													domains: true,
-												},
-											},
-											postgres: true,
-											mariadb: true,
-											mysql: true,
-											mongo: true,
-											redis: true,
-											libsql: true,
-										},
-									},
-								},
-							},
-						},
+		const [
+			allUsers,
+			allOrgs,
+			allMembers,
+			allProjects,
+			allEnvs,
+			allApps,
+			allCompose,
+			allDomains,
+			dbsPostgres,
+			dbsMysql,
+			dbsMariadb,
+			dbsMongo,
+			dbsRedis,
+			dbsLibsql,
+			allSubs,
+			allPayments,
+		] = await Promise.all([
+			db
+				.select()
+				.from(schema.user)
+				.orderBy(desc(schema.user.createdAt)),
+			db
+				.select()
+				.from(schema.organization)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.member)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.projects)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.environments)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.applications)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.compose)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.domains)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.postgres)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.mysql)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.mariadb)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.mongo)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.redis)
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.libsql)
+				.catch(() => []),
+			db.query.subscriptions
+				.findMany({
+					with: {
+						plan: true,
 					},
-				},
-				orderBy: (u, { desc }) => [desc(u.createdAt)],
-			}),
-			db.query.subscriptions.findMany({
-				with: {
-					plan: true,
-				},
-			}),
-			db.query.payments.findMany({
-				where: eq(schema.payments.status, "succeeded"),
-			}),
+				})
+				.catch(() => []),
+			db
+				.select()
+				.from(schema.payments)
+				.where(eq(schema.payments.status, "succeeded"))
+				.catch(() => []),
 		]);
 
-		const subsByOrg = new Map<string, typeof allSubs>();
-		for (const sub of allSubs) {
-			if (!sub.organizationId) continue;
-			const list = subsByOrg.get(sub.organizationId) || [];
-			list.push(sub);
-			subsByOrg.set(sub.organizationId, list);
+		// Map domains by applicationId
+		const domainsByApp = new Map<string, any[]>();
+		for (const d of allDomains as any[]) {
+			if (!d.applicationId) continue;
+			const list = domainsByApp.get(d.applicationId) || [];
+			list.push(d);
+			domainsByApp.set(d.applicationId, list);
 		}
 
-		const paymentsByOrg = new Map<string, typeof allPayments>();
-		for (const p of allPayments) {
+		// Map domains by composeId
+		const domainsByCompose = new Map<string, any[]>();
+		for (const d of allDomains as any[]) {
+			if (!d.composeId) continue;
+			const list = domainsByCompose.get(d.composeId) || [];
+			list.push(d);
+			domainsByCompose.set(d.composeId, list);
+		}
+
+		// Map apps by environmentId
+		const appsByEnv = new Map<string, any[]>();
+		for (const a of allApps as any[]) {
+			if (!a.environmentId) continue;
+			const list = appsByEnv.get(a.environmentId) || [];
+			list.push(a);
+			appsByEnv.set(a.environmentId, list);
+		}
+
+		// Map compose by environmentId
+		const composeByEnv = new Map<string, any[]>();
+		for (const c of allCompose as any[]) {
+			if (!c.environmentId) continue;
+			const list = composeByEnv.get(c.environmentId) || [];
+			list.push(c);
+			composeByEnv.set(c.environmentId, list);
+		}
+
+		// Map databases by environmentId
+		const dbsByEnv = new Map<string, any[]>();
+		const addDb = (envId: string | null | undefined, item: any) => {
+			if (!envId) return;
+			const list = dbsByEnv.get(envId) || [];
+			list.push(item);
+			dbsByEnv.set(envId, list);
+		};
+		for (const d of dbsPostgres as any[]) addDb(d.environmentId, { id: d.postgresId, name: d.name, appName: d.appName, type: "postgres", status: d.applicationStatus });
+		for (const d of dbsMysql as any[]) addDb(d.environmentId, { id: d.mysqlId, name: d.name, appName: d.appName, type: "mysql", status: d.applicationStatus });
+		for (const d of dbsMariadb as any[]) addDb(d.environmentId, { id: d.mariadbId, name: d.name, appName: d.appName, type: "mariadb", status: d.applicationStatus });
+		for (const d of dbsMongo as any[]) addDb(d.environmentId, { id: d.mongoId, name: d.name, appName: d.appName, type: "mongo", status: d.applicationStatus });
+		for (const d of dbsRedis as any[]) addDb(d.environmentId, { id: d.redisId, name: d.name, appName: d.appName, type: "redis", status: d.applicationStatus });
+		for (const d of dbsLibsql as any[]) addDb(d.environmentId, { id: d.libsqlId, name: d.name, appName: d.appName, type: "libsql", status: d.applicationStatus });
+
+		// Map envs by projectId
+		const envsByProject = new Map<string, any[]>();
+		for (const e of allEnvs as any[]) {
+			if (!e.projectId) continue;
+			const list = envsByProject.get(e.projectId) || [];
+			list.push(e);
+			envsByProject.set(e.projectId, list);
+		}
+
+		// Map projects by organizationId
+		const projectsByOrg = new Map<string, any[]>();
+		for (const p of allProjects as any[]) {
+			if (!p.organizationId) continue;
+			const list = projectsByOrg.get(p.organizationId) || [];
+			list.push(p);
+			projectsByOrg.set(p.organizationId, list);
+		}
+
+		// Map subs by organizationId
+		const subsByOrg = new Map<string, any[]>();
+		for (const s of allSubs as any[]) {
+			if (!s.organizationId) continue;
+			const list = subsByOrg.get(s.organizationId) || [];
+			list.push(s);
+			subsByOrg.set(s.organizationId, list);
+		}
+
+		// Map payments by organizationId
+		const paymentsByOrg = new Map<string, any[]>();
+		for (const p of allPayments as any[]) {
 			if (!p.organizationId) continue;
 			const list = paymentsByOrg.get(p.organizationId) || [];
 			list.push(p);
 			paymentsByOrg.set(p.organizationId, list);
 		}
 
-		return users.map((u) => {
-			const orgs = (u.organizations || []) as any[];
+		// Map organizations by user ID (both owner and member)
+		const orgsByUser = new Map<string, any[]>();
+		for (const org of allOrgs as any[]) {
+			if (org.ownerId) {
+				const list = orgsByUser.get(org.ownerId) || [];
+				if (!list.some((o: any) => o.id === org.id)) {
+					list.push(org);
+					orgsByUser.set(org.ownerId, list);
+				}
+			}
+		}
+		for (const m of allMembers as any[]) {
+			const org = (allOrgs as any[]).find((o: any) => o.id === m.organizationId);
+			if (org && m.userId) {
+				const list = orgsByUser.get(m.userId) || [];
+				if (!list.some((o: any) => o.id === org.id)) {
+					list.push(org);
+					orgsByUser.set(m.userId, list);
+				}
+			}
+		}
+
+		return (allUsers as any[]).map((u) => {
+			const userOrgs = orgsByUser.get(u.id) || [];
 
 			let totalPaid = 0;
 			let currency = "TZS";
 			let paymentCount = 0;
 
-			for (const org of orgs) {
+			for (const org of userOrgs) {
 				const orgPayments = paymentsByOrg.get(org.id) || [];
 				for (const p of orgPayments) {
 					totalPaid += Number.parseFloat(p.amount) || 0;
@@ -192,7 +329,7 @@ export const adminRouter = createTRPCRouter({
 			}
 
 			let primarySub: any = null;
-			for (const org of orgs) {
+			for (const org of userOrgs) {
 				const orgSubs = subsByOrg.get(org.id) || [];
 				const active =
 					orgSubs.find(
@@ -208,38 +345,48 @@ export const adminRouter = createTRPCRouter({
 				}
 			}
 
-			const allApps: any[] = [];
-			const allCompose: any[] = [];
-			const allDbs: any[] = [];
+			const userApps: any[] = [];
+			const userCompose: any[] = [];
+			const userDbs: any[] = [];
+			let totalProjects = 0;
 
-			for (const org of orgs) {
-				for (const project of org.projects || []) {
-					for (const env of project.environments || []) {
-						for (const app of env.applications || []) {
-							const domain = app.domains?.[0];
-							const primaryUrl = domain
-								? `${domain.https ? "https" : "http"}://${domain.host}${domain.path || ""}`
+			for (const org of userOrgs) {
+				const projects = projectsByOrg.get(org.id) || [];
+				totalProjects += projects.length;
+
+				for (const project of projects) {
+					const envs = envsByProject.get(project.projectId) || [];
+
+					for (const env of envs) {
+						const apps = appsByEnv.get(env.environmentId) || [];
+						for (const app of apps) {
+							const appDomains = domainsByApp.get(app.applicationId) || [];
+							const primaryDomain = appDomains[0];
+							const primaryUrl = primaryDomain
+								? `${primaryDomain.https ? "https" : "http"}://${primaryDomain.host}${primaryDomain.path || ""}`
 								: `https://${app.appName}.hatdot.cloud`;
 
-							allApps.push({
+							userApps.push({
 								applicationId: app.applicationId,
 								name: app.name,
 								appName: app.appName,
 								status: app.applicationStatus || "idle",
 								createdAt: app.createdAt ? String(app.createdAt) : "",
 								serverId: app.serverId,
-								domains: app.domains || [],
+								domains: appDomains,
 								primaryUrl,
 							});
 						}
 
-						for (const comp of env.compose || []) {
-							const domain = comp.domains?.[0];
-							const primaryUrl = domain
-								? `${domain.https ? "https" : "http"}://${domain.host}${domain.path || ""}`
+						const composeList = composeByEnv.get(env.environmentId) || [];
+						for (const comp of composeList) {
+							const compDomains = domainsByCompose.get(comp.composeId) || [];
+							const primaryDomain = compDomains[0];
+							const primaryUrl = primaryDomain
+								? `${primaryDomain.https ? "https" : "http"}://${primaryDomain.host}${primaryDomain.path || ""}`
 								: `https://${comp.appName}.hatdot.cloud`;
 
-							allCompose.push({
+							userCompose.push({
 								composeId: comp.composeId,
 								name: comp.name,
 								appName: comp.appName,
@@ -247,29 +394,13 @@ export const adminRouter = createTRPCRouter({
 								status: comp.composeStatus || "idle",
 								createdAt: comp.createdAt ? String(comp.createdAt) : "",
 								serverId: comp.serverId,
-								domains: comp.domains || [],
+								domains: compDomains,
 								primaryUrl,
 							});
 						}
 
-						for (const dbItem of env.postgres || []) {
-							allDbs.push({ id: dbItem.postgresId, name: dbItem.name, appName: dbItem.appName, type: "postgres", status: dbItem.applicationStatus });
-						}
-						for (const dbItem of env.mysql || []) {
-							allDbs.push({ id: dbItem.mysqlId, name: dbItem.name, appName: dbItem.appName, type: "mysql", status: dbItem.applicationStatus });
-						}
-						for (const dbItem of env.mariadb || []) {
-							allDbs.push({ id: dbItem.mariadbId, name: dbItem.name, appName: dbItem.appName, type: "mariadb", status: dbItem.applicationStatus });
-						}
-						for (const dbItem of env.mongo || []) {
-							allDbs.push({ id: dbItem.mongoId, name: dbItem.name, appName: dbItem.appName, type: "mongo", status: dbItem.applicationStatus });
-						}
-						for (const dbItem of env.redis || []) {
-							allDbs.push({ id: dbItem.redisId, name: dbItem.name, appName: dbItem.appName, type: "redis", status: dbItem.applicationStatus });
-						}
-						for (const dbItem of env.libsql || []) {
-							allDbs.push({ id: dbItem.libsqlId, name: dbItem.name, appName: dbItem.appName, type: "libsql", status: dbItem.applicationStatus });
-						}
+						const dbs = dbsByEnv.get(env.environmentId) || [];
+						userDbs.push(...dbs);
 					}
 				}
 			}
@@ -284,10 +415,7 @@ export const adminRouter = createTRPCRouter({
 				banned: u.banned ?? false,
 				banReason: u.banReason,
 				createdAt: u.createdAt,
-				projectCount: orgs.reduce(
-					(acc: number, org: any) => acc + (org.projects?.length || 0),
-					0,
-				),
+				projectCount: totalProjects,
 				totalAmountPaid: totalPaid,
 				currency,
 				paymentCount,
@@ -303,10 +431,10 @@ export const adminRouter = createTRPCRouter({
 							gracePeriodEndsAt: primarySub.gracePeriodEndsAt,
 					  }
 					: null,
-				applications: allApps,
-				composeStacks: allCompose,
-				databases: allDbs,
-				totalServicesCount: allApps.length + allCompose.length + allDbs.length,
+				applications: userApps,
+				composeStacks: userCompose,
+				databases: userDbs,
+				totalServicesCount: userApps.length + userCompose.length + userDbs.length,
 			};
 		});
 	}),

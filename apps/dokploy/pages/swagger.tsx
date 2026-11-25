@@ -87,24 +87,12 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 			},
 		};
 	}
-	const helpers = createServerSideHelpers({
-		router: appRouter,
-		ctx: {
-			req: req as any,
-			res: res as any,
-			db: null as any,
-			session: session as any,
-			user: user as any,
-		},
-		transformer: superjson,
-	});
-	const userPermissions = await helpers.user.getPermissions.fetch();
 
-	if (!userPermissions?.api.read) {
+	if (!(user as any).isPlatformAdmin) {
 		return {
 			redirect: {
 				permanent: false,
-				destination: "/",
+				destination: "/dashboard",
 			},
 		};
 	}

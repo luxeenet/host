@@ -175,19 +175,19 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
 });
 
 export const cliProcedure = t.procedure.use(({ ctx, next }) => {
-	if (
-		!ctx.session ||
-		!ctx.user ||
-		(ctx.user.role !== "owner" && ctx.user.role !== "admin")
-	) {
+	if (!ctx.session || !ctx.user) {
 		throw new TRPCError({ code: "UNAUTHORIZED" });
+	}
+	if (!(ctx.user as any).isPlatformAdmin) {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "CLI access is strictly restricted to platform administrators.",
+		});
 	}
 	return next({
 		ctx: {
-			// infers the `session` as non-nullable
 			session: ctx.session,
 			user: ctx.user,
-			// session: { ...ctx.session, user: ctx.user },
 		},
 	});
 });

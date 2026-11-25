@@ -654,7 +654,7 @@ export const settingsRouter = createTRPCRouter({
 			return settings;
 		}),
 
-	getOpenApiDocument: protectedProcedure.query(
+	getOpenApiDocument: platformAdminProcedure.query(
 		async ({ ctx }): Promise<unknown> => {
 			const protocol = ctx.req.headers["x-forwarded-proto"];
 			const url = `${protocol}://${ctx.req.headers.host}/api`;

@@ -29,7 +29,8 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 
 	const isChatEnabled = isCloud === true && currentPlan === "startup";
 
-	const { data: onboardingStatus } = api.project.onboardingStatus.useQuery();
+	const { data: onboardingStatus, isLoading: isOnboardingLoading } =
+		api.project.onboardingStatus.useQuery();
 	const shouldRedirectToOnboarding =
 		router.pathname !== "/dashboard/home" &&
 		onboardingStatus?.shouldShowOnboarding === true;
@@ -50,6 +51,11 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 		haveRootAccess !== true &&
 		onboardingStatus?.needsPlanSelection === true &&
 		!isAllowedUnsubscribedPath;
+
+	const isCheckingAccess =
+		haveRootAccess !== true &&
+		!isAllowedUnsubscribedPath &&
+		(isOnboardingLoading || onboardingStatus === undefined);
 
 	useEffect(() => {
 		if (shouldRedirectToPayment) {
@@ -72,6 +78,7 @@ export const DashboardLayout = ({ children, metaName }: Props) => {
 	]);
 
 	if (
+		isCheckingAccess ||
 		shouldRedirectToPlanSelection ||
 		shouldRedirectToPayment ||
 		shouldRedirectToOnboarding

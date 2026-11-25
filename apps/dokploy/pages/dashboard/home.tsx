@@ -81,6 +81,27 @@ export async function getServerSideProps(ctx: GetServerSidePropsContext) {
 	await helpers.user.get.prefetch();
 	await helpers.project.onboardingStatus.prefetch();
 
+	const onboardingStatus = await helpers.project.onboardingStatus.fetch();
+	if (onboardingStatus?.needsPayment) {
+		const planQuery = onboardingStatus.pendingPlanId
+			? `?planId=${encodeURIComponent(onboardingStatus.pendingPlanId)}`
+			: "";
+		return {
+			redirect: {
+				permanent: false,
+				destination: `/checkout${planQuery}`,
+			},
+		};
+	}
+	if (onboardingStatus?.needsPlanSelection) {
+		return {
+			redirect: {
+				permanent: false,
+				destination: "/onboarding",
+			},
+		};
+	}
+
 	return {
 		props: {
 			trpcState: helpers.dehydrate(),

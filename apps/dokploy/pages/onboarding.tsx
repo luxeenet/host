@@ -20,6 +20,10 @@ import {
 	LogOut,
 	HelpCircle,
 	Sparkles,
+	HardDrive,
+	Activity,
+	CheckCircle2,
+	ArrowRight,
 } from "lucide-react";
 import { api } from "@/utils/api";
 import { brand, formatCurrency } from "@paas/branding";
@@ -33,28 +37,19 @@ import type { GetServerSidePropsContext } from "next";
 import { validateRequest } from "@dokploy/server/lib/auth";
 
 const PLAN_ICONS: Record<string, ReactElement> = {
-	starter: <Zap className="size-5" />,
-	basic: <Server className="size-5" />,
-	developer: <Code className="size-5" />,
-	standard: <Layers className="size-5" />,
-	pro: <Code className="size-5" />,
-	business: <Building className="size-5" />,
-	enterprise: <ShieldCheck className="size-5" />,
-};
-
-const PLAN_GRADIENTS: Record<string, string> = {
-	starter: "from-blue-600 to-cyan-600",
-	basic: "from-indigo-600 to-blue-600",
-	developer: "from-violet-600 to-indigo-600",
-	standard: "from-violet-600 to-indigo-600",
-	pro: "from-purple-600 to-pink-600",
-	business: "from-amber-600 to-orange-600",
-	enterprise: "from-emerald-600 to-teal-600",
+	starter: <Zap className="size-5 text-amber-500" />,
+	basic: <Server className="size-5 text-blue-500" />,
+	developer: <Code className="size-5 text-indigo-500" />,
+	standard: <Layers className="size-5 text-violet-500" />,
+	pro: <Sparkles className="size-5 text-purple-500" />,
+	business: <Building className="size-5 text-emerald-500" />,
+	enterprise: <ShieldCheck className="size-5 text-cyan-500" />,
 };
 
 export default function OnboardingPage() {
 	const router = useRouter();
 	const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+	const [isPreselectedFromLanding, setIsPreselectedFromLanding] = useState(false);
 	const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
 	const [subscribing, setSubscribing] = useState(false);
 
@@ -69,7 +64,7 @@ export default function OnboardingPage() {
 		return rawPlans;
 	}, [rawPlans, billingCycle]);
 
-	// Auto-select tracked plan from landing page (via query or localStorage) or featured plan
+	// Auto-select tracked plan from landing page (via query or localStorage) ONLY if user actually chose one
 	useEffect(() => {
 		if (rawPlans && rawPlans.length > 0 && !selectedPlanId) {
 			const trackedPlanId =
@@ -85,6 +80,7 @@ export default function OnboardingPage() {
 				);
 				if (matched) {
 					setSelectedPlanId(matched.id);
+					setIsPreselectedFromLanding(true);
 					if (matched.billingCycle) {
 						setBillingCycle(matched.billingCycle as any);
 					}
@@ -92,18 +88,22 @@ export default function OnboardingPage() {
 				}
 			}
 
-			// Fallback: select featured or first plan
-			const featured = rawPlans.find((p) => p.isFeatured) ?? rawPlans[0];
-			if (featured) setSelectedPlanId(featured.id);
+			// If no tracked plan exists, keep selectedPlanId as null.
+			// The user MUST explicitly select a package.
 		}
 	}, [rawPlans, router.query.plan, selectedPlanId]);
 
 	const selectedPlan = useMemo(() => {
-		return plans.find((p) => p.id === selectedPlanId) ?? plans[0] ?? null;
-	}, [plans, selectedPlanId]);
+		if (!selectedPlanId) return null;
+		return plans.find((p) => p.id === selectedPlanId) ?? rawPlans?.find((p) => p.id === selectedPlanId) ?? null;
+	}, [plans, rawPlans, selectedPlanId]);
 
 	const subscribeMutation = api.subscription.create.useMutation({
 		onSuccess: async (result: any) => {
+			if (typeof window !== "undefined") {
+				localStorage.removeItem("hatdot_selected_plan");
+				localStorage.removeItem("hatdot_selected_plan_slug");
+			}
 			await Promise.all([
 				utils.subscription.getCurrent.invalidate(),
 				utils.project.onboardingStatus.invalidate(),
@@ -112,11 +112,9 @@ export default function OnboardingPage() {
 				toast.info(
 					"Payment required to activate your plan. Proceeding to checkout...",
 				);
-				await router.push(
-					`/checkout?planId=${result.planId}`,
-				);
+				await router.push(`/checkout?planId=${encodeURIComponent(result.planId)}`);
 			} else {
-				toast.success("Subscription activated! Welcome aboard 🎉");
+				toast.success("Package activated successfully! Welcome aboard 🎉");
 				await router.push("/dashboard/home");
 			}
 		},
@@ -127,14 +125,18 @@ export default function OnboardingPage() {
 	});
 
 	const handleSelectPlan = async () => {
-		if (!selectedPlanId) {
-			toast.error("Please select a plan to continue.");
+		if (!selectedPlanId || !selectedPlan) {
+			toast.error("Please select a package to continue.");
 			return;
 		}
 
 		// If plan requires payment with 0 trial days, route directly to checkout page
-		if (selectedPlan && Number(selectedPlan.price) > 0 && selectedPlan.trialDays === 0) {
-			router.push(`/checkout?planId=${encodeURIComponent(selectedPlan.id)}`);
+		if (Number(selectedPlan.price) > 0 && selectedPlan.trialDays === 0) {
+			if (typeof window !== "undefined") {
+				localStorage.removeItem("hatdot_selected_plan");
+				localStorage.removeItem("hatdot_selected_plan_slug");
+			}
+			await router.push(`/checkout?planId=${encodeURIComponent(selectedPlan.id)}`);
 			return;
 		}
 
@@ -155,23 +157,61 @@ export default function OnboardingPage() {
 		resources: { resourceKey: string; value: number; unit?: string | null }[],
 		key: string,
 	) => {
-		const r = resources.find((item) => item.resourceKey === key);
+		const r = resources?.find((item) => item.resourceKey === key);
 		if (!r) return null;
 		return r.value === -1 ? "Unlimited" : `${r.value}${r.unit ? ` ${r.unit}` : ""}`;
+	};
+
+	const getCpuValue = (
+		resources: { resourceKey: string; value: number; unit?: string | null }[],
+	) => {
+		const r = resources?.find((item) => item.resourceKey === "max_cpu_millicores");
+		if (!r) return "1 vCPU";
+		if (r.value === -1) return "Dedicated vCPU";
+		const cores = r.value / 1000;
+		return cores >= 1 ? `${cores} vCPU${cores > 1 ? "s" : ""}` : `${r.value}m CPU`;
+	};
+
+	const getRamValue = (
+		resources: { resourceKey: string; value: number; unit?: string | null }[],
+	) => {
+		const r = resources?.find((item) => item.resourceKey === "max_ram_mb");
+		if (!r) return "512 MB";
+		if (r.value === -1) return "Unlimited RAM";
+		if (r.value >= 1024) return `${r.value / 1024} GB RAM`;
+		return `${r.value} MB RAM`;
+	};
+
+	const getStorageValue = (
+		resources: { resourceKey: string; value: number; unit?: string | null }[],
+	) => {
+		const r = resources?.find((item) => item.resourceKey === "max_storage_gb");
+		if (!r) return "5 GB";
+		if (r.value === -1) return "Unlimited SSD";
+		return `${r.value} GB NVMe SSD`;
+	};
+
+	const getBandwidthValue = (
+		resources: { resourceKey: string; value: number; unit?: string | null }[],
+	) => {
+		const r = resources?.find((item) => item.resourceKey === "max_bandwidth_gb");
+		if (!r) return "20 GB";
+		if (r.value === -1) return "Unlimited";
+		return `${r.value} GB Bandwidth`;
 	};
 
 	const isFeatureEnabled = (
 		features: { featureKey: string; enabled: boolean }[],
 		key: string,
-	) => features.find((f) => f.featureKey === key)?.enabled ?? false;
+	) => features?.find((f) => f.featureKey === key)?.enabled ?? false;
 
 	return (
 		<>
 			<Head>
-				<title>Choose Your Cloud Plan — {brand.APP_NAME}</title>
+				<title>Choose Your Cloud Package — {brand.APP_NAME}</title>
 				<meta
 					name="description"
-					content={`Select your hosting plan and deploy applications on ${brand.APP_NAME}.`}
+					content={`Select your cloud hosting package and deploy applications on ${brand.APP_NAME}.`}
 				/>
 			</Head>
 
@@ -211,23 +251,30 @@ export default function OnboardingPage() {
 				</header>
 
 				{/* Main Content */}
-				<main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+				<main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
 					{/* Header */}
-					<div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14 space-y-3">
-						<div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1 text-xs font-medium text-primary">
-							<Sparkles className="size-3.5 text-primary" />
-							<span>Step 1 of 2: Pick Your Hosting Plan</span>
+					<div className="text-center max-w-3xl mx-auto mb-8 sm:mb-12 space-y-3">
+						<div className="flex items-center justify-center gap-2 mb-2">
+							<span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+								<CheckCircle className="size-3" /> Step 1: Account Created
+							</span>
+							<span className="text-muted-foreground text-xs font-bold">→</span>
+							<span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary border border-primary/25">
+								<Sparkles className="size-3 text-primary animate-pulse" />
+								Step 2 of 2: Choose Cloud Package (Required)
+							</span>
 						</div>
+
 						<h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
-							Choose the plan that fits your growth
+							Select the package that powers your stack
 						</h1>
-						<p className="text-muted-foreground text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
-							Deploy with zero-downtime rollouts, automated edge SSL, and isolated tenant
-							compute. Start with a 14-day free trial on any tier — cancel anytime.
+						<p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-2xl mx-auto">
+							Every package includes dedicated vCPU & RAM limits, automated edge SSL,
+							and isolated container runtime. Select your package below to unlock your workspace.
 						</p>
 
 						{/* Billing Period Selector */}
-						<div className="pt-4 flex items-center justify-center">
+						<div className="pt-3 flex items-center justify-center">
 							<div className="inline-flex items-center rounded-xl bg-muted p-1 border border-border">
 								<button
 									type="button"
@@ -272,60 +319,67 @@ export default function OnboardingPage() {
 							{plans.map((plan) => {
 								const isSelected = selectedPlanId === plan.id;
 								const isFeatured = plan.isFeatured;
-								const gradient =
-									PLAN_GRADIENTS[plan.slug] ?? "from-primary to-primary/80";
+								const isFromLandingThisPlan = isPreselectedFromLanding && isSelected;
 
 								return (
 									<div
 										key={plan.id}
-										onClick={() => setSelectedPlanId(plan.id)}
+										onClick={() => {
+											setSelectedPlanId(plan.id);
+											setIsPreselectedFromLanding(false);
+										}}
 										className={cn(
 											"relative flex flex-col justify-between rounded-2xl border p-6 cursor-pointer transition-all duration-200 select-none",
 											"bg-card text-card-foreground shadow-sm hover:shadow-md",
 											isSelected
-												? "border-primary ring-2 ring-primary/25 shadow-lg scale-[1.01]"
+												? "border-primary ring-2 ring-primary/40 shadow-xl shadow-primary/10 bg-primary/[0.03] scale-[1.01]"
 												: "border-border hover:border-primary/50",
 										)}
 									>
-										{/* Featured Badge */}
-										{isFeatured && (
-											<div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-												<Badge className="bg-primary text-primary-foreground border-0 text-[11px] font-semibold px-3 py-0.5 shadow-sm">
+										{/* Badges */}
+										<div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 whitespace-nowrap">
+											{isFromLandingThisPlan ? (
+												<Badge className="bg-primary text-primary-foreground border-0 text-[10px] font-bold px-2.5 py-0.5 shadow-sm flex items-center gap-1">
+													<Sparkles className="size-3" />
+													Selected from Landing Page
+												</Badge>
+											) : isFeatured ? (
+												<Badge className="bg-primary text-primary-foreground border-0 text-[10px] font-bold px-2.5 py-0.5 shadow-sm">
 													Most Popular
 												</Badge>
-											</div>
-										)}
+											) : null}
+										</div>
 
 										<div>
 											{/* Header */}
 											<div className="flex items-center gap-3 mb-4">
 												<div
-													className="size-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0"
+													className="size-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0"
 												>
-													{PLAN_ICONS[plan.slug] ?? <Zap className="size-5" />}
+													{PLAN_ICONS[plan.slug] ?? <Zap className="size-5 text-primary" />}
 												</div>
 												<div>
 													<h3 className="font-bold text-foreground text-lg leading-tight">
 														{plan.name}
 													</h3>
 													{plan.trialDays > 0 ? (
-														<span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+														<span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
 															{plan.trialDays}-day free trial
 														</span>
 													) : Number(plan.price) === 0 ? (
-														<span className="text-xs text-muted-foreground">
+														<span className="text-xs text-muted-foreground font-medium">
 															Free forever
 														</span>
 													) : (
-														<span className="text-xs text-muted-foreground">
-															Full cloud access
+														<span className="text-xs text-muted-foreground font-medium">
+															Production grade
 														</span>
 													)}
 												</div>
 											</div>
 
 											{/* Price */}
-											<div className="mb-4">
+											<div className="mb-3">
 												{Number(plan.price) === 0 ? (
 													<div className="text-3xl font-extrabold tracking-tight text-foreground">
 														Free
@@ -342,14 +396,54 @@ export default function OnboardingPage() {
 												)}
 											</div>
 
-											<p className="text-muted-foreground text-xs leading-relaxed mb-5 min-h-[36px]">
+											<p className="text-muted-foreground text-xs leading-relaxed mb-4 min-h-[32px]">
 												{plan.description}
 											</p>
 
-											<Separator className="mb-4" />
+											<Separator className="mb-3" />
 
-											{/* Quotas breakdown */}
-											<div className="space-y-2.5 mb-5 text-xs">
+											{/* Compute & Hardware Quotas */}
+											<div className="space-y-2 mb-4 text-xs">
+												<div className="flex items-center justify-between p-1.5 rounded-lg bg-muted/40 border border-border/50">
+													<span className="text-muted-foreground flex items-center gap-1.5 font-medium">
+														<Cpu className="size-3.5 text-primary" />
+														Compute (vCPU)
+													</span>
+													<span className="font-bold text-foreground">
+														{getCpuValue(plan.resources)}
+													</span>
+												</div>
+												<div className="flex items-center justify-between p-1.5 rounded-lg bg-muted/40 border border-border/50">
+													<span className="text-muted-foreground flex items-center gap-1.5 font-medium">
+														<Server className="size-3.5 text-primary" />
+														Memory (RAM)
+													</span>
+													<span className="font-bold text-foreground">
+														{getRamValue(plan.resources)}
+													</span>
+												</div>
+												<div className="flex items-center justify-between p-1.5 rounded-lg bg-muted/40 border border-border/50">
+													<span className="text-muted-foreground flex items-center gap-1.5 font-medium">
+														<HardDrive className="size-3.5 text-primary" />
+														Storage (SSD)
+													</span>
+													<span className="font-bold text-foreground">
+														{getStorageValue(plan.resources)}
+													</span>
+												</div>
+												<div className="flex items-center justify-between p-1.5 rounded-lg bg-muted/40 border border-border/50">
+													<span className="text-muted-foreground flex items-center gap-1.5 font-medium">
+														<Activity className="size-3.5 text-primary" />
+														Bandwidth
+													</span>
+													<span className="font-bold text-foreground">
+														{getBandwidthValue(plan.resources)}
+													</span>
+												</div>
+											</div>
+
+											{/* Applications & Databases */}
+											<div className="space-y-2 mb-4 text-xs">
 												<div className="flex items-center justify-between">
 													<span className="text-muted-foreground flex items-center gap-1.5">
 														<Layers className="size-3.5" />
@@ -377,30 +471,12 @@ export default function OnboardingPage() {
 														{getResourceValue(plan.resources, "max_domains") ?? "Unlimited"}
 													</span>
 												</div>
-												<div className="flex items-center justify-between">
-													<span className="text-muted-foreground flex items-center gap-1.5">
-														<Cpu className="size-3.5" />
-														RAM Limit
-													</span>
-													<span className="font-semibold text-foreground">
-														{getResourceValue(plan.resources, "max_ram_mb") ?? "Unlimited"}
-													</span>
-												</div>
-												<div className="flex items-center justify-between">
-													<span className="text-muted-foreground flex items-center gap-1.5">
-														<Clock className="size-3.5" />
-														Build Minutes
-													</span>
-													<span className="font-semibold text-foreground">
-														{getResourceValue(plan.resources, "build_minutes_per_month") ?? "Unlimited"}
-													</span>
-												</div>
 											</div>
 
-											<Separator className="mb-4" />
+											<Separator className="mb-3" />
 
 											{/* Included feature pills */}
-											<div className="space-y-2 mb-6 text-xs text-muted-foreground">
+											<div className="space-y-1.5 mb-6 text-xs text-muted-foreground">
 												<div className="flex items-center gap-2">
 													<Check className="size-3.5 text-emerald-500 shrink-0" />
 													<span>Automatic Edge SSL & HTTPS</span>
@@ -411,7 +487,7 @@ export default function OnboardingPage() {
 												</div>
 												<div className="flex items-center gap-2">
 													<Check className="size-3.5 text-emerald-500 shrink-0" />
-													<span>Dedicated Resource Security</span>
+													<span>Strict Hardware Isolation</span>
 												</div>
 												{isFeatureEnabled(plan.features, "backups") && (
 													<div className="flex items-center gap-2">
@@ -440,10 +516,10 @@ export default function OnboardingPage() {
 											{isSelected ? (
 												<span className="flex items-center gap-1.5">
 													<CheckCircle className="size-4" />
-													Selected
+													Package Selected
 												</span>
 											) : (
-												`Select ${plan.name}`
+												`Select ${plan.name} Package`
 											)}
 										</Button>
 									</div>
@@ -457,17 +533,22 @@ export default function OnboardingPage() {
 				<footer className="sticky bottom-0 z-30 w-full border-t border-border bg-background/95 backdrop-blur-md px-4 sm:px-8 py-3.5 sm:py-4 shadow-lg">
 					<div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
 						<div className="flex items-center gap-4 text-sm">
-							<div className="hidden sm:flex size-10 rounded-full bg-primary/10 border border-primary/20 items-center justify-center text-primary shrink-0">
-								<Lock className="size-4" />
+							<div className={cn(
+								"hidden sm:flex size-10 rounded-full items-center justify-center shrink-0 border",
+								selectedPlan
+									? "bg-primary/10 border-primary/20 text-primary"
+									: "bg-amber-500/10 border-amber-500/20 text-amber-500",
+							)}>
+								{selectedPlan ? <CheckCircle2 className="size-5" /> : <Lock className="size-4" />}
 							</div>
 							<div>
 								{selectedPlan ? (
 									<div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
 										<span className="font-bold text-foreground">
-											Selected: {selectedPlan.name} Plan
+											Selected Package: {selectedPlan.name}
 										</span>
 										<span className="text-muted-foreground text-xs hidden sm:inline">•</span>
-										<span className="text-muted-foreground text-xs">
+										<span className="text-muted-foreground text-xs font-medium">
 											{Number(selectedPlan.price) === 0
 												? "Free Forever"
 												: `${formatCurrency(Number(selectedPlan.price), selectedPlan.currency)}/${selectedPlan.billingCycle === "yearly" ? "yr" : "mo"}`}
@@ -476,16 +557,18 @@ export default function OnboardingPage() {
 										</span>
 									</div>
 								) : (
-									<span className="text-muted-foreground text-xs">
-										Choose a plan to get started
+									<span className="text-amber-500 font-medium text-xs sm:text-sm">
+										Package selection is mandatory. Please select a cloud package above.
 									</span>
 								)}
 								<p className="text-xs text-muted-foreground">
-									{selectedPlan?.trialDays && selectedPlan.trialDays > 0
-										? `${selectedPlan.trialDays}-day free trial included • No setup fees • Cancel anytime`
-										: Number(selectedPlan?.price) === 0
-											? "Free forever tier • Instant cloud workspace provisioning"
-											: "0-day trial • Payment required to activate and open your cloud workspace"}
+									{selectedPlan
+										? selectedPlan.trialDays > 0
+											? `${selectedPlan.trialDays}-day free trial included • No setup fees • Cancel anytime`
+											: Number(selectedPlan.price) === 0
+												? "Free forever starter package • Instant private cloud provisioning"
+												: "Production tier • Instant activation with secure mobile money or card"
+										: "You must choose a package to continue with setup and unlock your cloud workspace"}
 								</p>
 							</div>
 						</div>
@@ -496,13 +579,26 @@ export default function OnboardingPage() {
 								disabled={!selectedPlanId || subscribing}
 								isLoading={subscribing}
 								size="lg"
-								className="w-full sm:w-auto sm:min-w-[240px] font-semibold h-auto min-h-11 py-2.5 px-4 text-xs sm:text-sm shadow-md whitespace-normal leading-snug text-center"
+								className="w-full sm:w-auto sm:min-w-[260px] font-semibold h-auto min-h-11 py-2.5 px-5 text-xs sm:text-sm shadow-md whitespace-normal leading-snug text-center"
 							>
-								{selectedPlan?.trialDays && selectedPlan.trialDays > 0
-									? `Start ${selectedPlan.trialDays}-Day Free Trial →`
-									: Number(selectedPlan?.price) === 0
-										? "Activate Free Starter Plan →"
-										: `Pay & Activate ${selectedPlan?.name || "Plan"} →`}
+								{!selectedPlan ? (
+									"Choose a Package to Continue"
+								) : selectedPlan.trialDays > 0 ? (
+									<span className="flex items-center justify-center gap-1.5">
+										Start {selectedPlan.trialDays}-Day Free Trial
+										<ArrowRight className="size-4" />
+									</span>
+								) : Number(selectedPlan.price) === 0 ? (
+									<span className="flex items-center justify-center gap-1.5">
+										Activate Free {selectedPlan.name} Package
+										<ArrowRight className="size-4" />
+									</span>
+								) : (
+									<span className="flex items-center justify-center gap-1.5">
+										Pay & Activate {selectedPlan.name} Package
+										<ArrowRight className="size-4" />
+									</span>
+								)}
 							</Button>
 						</div>
 					</div>
@@ -545,7 +641,7 @@ export async function getServerSideProps(ctx: GetServerSidePropsContext) {
 			if (sub?.status === "pending_payment") {
 				return {
 					redirect: {
-						destination: `/dashboard/billing?planId=${sub.planId}&pay=true`,
+						destination: `/checkout?planId=${sub.planId}`,
 						permanent: false,
 					},
 				};

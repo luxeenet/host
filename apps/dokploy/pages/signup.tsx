@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
 import { z } from "zod";
+import { Sparkles, Layers, ShieldCheck, CheckCircle } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { brand } from "@paas/branding";
 import { Button } from "@/components/ui/button";
@@ -62,11 +63,23 @@ export default function SignupPage() {
 	const { config: whitelabeling } = useWhitelabelingPublic();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [preselectedPlan, setPreselectedPlan] = useState<string | null>(null);
 
-	// Persist chosen plan from landing page
+	// Persist and track chosen plan from landing page
 	useEffect(() => {
-		if (router.query.plan && typeof window !== "undefined") {
-			localStorage.setItem("hatdot_selected_plan", String(router.query.plan));
+		if (typeof window !== "undefined") {
+			const queryPlan = router.query.plan ? String(router.query.plan) : null;
+			if (queryPlan) {
+				localStorage.setItem("hatdot_selected_plan", queryPlan);
+				setPreselectedPlan(queryPlan);
+			} else {
+				const stored =
+					localStorage.getItem("hatdot_selected_plan_slug") ||
+					localStorage.getItem("hatdot_selected_plan");
+				if (stored) {
+					setPreselectedPlan(stored);
+				}
+			}
 		}
 	}, [router.query.plan]);
 
@@ -99,15 +112,17 @@ export default function SignupPage() {
 				return;
 			}
 
-			toast.success("Account created successfully! Welcome aboard 🎉");
+			toast.success("Account created successfully! Proceeding to package selection...");
 			const selectedPlan =
 				(router.query.plan ? String(router.query.plan) : null) ||
 				(typeof window !== "undefined"
 					? localStorage.getItem("hatdot_selected_plan") ||
 					  localStorage.getItem("hatdot_selected_plan_slug")
 					: null);
+
+			// Always direct to the mandatory package selection step
 			if (selectedPlan) {
-				await router.push(`/checkout?planId=${encodeURIComponent(selectedPlan)}`);
+				await router.push(`/onboarding?plan=${encodeURIComponent(selectedPlan)}`);
 			} else {
 				await router.push("/onboarding");
 			}
@@ -120,6 +135,10 @@ export default function SignupPage() {
 		}
 	};
 
+	const onboardingRedirectUrl = preselectedPlan
+		? `/onboarding?plan=${encodeURIComponent(preselectedPlan)}`
+		: "/onboarding";
+
 	return (
 		<>
 			<Head>
@@ -129,6 +148,18 @@ export default function SignupPage() {
 					content={`Sign up for ${brand.APP_NAME} and deploy your first application in minutes.`}
 				/>
 			</Head>
+
+			{/* Progress Stepper */}
+			<div className="flex items-center justify-center gap-2 mb-3">
+				<span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary border border-primary/25">
+					<span className="size-2 rounded-full bg-primary animate-pulse" />
+					Step 1 of 2: Create Account
+				</span>
+				<span className="text-muted-foreground text-xs font-bold">•</span>
+				<span className="text-xs text-muted-foreground font-medium">
+					Step 2: Choose Cloud Package
+				</span>
+			</div>
 
 			<div className="flex flex-col space-y-2 text-center mb-2">
 				<h1 className="text-2xl font-bold tracking-tight">
@@ -145,9 +176,27 @@ export default function SignupPage() {
 					</div>
 				</h1>
 				<p className="text-sm text-muted-foreground">
-					Deploy your apps in seconds with a 14-day free trial on any plan
+					Deploy your apps in seconds with automated builds and private cloud isolation
 				</p>
 			</div>
+
+			{/* Landing page pre-selected plan banner */}
+			{preselectedPlan && (
+				<div className="flex items-center justify-between p-2.5 rounded-xl border border-primary/25 bg-primary/5 text-xs text-muted-foreground my-2">
+					<div className="flex items-center gap-2 text-foreground font-medium">
+						<Sparkles className="size-3.5 text-primary shrink-0" />
+						<span>
+							Selected Package:{" "}
+							<span className="capitalize font-bold text-primary">
+								{preselectedPlan}
+							</span>
+						</span>
+					</div>
+					<span className="text-[11px] text-muted-foreground font-medium">
+						Confirmed in Step 2 →
+					</span>
+				</div>
+			)}
 
 			{error && (
 				<AlertBlock type="error" className="my-2">
@@ -159,13 +208,13 @@ export default function SignupPage() {
 				{/* Social login */}
 				<div className="flex flex-col gap-2">
 					<SignInWithGithub
-						callbackURL="/onboarding"
-						newUserCallbackURL="/onboarding"
+						callbackURL={onboardingRedirectUrl}
+						newUserCallbackURL={onboardingRedirectUrl}
 						text="Sign up with GitHub"
 					/>
 					<SignInWithGoogle
-						callbackURL="/onboarding"
-						newUserCallbackURL="/onboarding"
+						callbackURL={onboardingRedirectUrl}
+						newUserCallbackURL={onboardingRedirectUrl}
 						text="Sign up with Google"
 					/>
 				</div>
@@ -274,7 +323,7 @@ export default function SignupPage() {
 							className="w-full mt-2"
 							size="lg"
 						>
-							Create Account →
+							Continue to Package Selection →
 						</Button>
 					</form>
 				</Form>
